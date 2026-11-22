@@ -141,13 +141,22 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)a { return YES; }
 // MARK: About
 
-static NSTextField *aboutLine(NSString *text, CGFloat size, NSColor *color, NSArray *links) {   // links: @[@[word, url], ...]
+static NSView *aboutLine(NSString *text, CGFloat size, NSColor *color, NSArray *links) {   // links: @[@[word, url], ...]
     NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.alignment = NSTextAlignmentCenter;
     NSMutableAttributedString *as = [[NSMutableAttributedString alloc] initWithString:text attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:size], NSForegroundColorAttributeName: color, NSParagraphStyleAttributeName: ps}];
     for (NSArray *l in links) { NSRange r = [text rangeOfString:l[0]]; if (r.location != NSNotFound) [as addAttributes:@{NSLinkAttributeName: l[1], NSForegroundColorAttributeName: NSColor.linkColor} range:r]; }
-    NSTextField *f = [NSTextField wrappingLabelWithString:@""]; f.attributedStringValue = as; f.allowsEditingTextAttributes = YES; f.selectable = YES;
-    f.preferredMaxLayoutWidth = 320; f.alignment = NSTextAlignmentCenter;
-    return f;
+    // NSTextView gives the pointing-hand cursor over links (a text field does not)
+    NSTextView *tv = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 320, 20)];
+    tv.drawsBackground = NO; tv.editable = NO; tv.selectable = YES; tv.textContainerInset = NSZeroSize; tv.textContainer.lineFragmentPadding = 0;
+    tv.verticallyResizable = NO; tv.horizontallyResizable = NO;
+    tv.linkTextAttributes = @{NSForegroundColorAttributeName: NSColor.linkColor, NSCursorAttributeName: NSCursor.pointingHandCursor};
+    [tv.textStorage setAttributedString:as];
+    tv.textContainer.containerSize = NSMakeSize(320, CGFLOAT_MAX);
+    [tv.layoutManager ensureLayoutForTextContainer:tv.textContainer];
+    CGFloat h = ceil([tv.layoutManager usedRectForTextContainer:tv.textContainer].size.height) + 2;
+    tv.translatesAutoresizingMaskIntoConstraints = NO;
+    [tv.widthAnchor constraintEqualToConstant:320].active = YES; [tv.heightAnchor constraintEqualToConstant:h].active = YES;
+    return tv;
 }
 static NSPanel *sAbout;
 - (void)showAbout:(id)sender {
