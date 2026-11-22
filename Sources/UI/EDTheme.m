@@ -90,6 +90,33 @@
 }
 @end
 
+// MARK: LCD scroll bar
+
+@interface EDLCDScroller : NSScroller
+@end
+@implementation EDLCDScroller
++ (CGFloat)scrollerWidthForControlSize:(NSControlSize)c scrollerStyle:(NSScrollerStyle)st { return 14; }
+- (void)drawRect:(NSRect)r { [self drawKnobSlotInRect:self.bounds highlight:NO]; [self drawKnob]; }
+- (void)drawKnobSlotInRect:(NSRect)slot highlight:(BOOL)h {
+    [EDTheme.lcdBackground setFill]; NSRectFill(slot);
+    [[EDTheme.lcdInk colorWithAlphaComponent:0.7] setFill];   // dotted track: a 2 px dot every 4 px
+    for (CGFloat y = NSMinY(slot) + 1; y + 2 <= NSMaxY(slot); y += 4) for (CGFloat x = NSMinX(slot) + 2; x + 2 <= NSMaxX(slot); x += 4) NSRectFill(NSMakeRect(x, y, 2, 2));
+}
+- (void)drawKnob {
+    NSRect k = NSInsetRect([self rectForPart:NSScrollerKnob], 2, 0); if (NSIsEmptyRect(k)) return;
+    NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:k xRadius:2 yRadius:2];
+    [EDTheme.lcdBackground setFill]; [p fill]; [EDTheme.lcdInk setStroke]; p.lineWidth = 2; [p stroke];
+    [EDTheme.lcdInk setFill];
+    for (CGFloat y = NSMinY(k) + 3; y + 2 <= NSMaxY(k) - 2; y += 4) for (CGFloat x = NSMinX(k) + 3; x + 2 <= NSMaxX(k) - 2; x += 4) NSRectFill(NSMakeRect(x, y, 2, 2));
+}
+@end
+
+static void EDUseLCDScroller(NSView *v) {
+    if (![v isKindOfClass:NSScrollView.class]) return;
+    NSScrollView *s = (NSScrollView *)v; s.scrollerStyle = NSScrollerStyleLegacy; s.autohidesScrollers = NO;
+    if (s.hasVerticalScroller) s.verticalScroller = [[EDLCDScroller alloc] initWithFrame:NSMakeRect(0, 0, 14, 100)];
+}
+
 @implementation EDTheme
 + (NSTableRowView *)lcdRowView { return [EDLCDRowView new]; }
 + (NSColor *)body { return [NSColor colorWithCalibratedRed:0.16 green:0.16 blue:0.165 alpha:1]; }
@@ -117,6 +144,7 @@
 }
 + (CGFloat)lcdFrameWidth { return 3; }
 + (NSView *)framedLCD:(NSScrollView *)s {
+    EDUseLCDScroller(s);
     NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 5; box.layer.masksToBounds = YES;
     EDLCDFrameView *f = [EDLCDFrameView new];
     for (NSView *v in @[s, f]) { v.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:v];
@@ -125,6 +153,7 @@
     return box;
 }
 + (NSView *)framedLCD:(NSView *)s footer:(NSView *)footer {
+    EDUseLCDScroller(s);
     NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 5; box.layer.masksToBounds = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
     EDLCDFrameView *f = [EDLCDFrameView new];
     for (NSView *v in @[s, footer, f]) { v.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:v]; }
@@ -195,6 +224,24 @@
     b.font = [EDTheme lcdFont:13]; [b setButtonType:NSButtonTypePushOnPushOff]; b.translatesAutoresizingMaskIntoConstraints = NO;
     [b.heightAnchor constraintEqualToConstant:30].active = YES;
     return b;
+}
+@end
+
+@implementation EDTheme (LCDScreens)
++ (void)styleLCDField:(NSTextField *)t {
+    t.font = [EDTheme lcdFont:13]; t.textColor = EDTheme.lcdInk; t.bezeled = NO; t.bordered = NO; t.focusRingType = NSFocusRingTypeNone;
+    t.drawsBackground = YES; t.backgroundColor = [EDTheme.lcdInk colorWithAlphaComponent:0.14];
+}
++ (NSTextField *)lcdLabel:(NSString *)s size:(CGFloat)pt {
+    NSTextField *t = [NSTextField labelWithString:s]; t.font = [EDTheme lcdFont:pt]; t.textColor = EDTheme.lcdInk; return t;
+}
++ (NSView *)lcdScreenAround:(NSView *)content {
+    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor; box.layer.cornerRadius = 8;
+    box.layer.borderColor = NSColor.blackColor.CGColor; box.layer.borderWidth = EDTheme.lcdFrameWidth;
+    content.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:content];
+    [NSLayoutConstraint activateConstraints:@[[content.topAnchor constraintEqualToAnchor:box.topAnchor], [content.bottomAnchor constraintEqualToAnchor:box.bottomAnchor],
+        [content.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [content.trailingAnchor constraintEqualToAnchor:box.trailingAnchor]]];
+    return box;
 }
 @end
 

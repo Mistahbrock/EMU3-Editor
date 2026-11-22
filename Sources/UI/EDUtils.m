@@ -25,7 +25,7 @@ static EDUtils *sCurrent;   // keeps the open sheet alive
     NSView *screen = [NSView new]; screen.wantsLayer = YES; screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor; screen.layer.cornerRadius = 6;
     screen.layer.borderWidth = EDTheme.lcdFrameWidth; screen.layer.borderColor = NSColor.blackColor.CGColor; screen.translatesAutoresizingMaskIntoConstraints = NO; [content addSubview:screen];
     NSTextField *t = [NSTextField labelWithString:title]; t.font = [EDTheme lcdFont:26]; t.textColor = EDTheme.lcdInk; t.translatesAutoresizingMaskIntoConstraints = NO; [screen addSubview:t];
-    NSButton *close = [NSButton buttonWithTitle:@"Done" target:u action:@selector(done:)]; close.keyEquivalent = @"\r"; close.translatesAutoresizingMaskIntoConstraints = NO; [content addSubview:close];
+    NSButton *close = [EDTheme lcdKey:@"Done" target:u action:@selector(done:)]; close.keyEquivalent = @"\r"; close.translatesAutoresizingMaskIntoConstraints = NO; [content addSubview:close];
     [NSLayoutConstraint activateConstraints:@[
         [screen.topAnchor constraintEqualToAnchor:content.topAnchor constant:20], [screen.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
         [screen.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20], [screen.bottomAnchor constraintEqualToAnchor:close.topAnchor constant:-16],

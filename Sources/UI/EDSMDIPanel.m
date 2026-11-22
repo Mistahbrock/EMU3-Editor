@@ -18,7 +18,7 @@
     if ((self = [super initWithWindow:w])) { _rows = [NSMutableArray array]; [self build]; }
     return self;
 }
-- (NSButton *)button:(NSString *)t action:(SEL)a { return [NSButton buttonWithTitle:t target:self action:a]; }
+- (NSButton *)button:(NSString *)t action:(SEL)a { return [EDTheme lcdKey:t target:self action:a]; }
 
 - (void)build {
     _portPop = [NSPopUpButton new];
@@ -27,7 +27,7 @@
     _idField.toolTip = @"The sampler's SCSI ID (Master ▸ Setup ▸ SCSI/Disk). The BlueSCSI board uses ID 7 — set \"Avoid Host on ID\" to 7 on the sampler.";
     _numField.toolTip = @"Sample number on the sampler, 1–999 (the number the sampler's display shows). Sample 0 is the sampler's clipboard and cannot be used over SMDI.";
     _status = [NSTextField wrappingLabelWithString:@"Needs the BlueSCSI board in initiator mode with the SMDI firmware (both initiator jumpers set), connected to the sampler's SCSI port. Quit EMU3 Disk Manager's sampler link first — it uses the same USB serial port."];
-    _status.preferredMaxLayoutWidth = 520; _status.maximumNumberOfLines = 6;
+    _status.font = [EDTheme lcdFont:11]; _status.textColor = EDTheme.lcdInk; _status.preferredMaxLayoutWidth = 520; _status.maximumNumberOfLines = 6;
     _bar = [NSProgressIndicator new]; _bar.style = NSProgressIndicatorStyleBar; _bar.indeterminate = NO; _bar.maxValue = 1;
     _scanBtn = [self button:@"Read sample list" action:@selector(scan:)];
     _sendBtn = [self button:@"Send selected sample →" action:@selector(send:)];
@@ -35,22 +35,23 @@
     _delBtn = [self button:@"Delete on sampler" action:@selector(deleteRemote:)];
     _cancelBtn = [self button:@"Cancel" action:@selector(cancel:)]; _cancelBtn.enabled = NO;
     NSButton *refresh = [self button:@"Refresh ports" action:@selector(refresh:)];
+    for (NSTextField *f in @[_idField, _numField]) [EDTheme styleLCDField:f];
 
     _list = [NSTableView new];
     for (NSArray *c in @[@[@"num", @"#", @50], @[@"name", @"Name", @170], @[@"rate", @"Rate", @70], @[@"len", @"Frames", @80], @[@"loop", @"Loop", @60], @[@"bits", @"Bits", @40]]) {
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:c[0]]; col.title = c[1]; col.width = [c[2] doubleValue]; [_list addTableColumn:col];
     }
-    _list.dataSource = (id)self; _list.delegate = (id)self; _list.usesAlternatingRowBackgroundColors = YES;
-    NSScrollView *sv = [NSScrollView new]; sv.documentView = _list; sv.hasVerticalScroller = YES; sv.borderType = NSBezelBorder;
+    _list.dataSource = (id)self; _list.delegate = (id)self; [EDTheme styleLCDTable:_list];
+    NSScrollView *sv = [NSScrollView new]; sv.documentView = _list; sv.hasVerticalScroller = YES; sv.borderType = NSNoBorder;
     sv.translatesAutoresizingMaskIntoConstraints = NO;
     [sv.widthAnchor constraintEqualToConstant:520].active = YES; [sv.heightAnchor constraintEqualToConstant:170].active = YES;
 
     NSTextField *note = [NSTextField wrappingLabelWithString:@"1–999, as on the sampler's display (S001…). Sample 0 (S000) is the sampler's clipboard; SMDI refuses it."];
-    note.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize]; note.textColor = NSColor.secondaryLabelColor; note.preferredMaxLayoutWidth = 391;
+    note.font = [EDTheme lcdFont:10]; note.textColor = EDTheme.lcdInk; note.preferredMaxLayoutWidth = 391;
     NSGridView *g = [NSGridView gridViewWithViews:@[
-        @[[NSTextField labelWithString:@"BlueSCSI serial port"], _portPop],
-        @[[NSTextField labelWithString:@"Sampler SCSI ID"], _idField],
-        @[[NSTextField labelWithString:@"Sample #"], _numField],
+        @[[EDTheme lcdLabel:@"BlueSCSI serial port" size:12], _portPop],
+        @[[EDTheme lcdLabel:@"Sampler SCSI ID" size:12], _idField],
+        @[[EDTheme lcdLabel:@"Sample #" size:12], _numField],
         @[[NSGridCell emptyContentView], note]]];
     g.rowSpacing = 8; g.columnSpacing = 10; [g columnAtIndex:0].xPlacement = NSGridCellPlacementTrailing;
     NSStackView *r1 = [NSStackView stackViewWithViews:@[_scanBtn, _sendBtn, _recvBtn]];
@@ -59,7 +60,7 @@
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeLeading; root.spacing = 12;
     root.edgeInsets = NSEdgeInsetsMake(18, 18, 18, 18);
     _bar.translatesAutoresizingMaskIntoConstraints = NO; [_bar.widthAnchor constraintEqualToConstant:520].active = YES;
-    self.window.contentView = root; [self.window setContentSize:root.fittingSize];
+    [EDTheme styleWindow:self.window]; self.window.contentView = [EDTheme lcdScreenAround:root]; [self.window setContentSize:root.fittingSize];
     [self refresh:nil];
 }
 
@@ -71,6 +72,7 @@
     NSString *def = keep && [ports containsObject:keep] ? keep : [EDSMDIBoard defaultPort];
     if (def) [_portPop selectItemWithTitle:def];
     if (!ports.count) [_portPop addItemWithTitle:@"(no BlueSCSI serial port found)"];
+    [EDTheme styleLCDPopup:_portPop];
 }
 - (void)present {
     [self refresh:nil];

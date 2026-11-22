@@ -42,6 +42,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// A soft-key style button for the LCD: outlined, filled with ink while its state is On.
 + (NSButton *)lcdButton:(NSString *)title target:(nullable id)target action:(nullable SEL)action;
 /// A green LCD-coloured key for the dark window (filled green, black outline).
++ (void)styleLCDField:(NSTextField *)t;                      // ink on a slightly darker green, no bezel
++ (NSTextField *)lcdLabel:(NSString *)s size:(CGFloat)pt;
++ (NSView *)lcdScreenAround:(NSView *)content;                // green framed screen around a stack of controls
 + (NSButton *)lcdKey:(NSString *)title target:(nullable id)target action:(nullable SEL)action;
 /// Returns the index of the pressed button (the last one is the default); -1 for Esc.
 + (NSInteger)choose:(NSString *)message buttons:(NSArray<NSString *> *)titles;

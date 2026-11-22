@@ -1,5 +1,6 @@
 #import "EDSDSPanel.h"
 #import "EDMIDIPort.h"
+#import "EDTheme.h"
 
 @implementation EDSDSPanel {
     NSPopUpButton *_outPop, *_inPop;
@@ -20,8 +21,8 @@
     return self;
 }
 
-- (NSTextField *)label:(NSString *)s { NSTextField *t = [NSTextField labelWithString:s]; return t; }
-- (NSButton *)button:(NSString *)t action:(SEL)a { NSButton *b = [NSButton buttonWithTitle:t target:self action:a]; return b; }
+- (NSTextField *)label:(NSString *)s { return [EDTheme lcdLabel:s size:12]; }
+- (NSButton *)button:(NSString *)t action:(SEL)a { return [EDTheme lcdKey:t target:self action:a]; }
 
 - (void)build {
     _outPop = [NSPopUpButton new]; _inPop = [NSPopUpButton new];
@@ -30,12 +31,13 @@
     _devField.toolTip = @"SDS device (channel) ID, 0–127. Many samplers answer to 127 (all).";
     _numField.toolTip = @"The sample number sent in the dump header. EOS keeps sample numbers through a dump.";
     _status = [self label:@"Sampler side: Sample Manage ▸ Utils ▸ Dump… starts every transfer. To send from here, set Direction = Receive on the sampler, pick the sample, press OK, then press Send. To receive, set Direction = Transmit, then press \"Wait for dump\" here first and OK on the sampler."];
-    _status.maximumNumberOfLines = 5; _status.preferredMaxLayoutWidth = 480; _status.lineBreakMode = NSLineBreakByWordWrapping;
+    _status.font = [EDTheme lcdFont:11]; _status.textColor = EDTheme.lcdInk; _status.maximumNumberOfLines = 6; _status.preferredMaxLayoutWidth = 480; _status.lineBreakMode = NSLineBreakByWordWrapping;
     _bar = [NSProgressIndicator new]; _bar.style = NSProgressIndicatorStyleBar; _bar.indeterminate = NO; _bar.maxValue = 1;
     _sendBtn = [self button:@"Send selected sample" action:@selector(send:)];
     _listenBtn = [self button:@"Wait for dump from sampler" action:@selector(listen:)];
     _cancelBtn = [self button:@"Cancel transfer" action:@selector(cancel:)]; _cancelBtn.enabled = NO;
-    _fastCheck = [NSButton checkboxWithTitle:@"Open loop: send without waiting for acknowledgements (single cable only)" target:nil action:nil];
+    _fastCheck = [EDTheme lcdButton:@"Open loop: send without acknowledgements (single cable only)" target:nil action:nil]; [_fastCheck.widthAnchor constraintEqualToConstant:440].active = YES;
+    for (NSTextField *f in @[_devField, _numField]) [EDTheme styleLCDField:f];
     NSButton *refresh = [self button:@"Refresh ports" action:@selector(refresh:)];
 
     NSGridView *g = [NSGridView gridViewWithViews:@[
@@ -51,8 +53,7 @@
     root.edgeInsets = NSEdgeInsetsMake(18, 18, 18, 18);
     _bar.translatesAutoresizingMaskIntoConstraints = NO;
     [_bar.widthAnchor constraintEqualToConstant:484].active = YES;
-    self.window.contentView = root;
-    [self.window setContentSize:root.fittingSize];
+    [EDTheme styleWindow:self.window]; self.window.contentView = [EDTheme lcdScreenAround:root]; [self.window setContentSize:root.fittingSize];
     [self refresh:nil];
 }
 
@@ -67,6 +68,7 @@
     if (po) [_outPop selectItemWithTitle:po]; if (pi) [_inPop selectItemWithTitle:pi];
     if (!_outs.count) { [_outPop addItemWithTitle:@"(no MIDI outputs found)"]; }
     if (!_ins.count) { [_inPop addItemWithTitle:@"(no MIDI inputs found)"]; }
+    [EDTheme styleLCDPopup:_outPop]; [EDTheme styleLCDPopup:_inPop]; [EDTheme styleLCDPopup:_bitsPop];
 }
 
 - (void)present {
