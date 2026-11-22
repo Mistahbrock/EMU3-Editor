@@ -35,6 +35,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Same look for the dropdown list of a popup button (call after its items are added).
 + (void)styleLCDPopup:(NSPopUpButton *)p;
 + (void)styleWindow:(NSWindow *)w;
+/// Sampler-style modal dialogs (green LCD box, "?" or "!" glyph, soft buttons). Returns YES for OK.
++ (BOOL)confirm:(NSString *)message okTitle:(NSString *)ok cancelTitle:(NSString *)cancel;
++ (void)notice:(NSString *)message;
 @end
 
 NS_ASSUME_NONNULL_END

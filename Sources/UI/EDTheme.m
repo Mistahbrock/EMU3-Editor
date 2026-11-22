@@ -135,4 +135,66 @@
 + (void)styleWindow:(NSWindow *)w {
     w.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
 }
+
+@end
+
+// MARK: LCD dialogs
+
+@interface EDLCDButton : NSButton
+@end
+@implementation EDLCDButton
+- (void)drawRect:(NSRect)r {
+    NSRect b = NSInsetRect(self.bounds, 2, 2);
+    NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:b xRadius:6 yRadius:6];
+    if (self.isHighlighted) { [[EDTheme.lcdInk colorWithAlphaComponent:0.25] setFill]; [p fill]; }
+    [EDTheme.lcdInk setStroke]; p.lineWidth = 2; [p stroke];
+    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:15], NSForegroundColorAttributeName: EDTheme.lcdInk};
+    NSSize ts = [self.title sizeWithAttributes:at];
+    [self.title drawAtPoint:NSMakePoint(NSMidX(b) - ts.width / 2, NSMidY(b) - ts.height / 2) withAttributes:at];
+}
+@end
+
+@interface EDLCDDialogPanel : NSPanel
+@end
+@implementation EDLCDDialogPanel
+- (BOOL)canBecomeKeyWindow { return YES; }
+- (void)cancelOperation:(id)s { [NSApp stopModalWithCode:NSModalResponseCancel]; }
+@end
+
+@interface EDLCDDialogHandler : NSObject
+@end
+@implementation EDLCDDialogHandler
+- (void)ok:(id)s { [NSApp stopModalWithCode:NSModalResponseOK]; }
+- (void)cancel:(id)s { [NSApp stopModalWithCode:NSModalResponseCancel]; }
+@end
+
+@implementation EDTheme (Dialogs)
++ (BOOL)runLCDDialogGlyph:(NSString *)glyph message:(NSString *)msg ok:(NSString *)ok cancel:(NSString *)cancel {
+    const CGFloat W = 560, H = 190;
+    EDLCDDialogPanel *w = [[EDLCDDialogPanel alloc] initWithContentRect:NSMakeRect(0, 0, W, H) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+    w.opaque = NO; w.backgroundColor = NSColor.clearColor; w.hasShadow = YES; w.level = NSModalPanelWindowLevel;
+    NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, W, H)];
+    box.wantsLayer = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
+    box.layer.cornerRadius = 10; box.layer.borderColor = NSColor.blackColor.CGColor; box.layer.borderWidth = EDTheme.lcdFrameWidth + 1;
+    w.contentView = box;
+    EDLCDDialogHandler *h = [EDLCDDialogHandler new];
+    NSTextField *g = [NSTextField labelWithString:glyph]; g.font = [EDTheme lcdFont:44]; g.textColor = EDTheme.lcdInk; g.frame = NSMakeRect(24, H - 110, 50, 60); [box addSubview:g];
+    NSTextField *t = [NSTextField wrappingLabelWithString:msg]; t.font = [EDTheme lcdFont:15]; t.textColor = EDTheme.lcdInk;
+    t.frame = NSMakeRect(86, 66, W - 86 - 24, H - 66 - 24); t.preferredMaxLayoutWidth = W - 110; [box addSubview:t];
+    if (cancel) {
+        EDLCDButton *c = [[EDLCDButton alloc] initWithFrame:NSMakeRect(24, 16, 130, 38)]; c.title = cancel; c.target = h; c.action = @selector(cancel:); c.bordered = NO;
+        [box addSubview:c];
+    }
+    EDLCDButton *o = [[EDLCDButton alloc] initWithFrame:NSMakeRect(W - 24 - 130, 16, 130, 38)]; o.title = ok; o.target = h; o.action = @selector(ok:); o.bordered = NO;
+    o.keyEquivalent = @"\r"; [box addSubview:o];
+    NSWindow *parent = NSApp.keyWindow ?: NSApp.mainWindow;
+    if (parent) [w setFrameOrigin:NSMakePoint(NSMidX(parent.frame) - W / 2, NSMidY(parent.frame) - H / 2)]; else [w center];
+    [w makeKeyAndOrderFront:nil];
+    NSModalResponse r = [NSApp runModalForWindow:w];
+    [w orderOut:nil];
+    (void)h;
+    return r == NSModalResponseOK;
+}
++ (BOOL)confirm:(NSString *)message okTitle:(NSString *)ok cancelTitle:(NSString *)cancel { return [self runLCDDialogGlyph:@"?" message:message ok:ok cancel:cancel ?: @"Cancel"]; }
++ (void)notice:(NSString *)message { [self runLCDDialogGlyph:@"!" message:message ok:@"OK" cancel:nil]; }
 @end

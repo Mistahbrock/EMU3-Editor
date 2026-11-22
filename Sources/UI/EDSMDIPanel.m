@@ -1,4 +1,5 @@
 #import "EDSMDIPanel.h"
+#import "EDTheme.h"
 
 @implementation EDSMDIPanel {
     NSPopUpButton *_portPop;
@@ -152,9 +153,7 @@
 }
 - (void)deleteRemote:(id)s {
     uint32_t num = (uint32_t)MAX(_numField.intValue, 0);
-    NSAlert *a = [NSAlert new]; a.messageText = [NSString stringWithFormat:@"Delete sample %u on the sampler?", num];
-    a.informativeText = @"This removes it from the sampler's memory (not from any disk)."; [a addButtonWithTitle:@"Delete"]; [a addButtonWithTitle:@"Cancel"];
-    if ([a runModal] != NSAlertFirstButtonReturn) return;
+    if (![EDTheme confirm:[NSString stringWithFormat:@"Deletes sample %u from the sampler's memory (not from any disk). Continue?", num] okTitle:@"OK" cancelTitle:@"Cancel"]) return;
     [self runJob:^NSString *(EDSMDIClient *c) {
         NSError *e = nil; return [c deleteSample:num error:&e] ? [NSString stringWithFormat:@"Deleted sample %u.", num] : e.localizedDescription;
     }];

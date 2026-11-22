@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		087CCCE47F17413E93E15615 /* EDMainWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = 2A3B17D58C81D61A25A80395 /* EDMainWindowController.m */; };
 		08F35643C231B300AAA9C36E /* EDPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 9EFCE0EC7C3A74FD460C454B /* EDPlayer.m */; };
+		0D8D69F539B599EF09A49517 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 231B24616C3B499838F3C77E /* AppIcon.icns */; };
 		141033AAC590EAEB702CF88F /* EDWaveformView.m in Sources */ = {isa = PBXBuildFile; fileRef = F4988E85FDF2B2724BDD0767 /* EDWaveformView.m */; };
 		15B3A61A1137B26E26255C9B /* EDHomeList.m in Sources */ = {isa = PBXBuildFile; fileRef = 84DD7876BC48F72C7BBFD08A /* EDHomeList.m */; };
 		20D4A6645D0D1E51B84F00CB /* CoreMIDI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 359CC8504CC82A7D6BA5F2C9 /* CoreMIDI.framework */; };
@@ -47,6 +48,7 @@
 		1D0A9D8531AD80B766795658 /* EDUtils.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDUtils.h; sourceTree = "<group>"; };
 		2033D929DB700788CB572397 /* EMU3Directory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EMU3Directory.h; sourceTree = "<group>"; };
 		217556318DC977B2FA67F919 /* EDSDSPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSDSPanel.h; sourceTree = "<group>"; };
+		231B24616C3B499838F3C77E /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		26D09E8038B97782E3E9D2AB /* emu-logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "emu-logo.png"; sourceTree = "<group>"; };
 		2A3B17D58C81D61A25A80395 /* EDMainWindowController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDMainWindowController.m; sourceTree = "<group>"; };
 		2BFF640DE98690241ED7C5DC /* EDTheme.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDTheme.h; sourceTree = "<group>"; };
@@ -124,6 +126,14 @@
 				FDB83EEC7537BB9A96DA457B /* EDSample+Ops.m */,
 			);
 			path = Model;
+			sourceTree = "<group>";
+		};
+		16271C6E1ED3A2C38D3C731A /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				231B24616C3B499838F3C77E /* AppIcon.icns */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		2DDAC8A1189357B062693ED3 /* MIDI */ = {
@@ -225,6 +235,7 @@
 			isa = PBXGroup;
 			children = (
 				B1B57E1572B1E518E962AE81 /* Graphics */,
+				16271C6E1ED3A2C38D3C731A /* Resources */,
 				59009DCAA28FF59D5448321A /* Sources */,
 				9C5B78E046A770C73914B9C9 /* Frameworks */,
 				8176F04BBFACFB0181A6EA93 /* Products */,
@@ -298,6 +309,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0D8D69F539B599EF09A49517 /* AppIcon.icns in Resources */,
 				34D76A148E8D9511E7EAEE46 /* emu-logo.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

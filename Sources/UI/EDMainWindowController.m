@@ -462,26 +462,21 @@ static NSTextField *label(NSString *s) {
 - (void)masterAction:(NSString *)name {
     if ([name isEqual:@"saveAs"]) { [self saveBankAs:nil]; return; }
     if ([name isEqual:@"eraseAll"] && _bank) {
-        NSAlert *a = [NSAlert new]; a.messageText = @"Erase all presets and samples of this bank?";
-        a.informativeText = [NSString stringWithFormat:@"%lu presets and %lu samples will be removed. Nothing is written until you save; reopen the bank without saving to get them back. With automatic saving on and the bank on the sampler disk, the empty bank is written a few seconds from now.",
-            (unsigned long)_bank.presets.count, (unsigned long)_bank.samples.count];
-        [a addButtonWithTitle:@"Cancel"]; [a addButtonWithTitle:@"Erase Everything"]; if ([a runModal] != NSAlertSecondButtonReturn) return;
+        if (![EDTheme confirm:[NSString stringWithFormat:@"Erases all Presets and Samples of this bank (%lu presets, %lu samples). Nothing is written until you save; reopen the bank to get it back. Continue?", (unsigned long)_bank.presets.count, (unsigned long)_bank.samples.count] okTitle:@"OK" cancelTitle:@"Cancel"]) return;
         [_player stop]; [_bank eraseAllPresetsAndSamples]; _sample = nil;
         [_sampleTable reloadData]; [self selectSample:nil];
         _presetEditor.bank = _bank; _midiEditor.bank = _bank; [self refreshBankStatus]; [self updateTitle]; [self modelChanged];
         return;
     }
     if ([name isEqual:@"erasePresets"] && _bank) {
-        NSAlert *a = [NSAlert new]; a.messageText = @"Erase all presets of this bank?";
-        a.informativeText = [NSString stringWithFormat:@"%lu presets will be removed. The samples are kept. This cannot be undone; reopen the bank without saving to get them back.", (unsigned long)_bank.presets.count];
-        [a addButtonWithTitle:@"Cancel"]; [a addButtonWithTitle:@"Erase Presets"]; if ([a runModal] != NSAlertSecondButtonReturn) return;
+        if (![EDTheme confirm:[NSString stringWithFormat:@"Erases all %lu Presets of this bank. The Samples are kept. Continue?", (unsigned long)_bank.presets.count] okTitle:@"OK" cancelTitle:@"Cancel"]) return;
         for (EDPreset *p in [_bank.presets copy]) [_bank removePreset:p];
         _presetEditor.bank = _bank; _midiEditor.bank = _bank; [self refreshBankStatus]; [self updateTitle]; [self modelChanged];
     }
 }
 - (IBAction)showSamplerDisk:(id)s {
     NSURL *d = [self samplerDiskFolder];
-    if (!d) { NSAlert *a = [NSAlert new]; a.messageText = @"No sampler disk is mounted"; a.informativeText = @"Start the Disk Manager helper and serve a disk image; it appears under ~/EMU3 Disks."; [a runModal]; return; }
+    if (!d) { [EDTheme notice:@"No sampler disk is mounted. Start the Disk Manager helper and serve a disk image; it appears under ~/EMU3 Disks."]; return; }
     if ([d.lastPathComponent isEqual:@"Default Folder"]) d = d.URLByDeletingLastPathComponent;   // show the disk itself, not a folder inside it
     [NSWorkspace.sharedWorkspace openURL:d];
 }
@@ -847,10 +842,7 @@ static NSTextField *label(NSString *s) {
     if (!bank) { [self alertError:[NSError errorWithDomain:EDErrorDomain code:1 userInfo:@{NSLocalizedDescriptionKey: @"Only samples from EOS (E4B) banks can be sent this way."}] title:@"Cannot send"]; return; }
     NSURL *dir = [self samplerDiskFolder];
     if (!dir) {
-        NSAlert *a = [NSAlert new]; a.messageText = @"No sampler disk is mounted";
-        a.informativeText = @"Mount an image with EMU3 Disk Manager and serve it with Sampler Link. You can still save the one-sample bank as a file and copy it to the disk yourself.";
-        [a addButtonWithTitle:@"Save as File…"]; [a addButtonWithTitle:@"Cancel"];
-        if ([a runModal] != NSAlertFirstButtonReturn) return;
+        if (![EDTheme confirm:[@"No sampler disk is mounted. " stringByAppendingString:@"Mount an image with EMU3 Disk Manager and serve it with Sampler Link. You can still save the one-sample bank as a file and copy it to the disk yourself."] okTitle:@"Save File…" cancelTitle:@"Cancel"]) return;
     }
     NSSavePanel *p = [NSSavePanel savePanel];
     p.message = @"Save this sample as a one-sample bank on the sampler's disk";
@@ -886,10 +878,7 @@ static NSTextField *label(NSString *s) {
 - (void)writePresetBank:(NSData *)bank preset:(EDPreset *)p toSampler:(BOOL)toSampler {
     NSURL *dir = toSampler ? [self samplerDiskFolder] : nil;
     if (toSampler && !dir) {
-        NSAlert *a = [NSAlert new]; a.messageText = @"No sampler disk is mounted";
-        a.informativeText = @"Mount an image with EMU3 Disk Manager and serve it with Sampler Link. You can still save the bank as a file and copy it to the disk yourself.";
-        [a addButtonWithTitle:@"Save as File…"]; [a addButtonWithTitle:@"Cancel"];
-        if ([a runModal] != NSAlertFirstButtonReturn) return;
+        if (![EDTheme confirm:[@"No sampler disk is mounted. " stringByAppendingString:@"Mount an image with EMU3 Disk Manager and serve it with Sampler Link. You can still save the bank as a file and copy it to the disk yourself."] okTitle:@"Save File…" cancelTitle:@"Cancel"]) return;
     }
     NSSavePanel *sp = [NSSavePanel savePanel];
     sp.message = toSampler ? @"Save this preset and its samples as a bank on the sampler's disk" : @"Save this preset and its samples as a bank file";
@@ -999,7 +988,7 @@ static NSTextField *label(NSString *s) {
 - (BOOL)confirmQuit { return [self confirmDiscard]; }
 - (BOOL)windowShouldClose:(NSWindow *)w { return [self confirmDiscard]; }
 - (void)alertError:(NSError *)e title:(NSString *)t {
-    NSAlert *a = [NSAlert new]; a.messageText = t; a.informativeText = e.localizedDescription ?: @"Unknown error"; a.alertStyle = NSAlertStyleWarning; [a runModal];
+    [EDTheme notice:[NSString stringWithFormat:@"%@. %@", t, e.localizedDescription ?: @"Unknown error"]];
 }
 - (BOOL)validateMenuItem:(NSMenuItem *)m {
     SEL a = m.action;
