@@ -116,7 +116,7 @@
     EDPNode *_sel;
     EDKeyMapView *_keyMap;
     EDPlayer *_player;
-    EDPresetLCD *_lcd; NSScrollView *_paramScroll; NSSegmentedControl *_viewSeg;
+    EDPresetLCD *_lcd; NSView *_paramScroll; NSSegmentedControl *_viewSeg;
 }
 
 - (instancetype)initWithFrame:(NSRect)f {
@@ -195,7 +195,7 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
     _keyMap.picked = ^(id node) { [weak pickNode:node]; };
     _keyMap.keyDown = ^(int k) { [weak playKey:k]; };
     _keyMap.keyUp = ^{ [weak endKey]; };
-    _paramScroll = scrollOf(_paramTable);
+    [EDTheme styleLCDTable:_paramTable]; _paramScroll = lcdScrollOf(_paramTable);
     _lcd = [[EDPresetLCD alloc] initWithFrame:NSMakeRect(0, 0, 600, 420)]; _lcd.translatesAutoresizingMaskIntoConstraints = NO;
     _lcd.getValue = ^NSInteger(EDParam *pp, NSInteger v, NSInteger r) { return [weak lcdValueOf:pp voice:v ref:r]; };
     _lcd.setValue = ^(EDParam *pp, NSInteger v, NSInteger r, NSInteger val) { [weak applyParam:pp voice:v ref:r value:val]; };
@@ -311,7 +311,7 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)t { if (t == _sampleList) return (NSInteger)_bank.samples.count; return t == _presetTable ? (NSInteger)_bank.presets.count : (NSInteger)_rows.count; }
 - (BOOL)tableView:(NSTableView *)t isGroupRow:(NSInteger)r { return t == _paramTable && _rows[r].param == nil; }
-- (NSTableRowView *)tableView:(NSTableView *)t rowViewForRow:(NSInteger)r { return t == _paramTable ? nil : [EDTheme lcdRowView]; }
+- (NSTableRowView *)tableView:(NSTableView *)t rowViewForRow:(NSInteger)r { return [EDTheme lcdRowView]; }
 - (NSTableRowView *)outlineView:(NSOutlineView *)ov rowViewForItem:(id)item { return [EDTheme lcdRowView]; }
 - (NSView *)tableView:(NSTableView *)t viewForTableColumn:(NSTableColumn *)c row:(NSInteger)r {
     NSString *k = c.identifier;
@@ -321,18 +321,19 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
         return [EDTheme lcdLabel:[k isEqual:@"num"] ? [NSString stringWithFormat:@"%u", p.number] : p.name];
     }
     EDPRow *row = _rows[r];
-    if (!row.param) { if (c && ![k isEqual:@"label"]) return nil; NSTextField *f = [NSTextField labelWithString:row.group]; f.font = [NSFont boldSystemFontOfSize:12]; return f; }
+    if (!row.param) { if (c && ![k isEqual:@"label"]) return nil; NSTextField *f = [EDTheme lcdLabel:row.group]; f.font = [EDTheme lcdFont:13]; return f; }
     EDParam *p = row.param;
-    if ([k isEqual:@"label"]) { NSTextField *f = [NSTextField labelWithString:p.label]; f.font = [NSFont systemFontOfSize:13]; return f; }
+    if ([k isEqual:@"label"]) return [EDTheme lcdLabel:p.label];
     NSInteger v = [_preset valueOfParam:p voice:MAX(_sel.voice, 0) ref:MAX(_sel.ref, 0)];
     if ([k isEqual:@"value"]) {
         NSTextField *f = [NSTextField textFieldWithString:[NSString stringWithFormat:@"%ld", (long)v]];
-        f.delegate = self; f.tag = r; f.editable = !p.readOnly; f.bordered = !p.readOnly; f.drawsBackground = !p.readOnly; f.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
+        f.delegate = self; f.tag = r; f.editable = !p.readOnly; f.bordered = NO; f.drawsBackground = NO; f.font = [EDTheme lcdFont:13]; f.textColor = EDTheme.lcdInk; f.focusRingType = NSFocusRingTypeNone;
+        f.wantsLayer = YES; f.layer.borderWidth = p.readOnly ? 0 : 1.5; f.layer.borderColor = EDTheme.lcdInk.CGColor; f.layer.cornerRadius = 3; f.alignment = NSTextAlignmentCenter;
         return f;
     }
     NSString *info = p.isSample ? [self sampleLabel:v] : [p displayForValue:v];
     if (!p.isSample && !p.names && !p.isNote) info = [NSString stringWithFormat:@"%ld … %ld", (long)p.min, (long)p.max];
-    NSTextField *f = [NSTextField labelWithString:info]; f.font = [NSFont systemFontOfSize:11]; f.textColor = NSColor.secondaryLabelColor; return f;
+    NSTextField *f = [EDTheme lcdLabel:info]; f.font = [EDTheme lcdFont:11]; return f;
 }
 - (void)tableViewSelectionDidChange:(NSNotification *)n {
     if (n.object == _sampleList) { [self updateAssign]; return; }
