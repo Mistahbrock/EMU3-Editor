@@ -523,4 +523,5 @@ static NSInteger parseValue(NSString *s, EDParam *p) {
 - (void)removeRef:(id)s { NSInteger v = _sel.voice, r = _sel.ref; [self structural:^BOOL { return [self->_preset removeRef:r fromVoice:v]; } name:@"Remove Sample from Voice"]; }
 - (void)dupVoice:(id)s { NSInteger v = _sel.voice; [self structural:^BOOL { return [self->_preset duplicateVoice:v]; } name:@"Duplicate Voice"]; }
 - (void)removeVoice:(id)s { NSInteger v = _sel.voice; [self structural:^BOOL { return [self->_preset removeVoice:v]; } name:@"Remove Voice"]; }
+- (NSView *)lcdView { return _lcd; }
 @end

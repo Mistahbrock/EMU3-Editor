@@ -87,7 +87,7 @@
     NSOutlineView *_outline;
     NSTableView *_sampleTable;
     EDWaveformView *_wave;
-    NSTextField *_presetNote, *_nameField, *_rateField, *_loopStartField, *_loopEndField, *_info, *_status;
+    NSLayoutConstraint *_presetNoteLeading; NSTextField *_presetNote, *_nameField, *_rateField, *_loopStartField, *_loopEndField, *_info, *_status;
     NSButton *_loopCheck, *_releaseCheck, *_playButton;
     NSTabView *_tabs;
     NSSegmentedControl *_tabPicker;
@@ -365,7 +365,7 @@ static NSTextField *label(NSString *s) {
 
     _status = label(@"Open a disk image (File ▸ Open Disk Image…) or a bank file.");
     _presetNote = label(@"Pages follow the sampler's Preset Edit menus. Changes go straight into the preset (Edit ▸ Undo works).");
-    NSStackView *foot = [NSStackView stackViewWithViews:@[_status, _presetNote]]; foot.spacing = 40; _presetNote.hidden = YES; foot.edgeInsets = NSEdgeInsetsMake(2, 14, 0, 14);
+    NSStackView *foot = [NSStackView stackViewWithViews:@[_status]]; _presetNote.hidden = YES; foot.edgeInsets = NSEdgeInsetsMake(2, 14, 0, 14);
     NSStackView *root = [NSStackView stackViewWithViews:@[head, rule, bar, rule2, _tabs, foot]];
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.spacing = 0; root.alignment = NSLayoutAttributeLeading;
     root.translatesAutoresizingMaskIntoConstraints = NO;
@@ -375,6 +375,9 @@ static NSTextField *label(NSString *s) {
         [root.topAnchor constraintEqualToAnchor:content.topAnchor], [root.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-4],
         [head.widthAnchor constraintEqualToAnchor:root.widthAnchor], [bar.widthAnchor constraintEqualToAnchor:root.widthAnchor], [rule2.widthAnchor constraintEqualToAnchor:root.widthAnchor], [rule.widthAnchor constraintEqualToAnchor:root.widthAnchor],
         [_tabs.widthAnchor constraintEqualToAnchor:root.widthAnchor]]];
+    // the Presets note lines up with the left edge of the LCD screen, on the status line
+    _presetNote.translatesAutoresizingMaskIntoConstraints = NO; [foot addSubview:_presetNote];
+    [_presetNote.centerYAnchor constraintEqualToAnchor:_status.centerYAnchor].active = YES;
     [self updateLCD];
 }
 
@@ -423,9 +426,14 @@ static NSTextField *label(NSString *s) {
 - (void)selectTabNamed:(NSString *)ident {
     if ([ident isEqual:@"editor"]) ident = @"samples";
     [_tabs selectTabViewItemWithIdentifier:ident];
-    _presetNote.hidden = ![ident isEqual:@"presets"];
+    [self showPresetNote:[ident isEqual:@"presets"]];
 }
-- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; _presetNote.hidden = _tabPicker.selectedSegment != 3; }
+- (void)showPresetNote:(BOOL)show {
+    _presetNote.hidden = !show;
+    // the note lines up with the LCD screen's left edge; that view only joins the hierarchy once its tab is shown
+    if (show && !_presetNoteLeading) { _presetNoteLeading = [_presetNote.leadingAnchor constraintEqualToAnchor:_presetEditor.lcdView.leadingAnchor]; _presetNoteLeading.active = YES; }
+}
+- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; [self showPresetNote:_tabPicker.selectedSegment == 3]; }
 - (IBAction)showMasterTab:(id)s { [self selectTabNamed:@"master"]; }
 - (IBAction)showDiskTab:(id)s { [self selectTabNamed:@"disk"]; }
 - (IBAction)showSamplesTab:(id)s { [self selectTabNamed:@"samples"]; }

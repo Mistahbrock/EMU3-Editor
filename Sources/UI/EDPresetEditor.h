@@ -5,6 +5,7 @@
 NS_ASSUME_NONNULL_BEGIN
 @interface EDPresetEditor : NSView <NSTableViewDataSource, NSTableViewDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTextFieldDelegate, NSMenuDelegate>
 @property (nonatomic, strong, nullable) EDBank *bank;
+@property (nonatomic, readonly) NSView *lcdView;   // the LCD page view (for aligning outside notes)
 @property (nonatomic, copy, nullable) void (^edited)(void);     // called after every change
 @property (nonatomic, copy, nullable) void (^selectionChanged)(void);
 @property (nonatomic, strong, nullable) NSMenu *presetMenu;                 // right-click menu of the preset list; the clicked row is selected first
