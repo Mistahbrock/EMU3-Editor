@@ -449,8 +449,17 @@ static NSTextField *label(NSString *s) {
     NSURL *d = [self samplerDiskFolder]; NSURL *root = [d.lastPathComponent isEqual:@"Default Folder"] ? d.URLByDeletingLastPathComponent : d;
     NSArray *ports = [NSFileManager.defaultManager contentsOfDirectoryAtPath:@"/dev" error:nil];
     NSInteger boards = 0; for (NSString *n in ports) if ([n hasPrefix:@"cu.usbmodem"]) boards++;
-    _samplerStatus.stringValue = [NSString stringWithFormat:@"%@\n%@", root ? [NSString stringWithFormat:@"● Disk served: %@", root.lastPathComponent] : @"○ No sampler disk mounted",
-        boards ? @"● SCSI board connected" : @"○ SCSI board not found"];
+    NSFont *f = _samplerStatus.font ?: [NSFont systemFontOfSize:13];
+    NSMutableAttributedString *as = [NSMutableAttributedString new];
+    void (^line)(BOOL, NSString *) = ^(BOOL on, NSString *t) {
+        if (as.length) [as appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:@{NSFontAttributeName: f}]];
+        [as appendAttributedString:[[NSAttributedString alloc] initWithString:on ? @"● " : @"○ " attributes:@{NSFontAttributeName: f,
+            NSForegroundColorAttributeName: on ? [NSColor systemGreenColor] : NSColor.secondaryLabelColor}]];
+        [as appendAttributedString:[[NSAttributedString alloc] initWithString:t attributes:@{NSFontAttributeName: f, NSForegroundColorAttributeName: NSColor.labelColor}]];
+    };
+    line(root != nil, root ? [NSString stringWithFormat:@"Disk served: %@", root.lastPathComponent] : @"No sampler disk mounted");
+    line(boards > 0, boards ? @"SCSI board connected" : @"SCSI board not found");
+    _samplerStatus.attributedStringValue = as;
     [_home reloadWithSamplerDisk:d];
     [self refreshDiskIcons];
 }
