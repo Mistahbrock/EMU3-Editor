@@ -73,6 +73,7 @@
 @end
 
 @implementation EDMainWindowController {
+    NSTimer *_statusTimer; NSString *_statusSig;
     // model
     EMU3Filesystem *_fs;
     EDNode *_rootNode;
@@ -445,7 +446,23 @@ static NSTextField *label(NSString *s) {
 - (IBAction)showDiskTab:(id)s { [self selectTabNamed:@"disk"]; }
 - (IBAction)showSamplesTab:(id)s { [self selectTabNamed:@"samples"]; }
 - (IBAction)showPresetsTab:(id)s { [self selectTabNamed:@"presets"]; }
+- (NSString *)samplerSignature {
+    NSURL *d = [self samplerDiskFolder];
+    NSInteger boards = 0; for (NSString *n in [NSFileManager.defaultManager contentsOfDirectoryAtPath:@"/dev" error:nil]) if ([n hasPrefix:@"cu.usbmodem"]) boards++;
+    return [NSString stringWithFormat:@"%@|%ld", d.path, (long)boards];
+}
+- (void)startStatusWatch {
+    if (_statusTimer) return;
+    _statusSig = [self samplerSignature];
+    __weak typeof(self) w = self;
+    _statusTimer = [NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *t) {
+        EDMainWindowController *me = w; if (!me) { [t invalidate]; return; }
+        NSString *sig = [me samplerSignature];
+        if (![sig isEqualToString:me->_statusSig]) { me->_statusSig = sig; [me refreshSamplerStatus]; }
+    }];
+}
 - (void)refreshSamplerStatus {
+    [self startStatusWatch];
     NSURL *d = [self samplerDiskFolder]; NSURL *root = [d.lastPathComponent isEqual:@"Default Folder"] ? d.URLByDeletingLastPathComponent : d;
     NSArray *ports = [NSFileManager.defaultManager contentsOfDirectoryAtPath:@"/dev" error:nil];
     NSInteger boards = 0; for (NSString *n in ports) if ([n hasPrefix:@"cu.usbmodem"]) boards++;
