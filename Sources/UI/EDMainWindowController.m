@@ -191,7 +191,8 @@ static NSTextField *label(NSString *s) {
     NSStackView *diskBar = [NSStackView stackViewWithViews:@[[EDTheme lcdKey:@"Open Disk Image…" target:self action:@selector(openDiskImage:)],
         [EDTheme lcdKey:@"Open Bank File…" target:self action:@selector(openBankFile:)], diskNote]];
     diskBar.spacing = 8;
-    NSView *left = [EDTheme framedLCD:[self scroll:_outline] footer:diskBar];
+    NSScrollView *outlineScroll = [self scroll:_outline];
+    NSView *left = [EDTheme framedLCD:outlineScroll footer:diskBar];
 
     // sample list
     _sampleTable = [self table:@[@[@"num", @"#", @"40"], @[@"name", @"Sample", @"170"], @[@"rate", @"Rate", @"64"], @[@"len", @"Frames", @"80"], @[@"loop", @"Loop", @"44"]]];
@@ -246,17 +247,19 @@ static NSTextField *label(NSString *s) {
     // Disk tab: open keys live in the green screen
     NSView *diskView = [NSView new];
     EDLCDSideTab *diskTab = [[EDLCDSideTab alloc] initWithTitle:@"DISK"];
-    for (NSView *v in @[left, diskTab]) { v.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:v]; }
+    left.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:left];
+    diskTab.translatesAutoresizingMaskIntoConstraints = NO; [left addSubview:diskTab];   // the DISK strip lives inside the green screen, above the keys
+    for (NSLayoutConstraint *c in left.constraints) if (c.firstItem == outlineScroll && c.firstAttribute == NSLayoutAttributeLeading) c.constant = 60;
     _diskHint = [[EDDiskIcons alloc] initWithFrame:NSZeroRect];
     _diskHint.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:_diskHint];
     [NSLayoutConstraint activateConstraints:@[[_diskHint.topAnchor constraintEqualToAnchor:left.topAnchor constant:26], [_diskHint.bottomAnchor constraintEqualToAnchor:left.bottomAnchor constant:-44],
-        [_diskHint.leadingAnchor constraintEqualToAnchor:left.leadingAnchor], [_diskHint.trailingAnchor constraintEqualToAnchor:left.trailingAnchor]]];
+        [_diskHint.leadingAnchor constraintEqualToAnchor:left.leadingAnchor constant:60], [_diskHint.trailingAnchor constraintEqualToAnchor:left.trailingAnchor]]];
     __weak EDMainWindowController *weakSelf = self;
     _diskHint.onOpen = ^(EDDiskItem *it) { [weakSelf openDiskItem:it]; };
     [NSLayoutConstraint activateConstraints:@[
-        [left.topAnchor constraintEqualToAnchor:diskView.topAnchor constant:10], [left.leadingAnchor constraintEqualToAnchor:diskTab.trailingAnchor constant:6],
-        [diskTab.topAnchor constraintEqualToAnchor:left.topAnchor], [diskTab.bottomAnchor constraintEqualToAnchor:left.bottomAnchor],
-        [diskTab.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10], [diskTab.widthAnchor constraintEqualToConstant:46],
+        [left.topAnchor constraintEqualToAnchor:diskView.topAnchor constant:10], [left.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10],
+        [diskTab.topAnchor constraintEqualToAnchor:left.topAnchor constant:8], [diskTab.bottomAnchor constraintEqualToAnchor:diskBar.topAnchor constant:-8],
+        [diskTab.leadingAnchor constraintEqualToAnchor:left.leadingAnchor constant:8], [diskTab.widthAnchor constraintEqualToConstant:46],
         [left.trailingAnchor constraintEqualToAnchor:diskView.trailingAnchor constant:-10], [left.bottomAnchor constraintEqualToAnchor:diskView.bottomAnchor constant:-10]]];
 
     // Master tab: sampler status and shortcuts | banks to open (sampler disk + recent) | current bank
