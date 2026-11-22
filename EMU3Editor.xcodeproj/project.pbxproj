@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		087CCCE47F17413E93E15615 /* EDMainWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = 2A3B17D58C81D61A25A80395 /* EDMainWindowController.m */; };
 		08F35643C231B300AAA9C36E /* EDPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 9EFCE0EC7C3A74FD460C454B /* EDPlayer.m */; };
+		0A50FED468DCF7BCC5B27B76 /* EDDiskIcons.m in Sources */ = {isa = PBXBuildFile; fileRef = 0BD6DC64A92F8D097982F5F9 /* EDDiskIcons.m */; };
 		0D8D69F539B599EF09A49517 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 231B24616C3B499838F3C77E /* AppIcon.icns */; };
 		141033AAC590EAEB702CF88F /* EDWaveformView.m in Sources */ = {isa = PBXBuildFile; fileRef = F4988E85FDF2B2724BDD0767 /* EDWaveformView.m */; };
 		15B3A61A1137B26E26255C9B /* EDHomeList.m in Sources */ = {isa = PBXBuildFile; fileRef = 84DD7876BC48F72C7BBFD08A /* EDHomeList.m */; };
@@ -43,6 +44,7 @@
 		01E7FDB941E71D06C5A92086 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		08AC03D2B6EB7F472CD9C935 /* EDTheme.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDTheme.m; sourceTree = "<group>"; };
 		0ADE04AA74FB7123A801404C /* EDSDS.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSDS.m; sourceTree = "<group>"; };
+		0BD6DC64A92F8D097982F5F9 /* EDDiskIcons.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDDiskIcons.m; sourceTree = "<group>"; };
 		13A520F2107C8443E5D25248 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		1A03A19154F5070E0233C155 /* EDBankInternal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDBankInternal.h; sourceTree = "<group>"; };
 		1BEFFF3296DEA7D713AEBE88 /* EDUtils.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDUtils.m; sourceTree = "<group>"; };
@@ -53,6 +55,7 @@
 		26D09E8038B97782E3E9D2AB /* emu-logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "emu-logo.png"; sourceTree = "<group>"; };
 		2A3B17D58C81D61A25A80395 /* EDMainWindowController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDMainWindowController.m; sourceTree = "<group>"; };
 		2BFF640DE98690241ED7C5DC /* EDTheme.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDTheme.h; sourceTree = "<group>"; };
+		323201CAA6DA2DC45E16C004 /* EDDiskIcons.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDDiskIcons.h; sourceTree = "<group>"; };
 		359CC8504CC82A7D6BA5F2C9 /* CoreMIDI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMIDI.framework; path = System/Library/Frameworks/CoreMIDI.framework; sourceTree = SDKROOT; };
 		40C05C9C4389F72821C3BA41 /* EDPresetEditor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDPresetEditor.h; sourceTree = "<group>"; };
 		4270B6C2EF226B180DF3E0DD /* EMU3Types.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EMU3Types.h; sourceTree = "<group>"; };
@@ -189,6 +192,8 @@
 		883898288F3530067E244E1B /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				323201CAA6DA2DC45E16C004 /* EDDiskIcons.h */,
+				0BD6DC64A92F8D097982F5F9 /* EDDiskIcons.m */,
 				99A190C17BEED57349E83F37 /* EDHomeList.h */,
 				84DD7876BC48F72C7BBFD08A /* EDHomeList.m */,
 				7843E431F70C0C02AC53E619 /* EDMainWindowController.h */,
@@ -328,6 +333,7 @@
 			files = (
 				960F3B1B7C5D2F42829A0C1C /* AppDelegate.m in Sources */,
 				88ADF1D05448E513D3924C6B /* EDBank.m in Sources */,
+				0A50FED468DCF7BCC5B27B76 /* EDDiskIcons.m in Sources */,
 				15B3A61A1137B26E26255C9B /* EDHomeList.m in Sources */,
 				EE8B8D48E7DDAB1CB84D9190 /* EDLegacyBank.m in Sources */,
 				9C1D2ADCA8E82ADA89929C98 /* EDMIDIEditor.m in Sources */,

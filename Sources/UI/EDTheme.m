@@ -252,15 +252,19 @@
     [NSGraphicsContext restoreGraphicsState];
     [NSColor.blackColor setStroke]; frame.lineWidth = EDTheme.lcdFrameWidth; [frame stroke];
     NSUInteger n = _title.length; if (!n) return;
-    CGFloat cell = MIN(NSWidth(b) - 8, (NSHeight(b) - 16) / n), top = NSMinY(b) + 8;
-    cell = MIN(cell, 56);
-    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:MIN(cell * 0.8, 30)], NSForegroundColorAttributeName: EDTheme.lcdInk};
+    CGFloat cell = MIN(NSWidth(b) - 4, (NSHeight(b) - 16) / n), top = NSMinY(b) + 8;
+    cell = MIN(cell, 60);
+    CGFloat fs = MIN(cell * 0.95, 38);
+    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.alignment = NSTextAlignmentCenter;
+    // the dotted pattern surrounds each letter: a halo in the LCD colour, then the ink letter on top
+    NSDictionary *halo = @{NSFontAttributeName: [EDTheme lcdFont:fs], NSStrokeWidthAttributeName: @(14), NSStrokeColorAttributeName: EDTheme.lcdBackground, NSForegroundColorAttributeName: EDTheme.lcdBackground, NSParagraphStyleAttributeName: ps};
+    NSDictionary *ink = @{NSFontAttributeName: [EDTheme lcdFont:fs], NSForegroundColorAttributeName: EDTheme.lcdInk, NSParagraphStyleAttributeName: ps};
     for (NSUInteger i = 0; i < n; i++) {
         NSString *ch = [_title substringWithRange:NSMakeRange(i, 1)];
-        NSRect c = NSMakeRect(NSMidX(b) - cell / 2, top + i * (cell + 4), cell, cell);
-        [EDTheme.lcdBackground setFill]; [[NSBezierPath bezierPathWithRoundedRect:c xRadius:3 yRadius:3] fill];
-        NSSize ts = [ch sizeWithAttributes:at];
-        [ch drawAtPoint:NSMakePoint(NSMidX(c) - ts.width / 2, NSMidY(c) - ts.height / 2) withAttributes:at];
+        NSSize ts = [ch sizeWithAttributes:ink];
+        NSRect c = NSMakeRect(NSMinX(b), top + i * (cell + 6) + (cell - ts.height) / 2, NSWidth(b), ts.height);
+        [ch drawInRect:c withAttributes:halo];
+        [ch drawInRect:c withAttributes:ink];
     }
 }
 @end

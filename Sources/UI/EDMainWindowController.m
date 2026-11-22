@@ -12,6 +12,7 @@
 #import "EDUtils.h"
 #import "EDMemoryView.h"
 #import "EDTheme.h"
+#import "EDDiskIcons.h"
 #import "EMU3Filesystem.h"
 #import "EMU3Directory.h"
 #import "EMU3File.h"
@@ -101,7 +102,7 @@
     EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn; BOOL _autoBackedUp;
     EDHomeList *_home;
     EDMemoryView *_memory;
-    NSTextField *_samplerStatus, *_diskHint;
+    NSTextField *_samplerStatus; EDDiskIcons *_diskHint;
 }
 
 - (instancetype)init {
@@ -244,11 +245,12 @@ static NSTextField *label(NSString *s) {
     NSView *diskView = [NSView new];
     EDLCDSideTab *diskTab = [[EDLCDSideTab alloc] initWithTitle:@"DISK"];
     for (NSView *v in @[diskBar, left, diskTab]) { v.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:v]; }
-    _diskHint = [NSTextField wrappingLabelWithString:@"No disk image open.\n\nUse Open Disk in the bar above, or pick a bank from the Master tab."];
-    _diskHint.alignment = NSTextAlignmentCenter; _diskHint.font = [EDTheme lcdFont:15]; _diskHint.textColor = EDTheme.lcdInk;
+    _diskHint = [[EDDiskIcons alloc] initWithFrame:NSZeroRect];
     _diskHint.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:_diskHint];
-    [NSLayoutConstraint activateConstraints:@[[_diskHint.centerXAnchor constraintEqualToAnchor:left.centerXAnchor], [_diskHint.centerYAnchor constraintEqualToAnchor:left.centerYAnchor],
-        [_diskHint.widthAnchor constraintEqualToConstant:360]]];
+    [NSLayoutConstraint activateConstraints:@[[_diskHint.topAnchor constraintEqualToAnchor:left.topAnchor constant:26], [_diskHint.bottomAnchor constraintEqualToAnchor:left.bottomAnchor],
+        [_diskHint.leadingAnchor constraintEqualToAnchor:left.leadingAnchor], [_diskHint.trailingAnchor constraintEqualToAnchor:left.trailingAnchor]]];
+    __weak EDMainWindowController *weakSelf = self;
+    _diskHint.onOpen = ^(EDDiskItem *it) { [weakSelf openDiskItem:it]; };
     [NSLayoutConstraint activateConstraints:@[
         [diskBar.topAnchor constraintEqualToAnchor:diskView.topAnchor constant:10], [diskBar.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10],
         [left.topAnchor constraintEqualToAnchor:diskBar.bottomAnchor constant:8], [left.leadingAnchor constraintEqualToAnchor:diskTab.trailingAnchor constant:6],
@@ -429,6 +431,7 @@ static NSTextField *label(NSString *s) {
     _samplerStatus.stringValue = [NSString stringWithFormat:@"%@\n%@", root ? [NSString stringWithFormat:@"● Disk served: %@", root.lastPathComponent] : @"○ No sampler disk mounted",
         boards ? @"● SCSI board connected" : @"○ SCSI board not found"];
     [_home reloadWithSamplerDisk:d];
+    [self refreshDiskIcons];
 }
 - (IBAction)autoSaveToggled:(NSButton *)b {
     [NSUserDefaults.standardUserDefaults setBool:b.state == NSControlStateValueOn forKey:@"AutoSaveToSampler"]; [self scheduleAutoSave];
@@ -476,6 +479,22 @@ static NSTextField *label(NSString *s) {
         for (EDPreset *p in [_bank.presets copy]) [_bank removePreset:p];
         _presetEditor.bank = _bank; _midiEditor.bank = _bank; [self refreshBankStatus]; [self updateTitle]; [self modelChanged];
     }
+}
+- (void)openDiskItem:(EDDiskItem *)it {
+    if (it.sampler) { [self selectTabNamed:@"master"]; return; }
+    if (it.url) [self openImageAtURL:it.url];
+}
+/// The drives the Disk page shows while no image is open: the disk the sampler sees, and recently opened images.
+- (void)refreshDiskIcons {
+    NSMutableArray *items = [NSMutableArray array];
+    NSURL *d = [self samplerDiskFolder]; NSURL *root = [d.lastPathComponent isEqual:@"Default Folder"] ? d.URLByDeletingLastPathComponent : d;
+    if (root) { EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = root.lastPathComponent; it.subtitle = @"sampler disk · served"; it.sampler = YES; it.url = root; [items addObject:it]; }
+    for (NSString *path in [NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"]) {
+        if (![NSFileManager.defaultManager fileExistsAtPath:path]) continue;
+        EDDiskItem *it = [EDDiskItem new]; NSString *ext = path.pathExtension.lowercaseString;
+        it.kind = [ext isEqual:@"iso"] ? EDDiskCD : EDDiskHard; it.title = path.lastPathComponent; it.subtitle = @"disk image · double-click to open"; it.url = [NSURL fileURLWithPath:path]; [items addObject:it];
+    }
+    _diskHint.items = items;
 }
 - (IBAction)showSamplerDisk:(id)s {
     NSURL *d = [self samplerDiskFolder];
@@ -540,6 +559,7 @@ static NSTextField *label(NSString *s) {
     EMU3Filesystem *fs = [[EMU3Filesystem alloc] initWithURL:url error:&e];
     if (!fs) { [self alertError:e title:@"Could not open the disk image"]; return NO; }
     [_fs closeImage];
+    { NSMutableArray *r = [([NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"] ?: @[]) mutableCopy]; [r removeObject:url.path]; [r insertObject:url.path atIndex:0]; while (r.count > 8) [r removeLastObject]; [NSUserDefaults.standardUserDefaults setObject:r forKey:@"RecentDisks"]; }
     _fs = fs; _standaloneURL = nil;
     _rootNode = [self nodeForDirectory:fs.rootDirectory title:url.lastPathComponent path:@[]];
     [self closeBank];
