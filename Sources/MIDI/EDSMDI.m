@@ -36,6 +36,26 @@ enum { kSMDIErrNoSample = 0x00200002, kSMDIErrOutOfRange = 0x00200000, kSMDIErrN
     if (saved && [p containsObject:saved]) return saved;
     return p.count >= 2 ? p[1] : p.firstObject;     // the board shows two serial ports; the second carries the passthrough
 }
++ (NSString *)consolePortForPassthrough:(NSString *)pt {
+    NSString *stem = [pt substringToIndex:pt.length - 1], *best = nil;
+    for (NSString *p in [self availablePorts]) if ([p hasPrefix:stem] && p.length == pt.length && [p compare:pt] == NSOrderedAscending) best = p;   // sorted ascending: last lower one wins
+    return best;
+}
++ (NSString *)switchMode:(char)mode passthroughPort:(NSString *)port {
+    NSString *console = [self consolePortForPassthrough:port]; if (!console) return nil;
+    NSUInteger before = [self availablePorts].count;
+    int fd = open(console.fileSystemRepresentation, O_RDWR | O_NOCTTY | O_NONBLOCK); if (fd < 0) return nil;
+    struct termios t; tcgetattr(fd, &t); cfmakeraw(&t); t.c_cflag |= CS8 | CREAD | CLOCAL; tcsetattr(fd, TCSANOW, &t);
+    ssize_t w = write(fd, &mode, 1); close(fd); if (w != 1) return nil;
+    // the board reboots: its ports vanish, then come back
+    NSDate *end = [NSDate dateWithTimeIntervalSinceNow:4];
+    while ([self availablePorts].count >= before && [end timeIntervalSinceNow] > 0) [NSThread sleepForTimeInterval:0.2];
+    end = [NSDate dateWithTimeIntervalSinceNow:15];
+    while ([self availablePorts].count < MAX(before, 2) && [end timeIntervalSinceNow] > 0) [NSThread sleepForTimeInterval:0.2];
+    [NSThread sleepForTimeInterval:1.0];            // let USB finish enumerating
+    NSString *np = [self defaultPort];
+    return np;
+}
 - (instancetype)init { if ((self = [super init])) { _fd = -1; _lock = [NSLock new]; } return self; }
 - (void)dealloc { [self close]; }
 - (void)close { if (_fd >= 0) { close(_fd); _fd = -1; } _path = nil; }
@@ -108,7 +128,7 @@ static void put32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v, v >> 8, v >
         if (r) { [NSUserDefaults.standardUserDefaults setObject:path forKey:@"SMDIPort"]; return YES; }
     }
     [self close];
-    if (error) *error = MErr(EDSMDIErrorTransport, @"The BlueSCSI board did not answer on that port. It must be in initiator mode with the SMDI firmware (both initiator jumpers set).");
+    if (error) *error = MErr(EDSMDIErrorTransport, @"The BlueSCSI board did not answer on that port. It must run the SMDI firmware in initiator mode. Quit EMU3 Disk Manager's sampler link if it holds the port.");
     return NO;
 }
 - (EDSMDIExec)executor {

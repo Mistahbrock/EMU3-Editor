@@ -29,6 +29,11 @@ typedef EDSMDIResult * _Nullable (^EDSMDIExec)(uint8_t target, NSData *cdb, NSDa
 /// All /dev/cu.usbmodem* ports (the passthrough is the second port of the board's pair).
 + (NSArray<NSString *> *)availablePorts;
 + (nullable NSString *)defaultPort;
+/// The board's log console port that goes with a passthrough port (same name stem, lower interface number).
++ (nullable NSString *)consolePortForPassthrough:(NSString *)passthroughPort;
+/// Asks the board to reboot into 'i' (SCSI initiator / SMDI) or 't' (SCSI target / disk) mode through its console port, then
+/// waits for it to re-enumerate. Blocking (up to ~15 s): call it off the main thread. Returns the board's new passthrough port, or nil.
++ (nullable NSString *)switchMode:(char)mode passthroughPort:(NSString *)port;
 @property (nonatomic, readonly, copy, nullable) NSString *path;
 @property (nonatomic, readonly) uint8_t ownID;
 - (BOOL)openPath:(NSString *)path error:(NSError **)error;      // also pings the board

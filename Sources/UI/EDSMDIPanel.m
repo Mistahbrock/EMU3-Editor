@@ -8,7 +8,7 @@
     NSProgressIndicator *_bar;
     NSButton *_sendBtn, *_recvBtn, *_scanBtn, *_cancelBtn, *_delBtn;
     EDSMDIBoard *_board; EDSMDIClient *_client;
-    BOOL _busy;
+    BOOL _busy, _restoreTarget;
 }
 
 - (instancetype)init {
@@ -26,7 +26,7 @@
     _numField = [NSTextField textFieldWithString:@"1"];
     _idField.toolTip = @"The sampler's SCSI ID (Master ▸ Setup ▸ SCSI/Disk). The BlueSCSI board uses ID 7 — set \"Avoid Host on ID\" to 7 on the sampler.";
     _numField.toolTip = @"Sample number on the sampler, 1–999 (the number the sampler's display shows). Sample 0 is the sampler's clipboard and cannot be used over SMDI.";
-    _status = [NSTextField wrappingLabelWithString:@"Needs the BlueSCSI board in initiator mode with the SMDI firmware (both initiator jumpers set), connected to the sampler's SCSI port. Quit EMU3 Disk Manager's sampler link first — it uses the same USB serial port."];
+    _status = [NSTextField wrappingLabelWithString:@"Needs the BlueSCSI board with the SMDI firmware, connected to the sampler's SCSI port. If the board is serving a disk it is switched to SMDI mode automatically (it reboots, a few seconds) and switched back when you close this window."];
     _status.font = [EDTheme lcdFont:11]; _status.textColor = EDTheme.lcdInk; _status.preferredMaxLayoutWidth = 520; _status.maximumNumberOfLines = 6;
     _bar = [NSProgressIndicator new]; _bar.style = NSProgressIndicatorStyleBar; _bar.indeterminate = NO; _bar.maxValue = 1;
     _scanBtn = [self button:@"Read sample list" action:@selector(scan:)];
@@ -60,7 +60,7 @@
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeLeading; root.spacing = 12;
     root.edgeInsets = NSEdgeInsetsMake(18, 18, 18, 18);
     _bar.translatesAutoresizingMaskIntoConstraints = NO; [_bar.widthAnchor constraintEqualToConstant:520].active = YES;
-    [EDTheme styleWindow:self.window]; self.window.contentView = [EDTheme lcdScreenAround:root]; [self.window setContentSize:root.fittingSize];
+    self.window.delegate = (id)self; [EDTheme styleWindow:self.window]; self.window.contentView = [EDTheme lcdScreenAround:root]; [self.window setContentSize:root.fittingSize];
     [self refresh:nil];
 }
 
@@ -84,31 +84,40 @@
     _portPop.enabled = _idField.enabled = !b;
 }
 
-/// Connects the board and builds a client; the status line explains any failure.
-- (BOOL)prepare {
-    NSString *port = _portPop.titleOfSelectedItem;
-    if (![port hasPrefix:@"/dev/"]) { _status.stringValue = @"No BlueSCSI serial port found. Plug the board in (initiator mode, SMDI firmware)."; return NO; }
-    if (!_board || ![_board.path isEqual:port]) {
-        _board = [EDSMDIBoard new]; NSError *e = nil;
-        if (![_board openPath:port error:&e]) { _status.stringValue = e.localizedDescription; _board = nil; return NO; }
-    }
-    int sid = _idField.intValue;
-    if (sid < 0 || sid > 6) { _status.stringValue = @"The sampler's SCSI ID must be 0–6 (the board itself uses 7)."; return NO; }
-    [NSUserDefaults.standardUserDefaults setObject:@(sid).stringValue forKey:@"SMDITarget"];
-    _client = [[EDSMDIClient alloc] initWithExec:_board.executor target:(uint8_t)sid];
-    return YES;
-}
 - (void)progress:(double)f text:(NSString *)t {
     dispatch_async(dispatch_get_main_queue(), ^{ self->_bar.doubleValue = f; self->_status.stringValue = t; });
 }
 - (void)finish:(NSString *)msg {
     [self setBusy:NO]; _status.stringValue = msg; _bar.doubleValue = 0;
 }
+/// Connects to the board (switching it from disk/target mode to initiator mode when needed) and runs `job` on a background queue.
 - (void)runJob:(NSString *(^)(EDSMDIClient *))job {
-    if (![self prepare]) return;
-    [self setBusy:YES]; _bar.doubleValue = 0;
-    EDSMDIClient *c = _client;
+    NSString *port = _portPop.titleOfSelectedItem;
+    if (![port hasPrefix:@"/dev/"]) { _status.stringValue = @"No BlueSCSI serial port found. Plug the board in (SMDI firmware)."; return; }
+    int sid = _idField.intValue;
+    if (sid < 0 || sid > 6) { _status.stringValue = @"The sampler's SCSI ID must be 0–6 (the board itself uses 7)."; return; }
+    [NSUserDefaults.standardUserDefaults setObject:@(sid).stringValue forKey:@"SMDITarget"];
+    [self setBusy:YES]; _bar.doubleValue = 0; _status.stringValue = @"Connecting to the board…";
+    EDSMDIBoard *have = (_board && [_board.path isEqual:port]) ? _board : nil;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        EDSMDIBoard *b = have; NSError *e = nil; BOOL switched = NO;
+        if (!b) {
+            b = [EDSMDIBoard new];
+            if (![b openPath:port error:&e]) {
+                // no answer: the board is probably serving a disk (target mode). Reboot it into initiator mode.
+                dispatch_async(dispatch_get_main_queue(), ^{ self->_status.stringValue = @"The board is in disk (target) mode — switching it to SMDI mode, a few seconds…"; });
+                NSString *np = [EDSMDIBoard switchMode:'i' passthroughPort:port];
+                b = [EDSMDIBoard new]; e = nil;
+                if (!np || ![b openPath:np error:&e]) {
+                    NSString *msg = e.localizedDescription ?: @"The board did not come back after switching modes.";
+                    dispatch_async(dispatch_get_main_queue(), ^{ [self finish:msg]; });
+                    return;
+                }
+                switched = YES;
+            }
+        }
+        EDSMDIClient *c = [[EDSMDIClient alloc] initWithExec:b.executor target:(uint8_t)sid];
+        dispatch_async(dispatch_get_main_queue(), ^{ self->_board = b; self->_client = c; if (switched) self->_restoreTarget = YES; [self refresh:nil]; });
         NSString *m = job(c);
         dispatch_async(dispatch_get_main_queue(), ^{ [self finish:m]; });
     });
@@ -161,7 +170,14 @@
     }];
 }
 - (void)cancel:(id)s { [_client cancel]; }
-- (void)windowWillClose:(NSNotification *)n { [_client cancel]; }
+- (void)windowWillClose:(NSNotification *)n {
+    [_client cancel];
+    // we took the board out of disk mode for SMDI: put it back so the sampler sees the served disk again
+    if (_restoreTarget && _board.path) {
+        NSString *port = _board.path; [_board close]; _board = nil; _restoreTarget = NO;
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ [EDSMDIBoard switchMode:'t' passthroughPort:port]; });
+    }
+}
 
 // MARK: list
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)t { return (NSInteger)_rows.count; }
