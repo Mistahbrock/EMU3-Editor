@@ -82,37 +82,37 @@ static const CGFloat kRulerH = 26, kOverviewH = 52;
 
 - (void)drawRuler {
     CGFloat w = self.bounds.size.width;
-    [[NSColor colorWithCalibratedWhite:0.12 alpha:1] setFill]; NSRectFill(NSMakeRect(0, 0, w, kRulerH));
-    [[NSColor colorWithCalibratedWhite:0.28 alpha:1] setFill]; NSRectFill(NSMakeRect(0, kRulerH - 1, w, 1));
+    [[EDTheme.lcdInk colorWithAlphaComponent:0.16] setFill]; NSRectFill(NSMakeRect(0, 0, w, kRulerH));
+    [EDTheme.lcdInk setFill]; NSRectFill(NSMakeRect(0, kRulerH - 1, w, 1));
     double rate = MAX(_sample.sampleRate, 1);
     double secPerPx = _framesPerPixel / rate, minStep = secPerPx * 90, step = 0.001;
     static const double nice[] = {1, 2, 5};
     for (double dec = 0.0001; dec < 1000; dec *= 10) { BOOL ok = NO; for (int i = 0; i < 3; i++) if (dec * nice[i] >= minStep) { step = dec * nice[i]; ok = YES; break; } if (ok) break; }
-    NSDictionary *at = @{NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightRegular], NSForegroundColorAttributeName: [NSColor colorWithCalibratedWhite:0.72 alpha:1]};
+    NSDictionary *at = @{NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightRegular], NSForegroundColorAttributeName: EDTheme.lcdInk};
     double t0 = [self frameForX:0] / rate, t1 = [self frameForX:w] / rate;
     for (double t = ceil(t0 / step) * step; t <= t1; t += step) {
         CGFloat x = (CGFloat)[self xForFrame:t * rate];
-        [[NSColor colorWithCalibratedWhite:0.45 alpha:1] setFill]; NSRectFill(NSMakeRect(x, kRulerH - 9, 1, 8));
+        [EDTheme.lcdInk setFill]; NSRectFill(NSMakeRect(x, kRulerH - 9, 1, 8));
         NSString *l = step < 0.01 ? [NSString stringWithFormat:@"%.1f ms", t * 1000] : (step < 1 ? [NSString stringWithFormat:@"%.3f s", t] : [NSString stringWithFormat:@"%.1f s", t]);
         if (step >= 0.01 && step < 1) l = [NSString stringWithFormat:@"%.*f s", step < 0.1 ? 2 : 1, t];
         [l drawAtPoint:NSMakePoint(x + 4, 4) withAttributes:at];
     }
     if (_hoverFrame >= 0) {
         NSString *h = [NSString stringWithFormat:@"frame %ld  ·  %.4f s", (long)_hoverFrame, _hoverFrame / rate];
-        NSDictionary *ha = @{NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: [EDTheme lcdBackground]};
+        NSDictionary *ha = @{NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: EDTheme.lcdBackground};
         NSSize sz = [h sizeWithAttributes:ha];
         NSRect r = NSMakeRect(w - sz.width - 18, 3, sz.width + 12, 19);
-        [[NSColor colorWithCalibratedRed:0.04 green:0.20 blue:0.38 alpha:1] setFill]; [[NSBezierPath bezierPathWithRoundedRect:r xRadius:4 yRadius:4] fill];
+        [EDTheme.lcdInk setFill]; [[NSBezierPath bezierPathWithRoundedRect:r xRadius:4 yRadius:4] fill];
         [h drawAtPoint:NSMakePoint(r.origin.x + 6, r.origin.y + 2) withAttributes:ha];
     }
 }
 
 - (void)drawOverview {
     NSRect o = [self overviewRect]; NSUInteger n = _sample.frameCount;
-    [[NSColor colorWithCalibratedRed:0.04 green:0.07 blue:0.10 alpha:1] setFill]; NSRectFill(NSMakeRect(0, o.origin.y - 6, o.size.width, o.size.height + 8));
-    [[NSColor colorWithCalibratedWhite:0.28 alpha:1] setFill]; NSRectFill(NSMakeRect(0, o.origin.y - 6, o.size.width, 1));
+    [[EDTheme.lcdInk colorWithAlphaComponent:0.12] setFill]; NSRectFill(NSMakeRect(0, o.origin.y - 6, o.size.width, o.size.height + 8));
+    [EDTheme.lcdInk setFill]; NSRectFill(NSMakeRect(0, o.origin.y - 6, o.size.width, 1));
     const int16_t *d = _sample.leftFrames; CGFloat mid = NSMidY(o), half = o.size.height / 2 - 2;
-    [[NSColor colorWithCalibratedRed:0.30 green:0.62 blue:0.78 alpha:1] setFill];
+    [EDTheme.lcdInk setFill];
     for (CGFloat x = 0; x < o.size.width; x++) {
         NSUInteger i0 = (NSUInteger)((double)x / o.size.width * n), i1 = MIN((NSUInteger)((double)(x + 1) / o.size.width * n) + 1, n);
         int mn = 32767, mx = -32768; for (NSUInteger i = i0; i < i1; i++) { if (d[i] < mn) mn = d[i]; if (d[i] > mx) mx = d[i]; }
@@ -121,52 +121,52 @@ static const CGFloat kRulerH = 26, kOverviewH = 52;
     }
     if (_sample.loopEnabled) {
         CGFloat xs = (CGFloat)_sample.loopStart / n * o.size.width, xe = (CGFloat)_sample.loopEnd / n * o.size.width;
-        [[NSColor colorWithCalibratedRed:0.2 green:0.4 blue:0.9 alpha:0.28] setFill]; NSRectFillUsingOperation(NSMakeRect(xs, o.origin.y - 5, xe - xs, o.size.height + 6), NSCompositingOperationSourceOver);
+        [[EDTheme.lcdInk colorWithAlphaComponent:0.25] setFill]; NSRectFillUsingOperation(NSMakeRect(xs, o.origin.y - 5, xe - xs, o.size.height + 6), NSCompositingOperationSourceOver);
     }
     CGFloat vx = (CGFloat)_visibleStart / n * o.size.width, vw = MIN(_framesPerPixel * self.bounds.size.width / n * o.size.width, o.size.width - vx);
     NSRect vr = NSMakeRect(vx, o.origin.y - 4, MAX(vw, 3), o.size.height + 4);
-    [[NSColor colorWithCalibratedWhite:1 alpha:0.10] setFill]; NSRectFillUsingOperation(vr, NSCompositingOperationSourceOver);
-    [[NSColor colorWithCalibratedRed:0.75 green:0.92 blue:0.85 alpha:1] setStroke]; NSBezierPath *bp = [NSBezierPath bezierPathWithRect:NSInsetRect(vr, 0.5, 0.5)]; bp.lineWidth = 1.5; [bp stroke];
+    [[EDTheme.lcdInk colorWithAlphaComponent:0.15] setFill]; NSRectFillUsingOperation(vr, NSCompositingOperationSourceOver);
+    [EDTheme.lcdInk setStroke]; NSBezierPath *bp = [NSBezierPath bezierPathWithRect:NSInsetRect(vr, 0.5, 0.5)]; bp.lineWidth = 1.5; [bp stroke];
 }
 
 - (void)drawRect:(NSRect)dirty {
-    [[NSColor colorWithCalibratedRed:0.045 green:0.055 blue:0.07 alpha:1] setFill]; NSRectFill(self.bounds);
+    [EDTheme.lcdBackground setFill]; NSRectFill(self.bounds);
     if (!_sample || _sample.frameCount == 0) return;
     NSUInteger n = _sample.frameCount;
     BOOL st = _sample.right != nil;
     NSRect wr = [self waveRect]; CGFloat w = wr.size.width, top = wr.origin.y, h = wr.size.height;
-    NSColor *wave = [EDTheme lcdBackground];
+    NSColor *wave = EDTheme.lcdInk;
     NSRect rl = NSMakeRect(0, top, w, st ? h / 2 : h), rr = NSMakeRect(0, top + h / 2, w, h / 2);
 
     // loop region tint
     if (_sample.loopEnabled) {
         double xs = [self xForFrame:_sample.loopStart], xe = [self xForFrame:_sample.loopEnd];
-        [[NSColor colorWithCalibratedRed:0.12 green:0.32 blue:0.85 alpha:0.20] setFill];
+        [[EDTheme.lcdInk colorWithAlphaComponent:0.20] setFill];
         NSRectFillUsingOperation(NSMakeRect(xs, top, xe - xs, h), NSCompositingOperationSourceOver);
     }
     // amplitude grid (50 %) and zero line(s)
     for (NSValue *v in (st ? @[[NSValue valueWithRect:rl], [NSValue valueWithRect:rr]] : @[[NSValue valueWithRect:rl]])) {
         NSRect r = v.rectValue; CGFloat mid = NSMidY(r), half = r.size.height / 2 - 2;
-        [[NSColor colorWithCalibratedWhite:0.15 alpha:1] setFill];
+        [[EDTheme.lcdInk colorWithAlphaComponent:0.28] setFill];
         NSRectFill(NSMakeRect(0, mid - half / 2, w, 1)); NSRectFill(NSMakeRect(0, mid + half / 2, w, 1));
-        [[NSColor colorWithCalibratedWhite:0.30 alpha:1] setFill]; NSRectFill(NSMakeRect(0, mid, w, 1));
+        [[EDTheme.lcdInk colorWithAlphaComponent:0.6] setFill]; NSRectFill(NSMakeRect(0, mid, w, 1));
     }
     [self drawChannel:_sample.leftFrames n:n inRect:rl color:wave];
     if (st) [self drawChannel:_sample.rightFrames n:n inRect:rr color:wave];
 
     // loop markers
-    NSDictionary *attr = @{NSFontAttributeName: [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: NSColor.whiteColor};
+    NSDictionary *attr = @{NSFontAttributeName: [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: EDTheme.lcdInk};
     for (int k = 0; k < 2; k++) {
         NSUInteger fr = k == 0 ? _sample.loopStart : _sample.loopEnd;
         double x = [self xForFrame:fr];
         if (x < -2 || x > w + 2) continue;
-        NSColor *mc = _sample.loopEnabled ? (k == 0 ? [NSColor systemYellowColor] : [NSColor systemOrangeColor]) : NSColor.grayColor;
+        NSColor *mc = _sample.loopEnabled ? EDTheme.lcdInk : [EDTheme.lcdInk colorWithAlphaComponent:0.4];
         [mc setFill]; NSRectFill(NSMakeRect(x - 0.5, top, 1.5, h));
         [(k == 0 ? @"S" : @"E") drawAtPoint:NSMakePoint(x + 4, top + 3) withAttributes:attr];
     }
     if (_playhead >= 0) {
         double x = [self xForFrame:_playhead];
-        [NSColor.whiteColor setFill]; NSRectFill(NSMakeRect(x, top, 1, h));
+        [EDTheme.lcdInk setFill]; NSRectFill(NSMakeRect(x, top, 1, h));
     }
     [self drawRuler];
     [self drawOverview];

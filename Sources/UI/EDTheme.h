@@ -32,7 +32,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Wraps a scroll view holding an LCD list in a view that adds that black frame (rounded, click-through). Use the returned view in the layout.
 + (NSView *)framedLCD:(NSScrollView *)s;
 /// The same frame with a row of keys inside it, under the list.
-+ (NSView *)framedLCD:(NSScrollView *)s footer:(NSView *)footer;
++ (NSView *)framedLCD:(NSView *)s footer:(NSView *)footer;
 + (void)styleLCDMenu:(NSMenu *)m;
 /// Same look for the dropdown list of a popup button (call after its items are added).
 + (void)styleLCDPopup:(NSPopUpButton *)p;

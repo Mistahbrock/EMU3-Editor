@@ -156,12 +156,19 @@
 
 // MARK: UI construction
 
+static NSTextField *lcdLabel(NSString *s) {
+    NSTextField *t = [NSTextField labelWithString:s]; t.font = [EDTheme lcdFont:12]; t.textColor = EDTheme.lcdInk; return t;
+}
 static NSTextField *label(NSString *s) {
     NSTextField *t = [NSTextField labelWithString:s]; t.font = [NSFont systemFontOfSize:12]; t.textColor = NSColor.secondaryLabelColor; return t;
 }
 - (NSTextField *)field:(CGFloat)width {
     NSTextField *t = [NSTextField textFieldWithString:@""]; t.delegate = self; t.controlSize = NSControlSizeRegular;
     t.font = [NSFont systemFontOfSize:13]; [t.widthAnchor constraintEqualToConstant:width].active = YES; return t;
+}
+- (NSTextField *)lcdField:(CGFloat)width {
+    NSTextField *t = [self field:width]; t.font = [EDTheme lcdFont:13]; t.textColor = EDTheme.lcdInk; t.bezeled = NO; t.bordered = NO; t.focusRingType = NSFocusRingTypeNone;
+    t.drawsBackground = YES; t.backgroundColor = [EDTheme.lcdInk colorWithAlphaComponent:0.14]; return t;
 }
 - (NSButton *)button:(NSString *)title action:(SEL)sel {
     NSButton *b = [NSButton buttonWithTitle:title target:self action:sel]; b.controlSize = NSControlSizeRegular; b.bezelStyle = NSBezelStyleRounded; return b;
@@ -206,26 +213,25 @@ static NSTextField *label(NSString *s) {
     _wave.loopChanged = ^(BOOL final) { [weak loopDragged:final]; };
     [_wave.heightAnchor constraintGreaterThanOrEqualToConstant:320].active = YES;
 
-    _playButton = [self button:@"▶ Play" action:@selector(togglePlay:)];
-    NSButton *zi = [self button:@"＋" action:@selector(zoomIn:)], *zo = [self button:@"－" action:@selector(zoomOut:)];
-    NSButton *zf = [self button:@"Fit" action:@selector(zoomFit:)], *zl = [self button:@"Loop" action:@selector(zoomLoop:)];
-    _info = label(@"");
+    // the whole sample editor is one green LCD screen: waveform on top, keys and fields below
+    _playButton = [EDTheme lcdKey:@"▶ Play" target:self action:@selector(togglePlay:)];
+    NSButton *zi = [EDTheme lcdKey:@"＋" target:self action:@selector(zoomIn:)], *zo = [EDTheme lcdKey:@"－" target:self action:@selector(zoomOut:)];
+    NSButton *zf = [EDTheme lcdKey:@"Fit" target:self action:@selector(zoomFit:)], *zl = [EDTheme lcdKey:@"Loop" target:self action:@selector(zoomLoop:)];
+    _info = lcdLabel(@"");
     NSStackView *transport = [NSStackView stackViewWithViews:@[_playButton, zo, zi, zf, zl, _info]];
     transport.spacing = 6;
 
-    // inspector
-    _nameField = [self field:150]; _rateField = [self field:70]; _loopStartField = [self field:80]; _loopEndField = [self field:80];
-    _loopCheck = [NSButton checkboxWithTitle:@"Loop" target:self action:@selector(inspectorChanged:)];
-    _releaseCheck = [NSButton checkboxWithTitle:@"Loop in release" target:self action:@selector(inspectorChanged:)];
-    NSStackView *insp = [NSStackView stackViewWithViews:@[label(@"Name"), _nameField, label(@"Rate Hz"), _rateField,
-        label(@"Loop start"), _loopStartField, label(@"Loop end"), _loopEndField, _loopCheck, _releaseCheck]];
+    _nameField = [self lcdField:150]; _rateField = [self lcdField:70]; _loopStartField = [self lcdField:80]; _loopEndField = [self lcdField:80];
+    _loopCheck = [EDTheme lcdButton:@"Loop" target:self action:@selector(inspectorChanged:)];
+    _releaseCheck = [EDTheme lcdButton:@"Loop in release" target:self action:@selector(inspectorChanged:)];
+    for (NSButton *b in @[_loopCheck, _releaseCheck]) b.translatesAutoresizingMaskIntoConstraints = NO;
+    [_loopCheck.widthAnchor constraintEqualToConstant:64].active = YES; [_releaseCheck.widthAnchor constraintEqualToConstant:140].active = YES;
+    NSStackView *insp = [NSStackView stackViewWithViews:@[lcdLabel(@"Name"), _nameField, lcdLabel(@"Rate Hz"), _rateField,
+        lcdLabel(@"Loop start"), _loopStartField, lcdLabel(@"Loop end"), _loopEndField, _loopCheck, _releaseCheck]];
     insp.spacing = 6;
-
-
-    NSStackView *editor = [NSStackView stackViewWithViews:@[_wave, transport, insp]];
-    editor.orientation = NSUserInterfaceLayoutOrientationVertical; editor.alignment = NSLayoutAttributeLeading; editor.spacing = 8;
-    editor.edgeInsets = NSEdgeInsetsMake(8, 8, 8, 8);
-    [_wave.widthAnchor constraintEqualToAnchor:editor.widthAnchor constant:-16].active = YES;
+    NSStackView *editorFoot = [NSStackView stackViewWithViews:@[transport, insp]];
+    editorFoot.orientation = NSUserInterfaceLayoutOrientationVertical; editorFoot.alignment = NSLayoutAttributeLeading; editorFoot.spacing = 6;
+    NSView *editor = [EDTheme framedLCD:_wave footer:editorFoot];
 
     NSSplitView *samplesSplit = [[NSSplitView alloc] init]; samplesSplit.vertical = YES; samplesSplit.dividerStyle = NSSplitViewDividerStyleThin;
     [samplesSplit addArrangedSubview:sampleScroll]; [samplesSplit addArrangedSubview:editor];

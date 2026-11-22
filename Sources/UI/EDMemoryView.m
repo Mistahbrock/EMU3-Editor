@@ -33,7 +33,11 @@ static NSString *kb(double k) { return k >= 1024 ? [NSString stringWithFormat:@"
         text([NSString stringWithFormat:@"%.0f%%", pct], NSMakePoint(NSMinX(r) + 318, y), 14, c, YES);
         NSRect bar = NSMakeRect(NSMinX(r) + 326, y + 1, r.size.width - 326 - 18, 14);
         [c setStroke]; NSBezierPath *bp = [NSBezierPath bezierPathWithRect:bar]; bp.lineWidth = 1.5; [bp stroke];
-        [c setFill]; NSRectFill(NSMakeRect(bar.origin.x + 1.5, bar.origin.y + 1.5, MAX(0, MIN(1, pct / 100)) * (bar.size.width - 3), bar.size.height - 3));
+        {   // dotted fill, like the sampler's LCD: a 2 px dot on a 3 px grid
+        NSRect fr = NSMakeRect(bar.origin.x + 1.5, bar.origin.y + 1.5, MAX(0, MIN(1, pct / 100)) * (bar.size.width - 3), bar.size.height - 3);
+        [c setFill];
+        for (CGFloat dy = 0; dy + 2 <= fr.size.height; dy += 3) for (CGFloat dx = 0; dx + 2 <= fr.size.width; dx += 3) NSRectFill(NSMakeRect(fr.origin.x + dx, fr.origin.y + dy, 2, 2));
+    }
     }
 }
 @end

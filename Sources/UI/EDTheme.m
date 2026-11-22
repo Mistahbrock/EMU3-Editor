@@ -124,7 +124,7 @@
             [v.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [v.trailingAnchor constraintEqualToAnchor:box.trailingAnchor]]]; }
     return box;
 }
-+ (NSView *)framedLCD:(NSScrollView *)s footer:(NSView *)footer {
++ (NSView *)framedLCD:(NSView *)s footer:(NSView *)footer {
     NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 5; box.layer.masksToBounds = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
     EDLCDFrameView *f = [EDLCDFrameView new];
     for (NSView *v in @[s, footer, f]) { v.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:v]; }
