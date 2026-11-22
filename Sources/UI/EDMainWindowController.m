@@ -73,7 +73,7 @@
 @end
 
 @implementation EDMainWindowController {
-    NSTimer *_statusTimer; NSString *_statusSig;
+    NSTimer *_statusTimer; NSString *_statusSig; BOOL _statusBusy;
     // model
     EMU3Filesystem *_fs;
     EDNode *_rootNode;
@@ -457,8 +457,15 @@ static NSTextField *label(NSString *s) {
     __weak typeof(self) w = self;
     _statusTimer = [NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *t) {
         EDMainWindowController *me = w; if (!me) { [t invalidate]; return; }
-        NSString *sig = [me samplerSignature];
-        if (![sig isEqualToString:me->_statusSig]) { me->_statusSig = sig; [me refreshSamplerStatus]; }
+        if (me->_statusBusy) return;
+        me->_statusBusy = YES;
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{   // the NFS volume can stall: never touch it on the main thread
+            NSString *sig = [me samplerSignature];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                me->_statusBusy = NO;
+                if (![sig isEqualToString:me->_statusSig]) { me->_statusSig = sig; [me refreshSamplerStatus]; }
+            });
+        });
     }];
 }
 - (void)refreshSamplerStatus {
