@@ -37,6 +37,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)styleWindow:(NSWindow *)w;
 /// Sampler-style modal dialogs (green LCD box, "?" or "!" glyph, soft buttons). Returns YES for OK.
 + (BOOL)confirm:(NSString *)message okTitle:(NSString *)ok cancelTitle:(NSString *)cancel;
+/// A soft-key style button for the LCD: outlined, filled with ink while its state is On.
++ (NSButton *)lcdButton:(NSString *)title target:(nullable id)target action:(nullable SEL)action;
 /// Returns the index of the pressed button (the last one is the default); -1 for Esc.
 + (NSInteger)choose:(NSString *)message buttons:(NSArray<NSString *> *)titles;
 + (void)notice:(NSString *)message;

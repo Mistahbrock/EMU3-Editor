@@ -74,7 +74,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     NSString *_menu; NSInteger _page, _lastV, _lastR;
     NSMutableArray<NSDictionary *> *_active;     // pages of the current menu that have rows for this preset
     NSMutableArray<EDParam *> *_fieldParams;
-    NSSegmentedControl *_menuSeg;
+    NSMutableArray<NSButton *> *_menuBtns; NSStackView *_menuRow;
     NSView *_screen; NSTextField *_title, *_context, *_empty; NSButton *_prevV, *_nextV;
     NSStackView *_grid, *_keys;
     NSTextField *_note;
@@ -83,34 +83,35 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
 - (instancetype)initWithFrame:(NSRect)f {
     if (!(self = [super initWithFrame:f])) return nil;
     _menu = @"Global"; _voice = -1; _ref = -1; _fieldParams = [NSMutableArray array];
-    _menuSeg = [NSSegmentedControl segmentedControlWithLabels:@[@"Global", @"Voice", @"Zone"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(menuPicked:)];
-    _menuSeg.selectedSegment = 0; _menuSeg.translatesAutoresizingMaskIntoConstraints = NO;
+    _menuBtns = [NSMutableArray array]; NSStackView *menuRow = [NSStackView new]; menuRow.spacing = 6;
+    for (NSInteger i = 0; i < 3; i++) { NSButton *b = [EDTheme lcdButton:@[@"Global", @"Voice", @"Zone"][i] target:self action:@selector(menuPicked:)]; b.tag = i; [b.widthAnchor constraintEqualToConstant:78].active = YES; [_menuBtns addObject:b]; [menuRow addArrangedSubview:b]; }
+    menuRow.translatesAutoresizingMaskIntoConstraints = NO; _menuRow = menuRow;
     _screen = [NSView new]; _screen.wantsLayer = YES; _screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
     _screen.layer.cornerRadius = 8; _screen.layer.borderColor = NSColor.blackColor.CGColor; _screen.layer.borderWidth = EDTheme.lcdFrameWidth;
     _screen.translatesAutoresizingMaskIntoConstraints = NO;
     _title = [NSTextField labelWithString:@""]; _title.font = [EDTheme lcdFont:22]; _title.textColor = EDTheme.lcdInk;
     _context = [NSTextField labelWithString:@""]; _context.font = [EDTheme lcdFont:14]; _context.textColor = EDTheme.lcdInk;
-    _prevV = [NSButton buttonWithTitle:@"◀" target:self action:@selector(prevItem:)]; _nextV = [NSButton buttonWithTitle:@"▶" target:self action:@selector(nextItem:)];
-    for (NSButton *b in @[_prevV, _nextV]) { b.bezelStyle = NSBezelStyleRounded; b.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua]; }
+    _prevV = [EDTheme lcdButton:@"◀" target:self action:@selector(prevItem:)]; _nextV = [EDTheme lcdButton:@"▶" target:self action:@selector(nextItem:)];
+    for (NSButton *b in @[_prevV, _nextV]) { [b setButtonType:NSButtonTypeMomentaryPushIn]; [b.widthAnchor constraintEqualToConstant:40].active = YES; }
     _empty = [NSTextField wrappingLabelWithString:@""]; _empty.font = [EDTheme lcdFont:15]; _empty.textColor = EDTheme.lcdInk; _empty.alignment = NSTextAlignmentCenter;
     _grid = [NSStackView new]; _grid.orientation = NSUserInterfaceLayoutOrientationHorizontal; _grid.alignment = NSLayoutAttributeTop; _grid.spacing = 40;
-    for (NSView *v in @[_title, _context, _prevV, _nextV, _empty, _grid]) { v.translatesAutoresizingMaskIntoConstraints = NO; [_screen addSubview:v]; }
     _keys = [NSStackView new]; _keys.orientation = NSUserInterfaceLayoutOrientationVertical; _keys.spacing = 6; _keys.translatesAutoresizingMaskIntoConstraints = NO;
+    for (NSView *v in @[_title, _context, _prevV, _nextV, _empty, _grid, _menuRow, _keys]) { v.translatesAutoresizingMaskIntoConstraints = NO; [_screen addSubview:v]; }
     _note = [NSTextField wrappingLabelWithString:@"Pages follow the sampler's Preset Edit menus. Changes go straight into the preset (Edit ▸ Undo works)."];
     _note.font = [NSFont systemFontOfSize:12]; _note.textColor = NSColor.secondaryLabelColor; _note.translatesAutoresizingMaskIntoConstraints = NO;
-    for (NSView *v in @[_menuSeg, _screen, _keys, _note]) [self addSubview:v];
+    for (NSView *v in @[_screen, _note]) [self addSubview:v];
     [NSLayoutConstraint activateConstraints:@[
-        [_menuSeg.topAnchor constraintEqualToAnchor:self.topAnchor], [_menuSeg.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-        [_screen.topAnchor constraintEqualToAnchor:_menuSeg.bottomAnchor constant:8], [_screen.leadingAnchor constraintEqualToAnchor:self.leadingAnchor], [_screen.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-        [_screen.heightAnchor constraintEqualToConstant:330],
-        [_title.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:12], [_title.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor],
-        [_context.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:16], [_context.centerYAnchor constraintEqualToAnchor:_title.centerYAnchor],
-        [_nextV.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-14], [_nextV.centerYAnchor constraintEqualToAnchor:_title.centerYAnchor],
-        [_prevV.trailingAnchor constraintEqualToAnchor:_nextV.leadingAnchor constant:-4], [_prevV.centerYAnchor constraintEqualToAnchor:_title.centerYAnchor],
-        [_grid.topAnchor constraintEqualToAnchor:_title.bottomAnchor constant:14], [_grid.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:24],
-        [_empty.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_screen.centerYAnchor], [_empty.widthAnchor constraintEqualToConstant:420],
-        [_keys.topAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:10], [_keys.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-        [_note.topAnchor constraintEqualToAnchor:_keys.bottomAnchor constant:8], [_note.leadingAnchor constraintEqualToAnchor:self.leadingAnchor], [_note.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [_screen.topAnchor constraintEqualToAnchor:self.topAnchor], [_screen.leadingAnchor constraintEqualToAnchor:self.leadingAnchor], [_screen.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+        [_screen.heightAnchor constraintEqualToConstant:430],
+        [_menuRow.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:12], [_menuRow.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:14],
+        [_title.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor], [_title.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor],
+        [_nextV.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-14], [_nextV.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor],
+        [_prevV.trailingAnchor constraintEqualToAnchor:_nextV.leadingAnchor constant:-6], [_prevV.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor],
+        [_context.trailingAnchor constraintEqualToAnchor:_prevV.leadingAnchor constant:-12], [_context.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor],
+        [_grid.topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:22], [_grid.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:24],
+        [_empty.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_screen.centerYAnchor constant:-20], [_empty.widthAnchor constraintEqualToConstant:420],
+        [_keys.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:14], [_keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-12],
+        [_note.topAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:8], [_note.leadingAnchor constraintEqualToAnchor:self.leadingAnchor], [_note.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [_note.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]]];
     return self;
 }
@@ -126,7 +127,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     }
     [self rebuild];
 }
-- (void)menuPicked:(NSSegmentedControl *)s { _menu = @[@"Global", @"Voice", @"Zone"][s.selectedSegment]; _page = 0; [self rebuild]; }
+- (void)menuPicked:(NSButton *)s { _menu = @[@"Global", @"Voice", @"Zone"][s.tag]; _page = 0; [self rebuild]; }
 - (NSInteger)vIndex { return MAX(_voice, 0); }
 - (NSInteger)rIndex { return MAX(_ref, 0); }
 - (EDParamScope)scopeForMenu { return [_menu isEqual:@"Global"] ? EDScopePreset : ([_menu isEqual:@"Voice"] ? EDScopeVoice : EDScopeRef); }
@@ -144,7 +145,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     return out;
 }
 - (void)rebuild {
-    _menuSeg.selectedSegment = [@[@"Global", @"Voice", @"Zone"] indexOfObject:_menu];
+    for (NSButton *b in _menuBtns) b.state = [@[@"Global", @"Voice", @"Zone"][b.tag] isEqual:_menu] ? NSControlStateValueOn : NSControlStateValueOff;
     for (NSView *v in _grid.arrangedSubviews.copy) { [_grid removeArrangedSubview:v]; [v removeFromSuperview]; }
     for (NSView *v in _keys.arrangedSubviews.copy) { [_keys removeArrangedSubview:v]; [v removeFromSuperview]; }
     [_fieldParams removeAllObjects];
@@ -165,8 +166,8 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     if (_page >= (NSInteger)_active.count) _page = 0;
     for (NSInteger i = 0; i < (NSInteger)_active.count; i++) {
         if (i % 6 == 0) { NSStackView *row = [NSStackView new]; row.spacing = 8; [_keys addArrangedSubview:row]; }
-        NSButton *b = [NSButton buttonWithTitle:_active[i][@"soft"] target:self action:@selector(softKey:)];
-        b.tag = i; b.bezelStyle = NSBezelStyleRounded; [b setButtonType:NSButtonTypePushOnPushOff]; b.state = i == _page ? NSControlStateValueOn : NSControlStateValueOff;
+        NSButton *b = [EDTheme lcdButton:_active[i][@"soft"] target:self action:@selector(softKey:)];
+        b.tag = i; b.state = i == _page ? NSControlStateValueOn : NSControlStateValueOff;
         [b.widthAnchor constraintEqualToConstant:104].active = YES; [(NSStackView *)_keys.arrangedSubviews.lastObject addArrangedSubview:b];
     }
     NSDictionary *pg = _active[_page]; _title.stringValue = pg[@"title"];

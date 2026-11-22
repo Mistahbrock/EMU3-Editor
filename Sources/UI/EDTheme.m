@@ -146,9 +146,11 @@
 - (void)drawRect:(NSRect)r {
     NSRect b = NSInsetRect(self.bounds, 2, 2);
     NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:b xRadius:6 yRadius:6];
-    if (self.isHighlighted) { [[EDTheme.lcdInk colorWithAlphaComponent:0.25] setFill]; [p fill]; }
+    BOOL on = self.state == NSControlStateValueOn;
+    if (on) { [EDTheme.lcdInk setFill]; [p fill]; }
+    else if (self.isHighlighted) { [[EDTheme.lcdInk colorWithAlphaComponent:0.25] setFill]; [p fill]; }
     [EDTheme.lcdInk setStroke]; p.lineWidth = 2; [p stroke];
-    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:15], NSForegroundColorAttributeName: EDTheme.lcdInk};
+    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:self.font.pointSize > 0 ? self.font.pointSize : 15], NSForegroundColorAttributeName: on ? EDTheme.lcdBackground : EDTheme.lcdInk};
     NSSize ts = [self.title sizeWithAttributes:at];
     [self.title drawAtPoint:NSMakePoint(NSMidX(b) - ts.width / 2, NSMidY(b) - ts.height / 2) withAttributes:at];
 }
@@ -165,6 +167,15 @@
 @end
 @implementation EDLCDDialogHandler
 - (void)pick:(NSButton *)b { [NSApp stopModalWithCode:b.tag + 100]; }
+@end
+
+@implementation EDTheme (LCDButtons)
++ (NSButton *)lcdButton:(NSString *)title target:(id)t action:(SEL)a {
+    EDLCDButton *b = [[EDLCDButton alloc] initWithFrame:NSMakeRect(0, 0, 90, 30)]; b.title = title; b.target = t; b.action = a; b.bordered = NO;
+    b.font = [EDTheme lcdFont:13]; [b setButtonType:NSButtonTypePushOnPushOff]; b.translatesAutoresizingMaskIntoConstraints = NO;
+    [b.heightAnchor constraintEqualToConstant:30].active = YES;
+    return b;
+}
 @end
 
 @implementation EDTheme (Dialogs)
