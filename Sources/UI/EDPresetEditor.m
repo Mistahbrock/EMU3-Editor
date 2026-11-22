@@ -1,4 +1,5 @@
 #import "EDPresetEditor.h"
+#import "EDPresetLCD.h"
 #import "EDPreset+Params.h"
 #import "EDTheme.h"
 #import "EDPlayer.h"
@@ -115,6 +116,7 @@
     EDPNode *_sel;
     EDKeyMapView *_keyMap;
     EDPlayer *_player;
+    EDPresetLCD *_lcd; NSScrollView *_paramScroll; NSSegmentedControl *_viewSeg;
 }
 
 - (instancetype)initWithFrame:(NSRect)f {
@@ -193,10 +195,20 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
     _keyMap.picked = ^(id node) { [weak pickNode:node]; };
     _keyMap.keyDown = ^(int k) { [weak playKey:k]; };
     _keyMap.keyUp = ^{ [weak endKey]; };
-    NSStackView *right = [NSStackView stackViewWithViews:@[top, _keyMap, scrollOf(_paramTable)]];
+    _paramScroll = scrollOf(_paramTable);
+    _lcd = [[EDPresetLCD alloc] initWithFrame:NSMakeRect(0, 0, 600, 420)]; _lcd.translatesAutoresizingMaskIntoConstraints = NO;
+    _lcd.getValue = ^NSInteger(EDParam *pp, NSInteger v, NSInteger r) { return [weak lcdValueOf:pp voice:v ref:r]; };
+    _lcd.setValue = ^(EDParam *pp, NSInteger v, NSInteger r, NSInteger val) { [weak applyParam:pp voice:v ref:r value:val]; };
+    _lcd.sampleName = ^NSString *(NSInteger n) { return [weak sampleLabel:n]; };
+    _lcd.navigate = ^(NSInteger v, NSInteger r) { [weak navigateToVoice:v ref:r]; };
+    _viewSeg = [NSSegmentedControl segmentedControlWithLabels:@[@"LCD", @"List"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(paramViewPicked:)];
+    _viewSeg.selectedSegment = 0;
+    NSStackView *right = [NSStackView stackViewWithViews:@[top, _keyMap, _viewSeg, _lcd, _paramScroll]];
     right.orientation = NSUserInterfaceLayoutOrientationVertical; right.alignment = NSLayoutAttributeLeading; right.spacing = 8;
     [right.arrangedSubviews[1].widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
-    [right.arrangedSubviews[2].widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
+    [_lcd.widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
+    [_paramScroll.widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
+    _paramScroll.hidden = YES;
 
     NSSplitView *split = [[NSSplitView alloc] initWithFrame:self.bounds]; split.vertical = YES; split.dividerStyle = NSSplitViewDividerStyleThin;
     split.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -288,7 +300,7 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
             EDPRow *r = [EDPRow new]; r.group = p.group; r.param = p; [rows addObject:r];
         }
     }
-    _rows = rows; [_paramTable reloadData];
+    _rows = rows; [_paramTable reloadData]; [self refreshLCD];
     BOOL e4 = _preset.canEditStructure, onVoice = _sel.voice >= 0;
     _newVoice.enabled = e4;
     _addRef.enabled = e4 && onVoice; _removeRef.enabled = e4 && _sel.ref >= 0 && [_preset refCountInVoice:_sel.voice] > 1;
@@ -442,11 +454,26 @@ static NSInteger parseValue(NSString *s, EDParam *p) {
     NSInteger nv = parseValue(f.stringValue, p);
     NSInteger old = [_preset valueOfParam:p voice:MAX(_sel.voice, 0) ref:MAX(_sel.ref, 0)];
     if (nv == old) { [_paramTable reloadDataForRowIndexes:[NSIndexSet indexSetWithIndex:row] columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 3)]]; return; }
-    [_preset setValue:nv ofParam:p voice:MAX(_sel.voice, 0) ref:MAX(_sel.ref, 0)];
+    [self applyParam:p voice:MAX(_sel.voice, 0) ref:MAX(_sel.ref, 0) value:nv];
+}
+/// One parameter change, from the list or from the LCD pages: undo, structure refresh, dirty state.
+- (void)applyParam:(EDParam *)p voice:(NSInteger)v ref:(NSInteger)r value:(NSInteger)nv {
+    if (!_preset) return;
+    NSDictionary *before = [self snapshot];
+    [_preset setValue:nv ofParam:p voice:v ref:r];
     [self registerUndo:before name:[NSString stringWithFormat:@"Change %@", p.label]];
-    [_paramTable reloadDataForRowIndexes:[NSIndexSet indexSetWithIndex:row] columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 3)]];
+    [_paramTable reloadData];
     if (p.isSample || p.isNote || [p.label hasPrefix:@"Key"]) [self refreshTreeKeepingSelection];
+    [self refreshLCD];
     [self changed];
+}
+- (NSInteger)lcdValueOf:(EDParam *)p voice:(NSInteger)v ref:(NSInteger)r { return _preset ? [_preset valueOfParam:p voice:v ref:r] : 0; }
+- (void)refreshLCD { [_lcd showPreset:_preset voice:_sel ? _sel.voice : -1 ref:_sel ? _sel.ref : -1]; }
+- (void)paramViewPicked:(NSSegmentedControl *)s { BOOL lcd = s.selectedSegment == 0; _lcd.hidden = !lcd; _paramScroll.hidden = lcd; }
+- (void)navigateToVoice:(NSInteger)v ref:(NSInteger)r {
+    EDPNode *n = v >= 0 && v < (NSInteger)_root.children.count ? _root.children[v] : _root;
+    if (r >= 0 && r < (NSInteger)n.children.count) n = n.children[r];
+    NSInteger row = [_outline rowForItem:n]; if (row >= 0) [_outline selectRowIndexes:[NSIndexSet indexSetWithIndex:row] byExtendingSelection:NO];
 }
 
 - (void)refreshTreeKeepingSelection {
