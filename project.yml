@@ -1,0 +1,25 @@
+name: EMU3Editor
+options:
+  bundleIdPrefix: com.rhynoaudio
+  deploymentTarget:
+    macOS: "12.0"
+targets:
+  EMU3Editor:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+    settings:
+      base:
+        PRODUCT_NAME: EMU3Editor
+        PRODUCT_BUNDLE_IDENTIFIER: com.rhynoaudio.emu3editor
+        INFOPLIST_FILE: Resources/Info.plist
+        CLANG_ENABLE_OBJC_ARC: YES
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_IDENTITY: "-"
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Sources/Disk", "$(SRCROOT)/Sources/Model", "$(SRCROOT)/Sources/UI", "$(SRCROOT)/Sources/MIDI"]
+    dependencies:
+      - sdk: AudioToolbox.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreMIDI.framework
+      - sdk: UniformTypeIdentifiers.framework

@@ -1,0 +1,12 @@
+// EDSMDIPanel — window for SMDI sample transfers over SCSI (BlueSCSI initiator board).
+// GPL-3.0-or-later, Copyright (C) 2026 Rhyno Audio.
+#import <Cocoa/Cocoa.h>
+#import "EDSMDI.h"
+
+NS_ASSUME_NONNULL_BEGIN
+@interface EDSMDIPanel : NSWindowController
+@property (nonatomic, copy, nullable) EDSDSSample * (^currentSample)(void);
+@property (nonatomic, copy, nullable) void (^received)(EDSDSSample *sample, NSString *name);
+- (void)present;
+@end
+NS_ASSUME_NONNULL_END
