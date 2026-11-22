@@ -33,14 +33,16 @@
 @implementation EDLogoView
 - (NSSize)intrinsicContentSize { return NSMakeSize(210, 44); }
 - (void)drawRect:(NSRect)r {
+    // the logo is Graphics/emu-logo.png (copied into the app); drawn in code only if that file is missing
+    static NSImage *img; static dispatch_once_t once;
+    dispatch_once(&once, ^{ img = [NSImage imageNamed:@"emu-logo"]; });
+    if (img) { [img drawInRect:self.bounds fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1 respectFlipped:YES hints:@{NSImageHintInterpolation: @(NSImageInterpolationHigh)}]; return; }
     NSDictionary *emu = @{NSFontAttributeName: [NSFont systemFontOfSize:34 weight:NSFontWeightHeavy], NSForegroundColorAttributeName: EDTheme.logoBlue, NSKernAttributeName: @(-1)};
-    NSDictionary *three = @{NSFontAttributeName: [NSFont systemFontOfSize:34 weight:NSFontWeightHeavy], NSForegroundColorAttributeName: EDTheme.accent};
     NSDictionary *sub = @{NSFontAttributeName: [NSFont systemFontOfSize:9 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: EDTheme.labelWhite, NSKernAttributeName: @(2.2)};
     NSSize es = [@"E-MU" sizeWithAttributes:emu];
     CGFloat top = NSHeight(self.bounds) - 40;
     [@"E-MU" drawAtPoint:NSMakePoint(0, top + 6) withAttributes:emu];
-    (void)three;
-    [EDTheme.logoBlue setFill];   // the three bars of the E-MU mark, after the name
+    [EDTheme.logoBlue setFill];
     for (int i = 0; i < 3; i++) NSRectFill(NSMakeRect(es.width + 8, top + 12 + i * 9, 26, 5));
     [@"SAMPLER EDITOR" drawAtPoint:NSMakePoint(2, top - 4) withAttributes:sub];
 }
@@ -54,9 +56,9 @@
 - (void)setLine1:(NSString *)l { _line1 = [l copy]; self.needsDisplay = YES; }
 - (void)setLine2:(NSString *)l { _line2 = [l copy]; self.needsDisplay = YES; }
 - (void)drawRect:(NSRect)r {
-    NSRect b = NSInsetRect(self.bounds, 1, 1);
+    NSRect b = NSInsetRect(self.bounds, EDTheme.lcdFrameWidth, EDTheme.lcdFrameWidth);
     NSBezierPath *bez = [NSBezierPath bezierPathWithRoundedRect:b xRadius:6 yRadius:6];
-    [[NSColor blackColor] setFill]; [[NSBezierPath bezierPathWithRoundedRect:self.bounds xRadius:7 yRadius:7] fill];
+    [[NSColor blackColor] setFill]; [[NSBezierPath bezierPathWithRoundedRect:self.bounds xRadius:8 yRadius:8] fill];
     [EDTheme.lcdBackground setFill]; [bez fill];
     NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByTruncatingMiddle;
     NSDictionary *a1 = @{NSFontAttributeName: [EDTheme lcdFont:15], NSForegroundColorAttributeName: EDTheme.lcdInk, NSParagraphStyleAttributeName: ps};
@@ -96,10 +98,9 @@
     EDSDSPanel *_sds;
     EDSMDIPanel *_smdi;
     EDPresetEditor *_presetEditor;
-    EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview;
+    EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn; BOOL _autoBackedUp;
     EDHomeList *_home;
     EDMemoryView *_memory;
-    NSPopUpButton *_ramPop;
     NSTextField *_samplerStatus, *_diskHint;
 }
 
@@ -184,13 +185,13 @@ static NSTextField *label(NSString *s) {
     _outline.outlineTableColumn = oc; _outline.dataSource = self; _outline.delegate = self;
     _outline.style = NSTableViewStyleSourceList; _outline.doubleAction = @selector(outlineDoubleClick:); _outline.target = self;
     [EDTheme styleLCDTable:_outline];
-    NSScrollView *left = [self scroll:_outline];
+    NSView *left = [EDTheme framedLCD:[self scroll:_outline]];
 
     // sample list
     _sampleTable = [self table:@[@[@"num", @"#", @"40"], @[@"name", @"Sample", @"170"], @[@"rate", @"Rate", @"64"], @[@"len", @"Frames", @"80"], @[@"loop", @"Loop", @"44"]]];
     _sampleTable.headerView = [[NSTableHeaderView alloc] init]; _sampleTable.rowHeight = 24;
     [EDTheme styleLCDTable:_sampleTable];
-    NSScrollView *sampleScroll = [self scroll:_sampleTable];
+    NSView *sampleScroll = [EDTheme framedLCD:[self scroll:_sampleTable]];
 
     // waveform + transport
     _wave = [[EDWaveformView alloc] init];
@@ -231,7 +232,10 @@ static NSTextField *label(NSString *s) {
     NSMenu *pm = [[NSMenu alloc] initWithTitle:@"Preset"];
     NSMenuItem *m1 = [pm addItemWithTitle:@"Save as Bank on Sampler Disk…" action:@selector(sendPresetToSamplerDisk:) keyEquivalent:@""]; m1.target = self;
     NSMenuItem *m2 = [pm addItemWithTitle:@"Export as Bank File…" action:@selector(exportPresetBank:) keyEquivalent:@""]; m2.target = self;
-    _presetEditor.presetMenu = pm;
+    [pm addItem:NSMenuItem.separatorItem];
+    NSMenuItem *m3 = [pm addItemWithTitle:@"Delete Preset" action:@selector(deletePresetFromMenu:) keyEquivalent:@""]; m3.target = _presetEditor;
+    NSMenuItem *m4 = [pm addItemWithTitle:@"Clear All Presets…" action:@selector(clearAllPresets:) keyEquivalent:@""]; m4.target = self;
+    [EDTheme styleLCDMenu:pm]; _presetEditor.presetMenu = pm;
 
     // Disk tab: open buttons over the source list
     NSStackView *diskBar = [NSStackView stackViewWithViews:@[[self button:@"Open Disk Image…" action:@selector(openDiskImage:)],
@@ -268,17 +272,19 @@ static NSTextField *label(NSString *s) {
     [gSampler.widthAnchor constraintEqualToAnchor:leftCol.widthAnchor].active = YES; [gUtils.widthAnchor constraintEqualToAnchor:leftCol.widthAnchor].active = YES; [gMasterMenu.widthAnchor constraintEqualToAnchor:leftCol.widthAnchor].active = YES;
     _home = [EDHomeList new]; __weak EDMainWindowController *wself = self;
     _home.onOpen = ^(NSURL *u) { [wself openURL:u]; };
-    NSScrollView *homeScroll = [NSScrollView new]; homeScroll.documentView = _home.table; homeScroll.hasVerticalScroller = YES;
+    NSScrollView *homeScroll = [NSScrollView new]; homeScroll.documentView = _home.table; homeScroll.hasVerticalScroller = YES; NSView *homeFrame = [EDTheme framedLCD:homeScroll];
     NSTextField *homeHint = label(@"Double-click a bank to open it.");
-    NSStackView *gOpen = [self group:@"Open a bank" views:@[homeHint, homeScroll]];
-    [homeScroll.widthAnchor constraintEqualToAnchor:gOpen.widthAnchor].active = YES;
-    [homeScroll.heightAnchor constraintGreaterThanOrEqualToConstant:240].active = YES;
+    NSStackView *gOpen = [self group:@"Open a bank" views:@[homeHint, homeFrame]];
+    [homeFrame.widthAnchor constraintEqualToAnchor:gOpen.widthAnchor].active = YES;
+    [homeFrame.heightAnchor constraintGreaterThanOrEqualToConstant:240].active = YES;
     _memory = [EDMemoryView new]; _memory.residentTotalK = 768; _memory.presetTotalK = 404;
     NSInteger mb = [NSUserDefaults.standardUserDefaults integerForKey:@"SamplerSampleMB"]; if (mb <= 0) mb = 40; _memory.sampleTotalMB = mb;
-    _ramPop = [NSPopUpButton new]; for (NSString *m in @[@"8", @"16", @"32", @"40", @"64", @"96", @"128"]) [_ramPop addItemWithTitle:[m stringByAppendingString:@" MB"]];
-    [_ramPop selectItemWithTitle:[NSString stringWithFormat:@"%ld MB", (long)mb]]; _ramPop.target = self; _ramPop.action = @selector(ramChanged:);
-    NSStackView *ramRow = [NSStackView stackViewWithViews:@[label(@"Sampler sample memory"), _ramPop]]; ramRow.spacing = 8;
-    NSStackView *gBank = [self group:@"Current bank" views:@[_masterSummary, _memory, ramRow,
+    NSTextField *ramRow = label([NSString stringWithFormat:@"Sample memory: %ld MB (installed in the sampler)", (long)mb]);
+    ramRow.toolTip = @"Information only: the sampler's sample RAM is physical (SIMMs) and cannot be changed by software. The Memory box uses this size for its percentages.";
+    _autoSaveBtn = [NSButton checkboxWithTitle:@"Save to sampler automatically" target:self action:@selector(autoSaveToggled:)];
+    _autoSaveBtn.state = [NSUserDefaults.standardUserDefaults boolForKey:@"AutoSaveToSampler"] ? NSControlStateValueOn : NSControlStateValueOff;
+    _autoSaveBtn.toolTip = @"When the open bank is on the sampler's disk, writes it back a few seconds after you stop editing. The sampler still needs a SCSI rescan and a bank reload to see the change. The original is backed up once per opened bank.";
+    NSStackView *gBank = [self group:@"Current bank" views:@[_masterSummary, _memory, ramRow, _autoSaveBtn,
         [self wideButton:@"Save Bank" action:@selector(saveBank:)], [self wideButton:@"Save Bank As…" action:@selector(saveBankAs:)],
         [self wideButton:@"Open Bank File…" action:@selector(openBankFile:)],
         [self wideButton:@"Send Sample to Sampler Disk…" action:@selector(sendToSamplerDisk:)]]];
@@ -297,6 +303,8 @@ static NSTextField *label(NSString *s) {
     _midiEditor = [[EDMIDIEditor alloc] initWithFrame:NSMakeRect(0, 0, 800, 500)];
     _midiEditor.edited = ^{ [weak updateTitle]; [weak modelChanged]; };
     _midiEditor.action = ^(NSString *n) { [weak masterAction:n]; };
+    _midiEditor.memoryChanged = ^(NSInteger k) { EDMainWindowController *s = weak; if (s) s->_memory.presetTotalK = k; };
+    NSString *pm0 = [NSUserDefaults.standardUserDefaults dictionaryForKey:@"SamplerMIDIProfile"][@"memprefer"]; if (pm0.integerValue > 0) _memory.presetTotalK = pm0.integerValue;
     _masterOverview = masterView; _midiEditor.hidden = YES;
     for (NSView *v in @[mp, masterView, _midiEditor]) { v.translatesAutoresizingMaskIntoConstraints = NO; [masterRoot addSubview:v]; }
     [NSLayoutConstraint activateConstraints:@[
@@ -419,8 +427,23 @@ static NSTextField *label(NSString *s) {
         boards ? @"● SCSI board connected" : @"○ SCSI board not found"];
     [_home reloadWithSamplerDisk:d];
 }
-- (IBAction)ramChanged:(NSPopUpButton *)p {
-    NSInteger mb = p.titleOfSelectedItem.integerValue; _memory.sampleTotalMB = mb; [NSUserDefaults.standardUserDefaults setInteger:mb forKey:@"SamplerSampleMB"];
+- (IBAction)autoSaveToggled:(NSButton *)b {
+    [NSUserDefaults.standardUserDefaults setBool:b.state == NSControlStateValueOn forKey:@"AutoSaveToSampler"]; [self scheduleAutoSave];
+}
+/// Opt-in: a bank that lives on the sampler's disk is written back 3 s after the last edit, without reloading it.
+- (void)scheduleAutoSave {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(autoSaveNow) object:nil];
+    if (_autoSaveBtn.state != NSControlStateValueOn || !_bank.dirty || !_standaloneURL || ![self urlIsOnSamplerDisk:_standaloneURL]) return;
+    [self performSelector:@selector(autoSaveNow) withObject:nil afterDelay:3];
+}
+- (void)autoSaveNow {
+    if (!_bank.dirty || !_standaloneURL) return;
+    NSError *e = nil; NSData *out = [_bank serializeWithError:&e];
+    if (!out) { _status.stringValue = @"Auto-save failed: cannot serialize the bank"; return; }
+    if (!_autoBackedUp) { [self backupOriginal]; _autoBackedUp = YES; }
+    if (![out writeToURL:_standaloneURL options:NSDataWritingAtomic error:&e]) { _status.stringValue = [@"Auto-save failed: " stringByAppendingString:e.localizedDescription ?: @"write error"]; return; }
+    [_bank markClean]; [self updateTitle]; [self modelChanged];
+    _status.stringValue = [NSString stringWithFormat:@"Auto-saved %@ to the sampler disk (%@) — rescan the SCSI bus on the sampler, then load the bank", _bankTitle, EMU3FormatBytes(out.length)];
 }
 - (IBAction)showAssignKeys:(id)s { [EDUtils showAssignKeysIn:self.window]; }
 - (IBAction)showChannelVolume:(id)s { [EDUtils showChannelVolumeIn:self.window]; }
@@ -435,8 +458,19 @@ static NSTextField *label(NSString *s) {
 - (IBAction)showMIDITab:(id)s { [self showMasterPage:1]; }
 - (IBAction)showSetupTab:(id)s { [self showMasterPage:2]; }
 - (IBAction)showBankTab:(id)s { [self showMasterPage:3]; }
+- (IBAction)clearAllPresets:(id)s { [self masterAction:@"erasePresets"]; }
 - (void)masterAction:(NSString *)name {
     if ([name isEqual:@"saveAs"]) { [self saveBankAs:nil]; return; }
+    if ([name isEqual:@"eraseAll"] && _bank) {
+        NSAlert *a = [NSAlert new]; a.messageText = @"Erase all presets and samples of this bank?";
+        a.informativeText = [NSString stringWithFormat:@"%lu presets and %lu samples will be removed. Nothing is written until you save; reopen the bank without saving to get them back. With automatic saving on and the bank on the sampler disk, the empty bank is written a few seconds from now.",
+            (unsigned long)_bank.presets.count, (unsigned long)_bank.samples.count];
+        [a addButtonWithTitle:@"Cancel"]; [a addButtonWithTitle:@"Erase Everything"]; if ([a runModal] != NSAlertSecondButtonReturn) return;
+        [_player stop]; [_bank eraseAllPresetsAndSamples]; _sample = nil;
+        [_sampleTable reloadData]; [self selectSample:nil];
+        _presetEditor.bank = _bank; _midiEditor.bank = _bank; [self refreshBankStatus]; [self updateTitle]; [self modelChanged];
+        return;
+    }
     if ([name isEqual:@"erasePresets"] && _bank) {
         NSAlert *a = [NSAlert new]; a.messageText = @"Erase all presets of this bank?";
         a.informativeText = [NSString stringWithFormat:@"%lu presets will be removed. The samples are kept. This cannot be undone; reopen the bank without saving to get them back.", (unsigned long)_bank.presets.count];
@@ -481,6 +515,13 @@ static NSTextField *label(NSString *s) {
 - (BOOL)openURL:(NSURL *)url {
     NSString *ext = url.pathExtension.lowercaseString;
     if ([ext hasPrefix:@"e4b"] || [ext isEqualToString:@"e3b"]) return [self openBankFileAtURL:url];
+    if ([ext isEqualToString:@"hda"] || [ext isEqualToString:@"iso"] || [ext isEqualToString:@"img"]) return [self openImageAtURL:url];
+    // files on the sampler's disk have no extension: tell a bank from a disk image by its first bytes
+    NSFileHandle *fh = [NSFileHandle fileHandleForReadingFromURL:url error:nil]; NSData *head = [fh readDataOfLength:16]; [fh closeFile];
+    if (head.length >= 12) {
+        const char *b = head.bytes;
+        if ((memcmp(b, "FORM", 4) == 0 && memcmp(b + 8, "E4B", 3) == 0) || memcmp(b, "EMULATOR 3X", 11) == 0 || memcmp(b, "EMU SI-32 v3", 12) == 0) return [self openBankFileAtURL:url];
+    }
     return [self openImageAtURL:url];
 }
 
@@ -544,11 +585,14 @@ static NSTextField *label(NSString *s) {
         return NO;
     }
     [_player stop];
-    _originalData = data; _bank = bank; _bankTitle = title; _midiEditor.bankTitle = title; _sample = nil;
+    _originalData = data; _autoBackedUp = NO; _bank = bank; _bankTitle = title; _midiEditor.bankTitle = title; _sample = nil;
     [self.window.undoManager removeAllActions];
     [_sampleTable reloadData]; _presetEditor.bank = bank; _midiEditor.bank = bank;
-    if (bank.samples.count) [_sampleTable selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
-    else [self selectSample:nil];
+    if (bank.samples.count) {
+        [_sampleTable selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+        // row 0 may already have been selected in the previous bank, in which case no selection notification fires
+        if (_sample != bank.samples.firstObject) [self selectSample:bank.samples.firstObject];
+    } else [self selectSample:nil];
     self.window.documentEdited = NO;
     [self updateTitle];
     [self.window makeFirstResponder:_sampleTable];
@@ -569,7 +613,7 @@ static NSTextField *label(NSString *s) {
     NSString *base = _fs ? _fs.imageURL.lastPathComponent : @"";
     NSString *t = _bank ? (base.length ? [NSString stringWithFormat:@"%@ ▸ %@", base, _bankTitle] : _bankTitle) : (base.length ? base : @"");
     self.window.title = t.length ? [@"EMU3 Editor — " stringByAppendingString:t] : @"EMU3 Editor";
-    self.window.documentEdited = _bank.dirty;
+    self.window.documentEdited = _bank.dirty; [self scheduleAutoSave];
     [self modelChanged];
 }
 

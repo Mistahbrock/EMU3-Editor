@@ -135,6 +135,7 @@ static NSView *column(NSString *title, NSView *content) {
     return st;
 }
 static NSScrollView *scrollOf(NSView *v) { NSScrollView *s = [[NSScrollView alloc] init]; s.documentView = v; s.hasVerticalScroller = YES; s.borderType = NSNoBorder; return s; }
+static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; }
 
 - (void)build {
     _presetTable = [[NSTableView alloc] init]; _presetTable.dataSource = self; _presetTable.delegate = self; _presetTable.usesAlternatingRowBackgroundColors = YES; _presetTable.rowHeight = 24;
@@ -144,7 +145,7 @@ static NSScrollView *scrollOf(NSView *v) { NSScrollView *s = [[NSScrollView allo
     _newPreset = [self button:@"＋ New preset" action:@selector(newPreset:)];
     _deletePreset = [self button:@"Delete preset" action:@selector(deletePresetAction:)];
     NSStackView *presetBtns = [NSStackView stackViewWithViews:@[_newPreset, _deletePreset]]; presetBtns.spacing = 4;
-    NSStackView *left = [NSStackView stackViewWithViews:@[scrollOf(_presetTable), presetBtns]];
+    NSStackView *left = [NSStackView stackViewWithViews:@[lcdScrollOf(_presetTable), presetBtns]];
     left.orientation = NSUserInterfaceLayoutOrientationVertical; left.alignment = NSLayoutAttributeLeading; left.spacing = 6;
     [left.arrangedSubviews[0].widthAnchor constraintEqualToAnchor:left.widthAnchor].active = YES;
 
@@ -163,10 +164,10 @@ static NSScrollView *scrollOf(NSView *v) { NSScrollView *s = [[NSScrollView allo
     }
     _sampleList.doubleAction = @selector(assignSample:); _sampleList.target = self;
     _assign = [self button:@"Use selected sample for this zone" action:@selector(assignSample:)];
-    NSScrollView *sampleScroll = scrollOf(_sampleList); [sampleScroll.heightAnchor constraintEqualToConstant:150].active = YES;
+    NSView *sampleScroll = lcdScrollOf(_sampleList); [sampleScroll.heightAnchor constraintEqualToConstant:150].active = YES;
     NSTextField *sampleCap = [NSTextField labelWithString:@"CHOOSE A SAMPLE  (double-click to assign to the selected zone)"];
     sampleCap.font = [NSFont systemFontOfSize:11 weight:NSFontWeightBold]; sampleCap.textColor = NSColor.secondaryLabelColor;
-    NSStackView *mid = [NSStackView stackViewWithViews:@[scrollOf(_outline), btns, sampleCap, sampleScroll, _assign]];
+    NSStackView *mid = [NSStackView stackViewWithViews:@[lcdScrollOf(_outline), btns, sampleCap, sampleScroll, _assign]];
     [sampleScroll.widthAnchor constraintEqualToAnchor:mid.widthAnchor].active = YES;
     mid.orientation = NSUserInterfaceLayoutOrientationVertical; mid.alignment = NSLayoutAttributeLeading; mid.spacing = 4;
     [mid.arrangedSubviews[0].widthAnchor constraintEqualToAnchor:mid.widthAnchor].active = YES;
@@ -271,7 +272,7 @@ static NSScrollView *scrollOf(NSView *v) { NSScrollView *s = [[NSScrollView allo
         // row 0 may already have been selected, in which case no selection event fires: refresh from the new tree explicitly
         _sel = [_outline itemAtRow:0]; [self rebuildRows]; [self updateKeyMap]; [self updateAssign]; }
     else { _sel = nil; [self rebuildRows]; [self updateKeyMap]; }
-    _deletePreset.enabled = p.canEditStructure; _newPreset.enabled = _bank != nil && ![_bank.formType isEqualToString:@"3X"];
+    _deletePreset.enabled = p != nil && [_bank.formType hasPrefix:@"E4B"]; _newPreset.enabled = _bank != nil && ![_bank.formType isEqualToString:@"3X"];
     _nameField.stringValue = p.name ?: @""; _nameField.enabled = p != nil;
     _numberField.stringValue = p ? [NSString stringWithFormat:@"%u", p.number] : @""; _numberField.enabled = p.kind == EDPresetKindE4;
     _hint.stringValue = p.kind == EDPresetKindLegacy3X ? @"Emulator 3X preset: only the sample reference of each voice is decoded; other voice bytes are shown raw." : @"";
@@ -469,6 +470,7 @@ static NSInteger parseValue(NSString *s, EDParam *p) {
     [self changed]; if (_presetCountChanged) _presetCountChanged();
 }
 // Delete (Preset Manage > Delete) and its inverse; each registers the other with the undo manager, so undo and redo both work.
+- (void)deletePresetFromMenu:(id)s { [self deletePresetAction:s]; }
 - (void)deletePresetAction:(id)s { if (_preset) [self removePresetObject:_preset]; }
 - (void)removePresetObject:(EDPreset *)p {
     NSInteger row = (NSInteger)[_bank.presets indexOfObject:p];

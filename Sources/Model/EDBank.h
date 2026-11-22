@@ -80,11 +80,15 @@ typedef NS_ENUM(NSInteger, EDPresetKind) { EDPresetKindE4 = 0, EDPresetKindLegac
 + (nullable NSData *)singleSampleBankDataForSample:(EDSample *)sample;
 + (nullable instancetype)bankWithData:(NSData *)data error:(NSError **)error;
 - (nullable NSData *)serializeWithError:(NSError **)error;
+/// Call after the serialized data has been written somewhere: forgets the unsaved-changes state without reloading.
+- (void)markClean;
 /// Adds an empty E4 preset (Preset Manage > New) with the lowest unused number, placed after the last preset in the file and listed in the
 /// table of contents. nil for 3X banks.
 - (nullable EDPreset *)addPresetNamed:(NSString *)name;
 /// Removes a preset added in this session (used to undo addPresetNamed:). NO if it is not in the bank.
 - (BOOL)removePreset:(EDPreset *)preset;
+- (BOOL)removeSample:(EDSample *)sample;               // E4B banks; also drops its table-of-contents record
+- (void)eraseAllPresetsAndSamples;
 /// Removes any preset from an E4B bank (Preset Manage > Delete). Returns an opaque state for reattachPreset: (undo), or nil when not possible.
 /// The samples the preset used are left alone, as on the sampler.
 - (nullable NSDictionary *)detachPreset:(EDPreset *)preset;

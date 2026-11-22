@@ -15,9 +15,9 @@ static void text(NSString *s, NSPoint p, CGFloat size, NSColor *c, BOOL right) {
 static NSString *kb(double k) { return k >= 1024 ? [NSString stringWithFormat:@"%.1fmb", k / 1024] : [NSString stringWithFormat:@"%.0fk", k]; }
 
 - (void)drawRect:(NSRect)dirty {
-    NSRect r = NSInsetRect(self.bounds, 3, 3);
+    NSRect r = NSInsetRect(self.bounds, EDTheme.lcdFrameWidth / 2, EDTheme.lcdFrameWidth / 2);
     NSBezierPath *frame = [NSBezierPath bezierPathWithRoundedRect:r xRadius:6 yRadius:6];
-    [EDTheme.lcdBackground setFill]; [frame fill]; [NSColor.blackColor setStroke]; frame.lineWidth = 6; [frame stroke];
+    [EDTheme.lcdBackground setFill]; [frame fill]; [NSColor.blackColor setStroke]; frame.lineWidth = EDTheme.lcdFrameWidth; [frame stroke];
     NSColor *ink = EDTheme.lcdInk; CGFloat top = NSMaxY(r), h = r.size.height;
     text(@"Memory", NSMakePoint(NSMinX(r) + 14, top - 36), 22, ink, NO);
     text(@"Total", NSMakePoint(NSMinX(r) + 190, top - 30), 12, ink, YES); text(@"Used", NSMakePoint(NSMinX(r) + 262, top - 30), 12, ink, YES);

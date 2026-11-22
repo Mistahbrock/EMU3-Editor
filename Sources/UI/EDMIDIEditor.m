@@ -16,7 +16,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     NSView *_screen; NSTextField *_title, *_prev, *_next, *_note, *_empty;
     NSStackView *_rows; NSScrollView *_tableScroll; NSTableView *_table;
     NSArray<NSDictionary *> *_pages; NSInteger _page; NSMutableDictionary<NSString *, NSString *> *_profile;
-    NSMutableArray<NSButton *> *_softKeys; NSString *_menu; NSTextField *_msg; NSStackView *_actions;
+    NSMutableArray<NSButton *> *_softKeys; NSString *_menu; NSTextField *_msg; NSStackView *_actions; id _keyMonitor;
 }
 
 - (NSDictionary *)defaults {
@@ -24,7 +24,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         @"pitch": @"ptwheel", @"mod": @"cc1", @"press": @"chnpres", @"pedal": @"cc3", @"sw1": @"64", @"sw2": @"65", @"sw3": @"66",
         @"vcurve": @"linear", @"c7sens": @"31", @"c7curve": @"logarithmic", @"gpedal": @"off", @"rcvpc": @"on", @"sendpc": @"on", @"magic": @"off",
         @"tuneoff": @"+0/64", @"xpose": @"+0", @"audition": @"60", @"headroom": @"3 dB", @"oboost": @"+0 dB", @"ofmt": @"analog", @"dither": @"off",
-        @"contrast": @"+0", @"wrap": @"on", @"saver": @"Never", @"scsiid": @"6", @"term": @"on", @"avoid": @"7", @"diskbtn": @"Last", @"combine": @"off", @"fracloop": @"off", @"autoload": @"off"} mutableCopy];
+        @"contrast": @"+0", @"wrap": @"on", @"saver": @"Never", @"scsiid": @"6", @"term": @"on", @"avoid": @"7", @"diskbtn": @"Last", @"combine": @"off", @"fracloop": @"off", @"autoload": @"off", @"memprefer": @"405 K", @"seqmem": @"1 K"} mutableCopy];
     NSInteger ccs[12] = {21, 22, 23, 24, 25, 26, 27, 28, 70, 71, 72, 73};
     for (int i = 0; i < 12; i++) d[[NSString stringWithFormat:@"midi%c", 'a' + i]] = [NSString stringWithFormat:@"cc%ld", (long)ccs[i]];
     return d;
@@ -64,11 +64,14 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         @{@"menu": @"Setup", @"soft": @"SCSI", @"title": @"SCSI / Disk", @"prev": @"Miscellaneous", @"next": @"Import Options", @"fk": @[@"F1", @"F2", @"F3", @"F4", @"F5"], @"rows": @[
             @[@"scsiid", @"SCSI ID", range(0, 7, @"%ld")], @[@"term", @"SCSI termination", onoff], @[@"avoid", @"Avoid Host on ID", range(0, 7, @"%ld")],
             @[@"diskbtn", @"Disk Button goes to", @[@"Sprint", @"Last"]]]},
-        @{@"menu": @"Setup", @"soft": @"Import", @"title": @"Import Options", @"prev": @"SCSI / Disk", @"fk": @[@"F1", @"F2"], @"rows": @[
+        @{@"menu": @"Setup", @"soft": @"Import", @"title": @"Import Options", @"prev": @"SCSI / Disk", @"next": @"Memory Configuration", @"fk": @[@"F1", @"F2"], @"rows": @[
             @[@"combine", @"Combine L/R into stereo", onoff], @[@"fracloop", @"Adjust Akai/Ensoniq fractional loops", onoff]]},
+        // CPU RAM is shared: Preset + Sequence = 406 K on the E6400 (as shown on the sampler's own screen); Sequence follows Preset
+        @{@"menu": @"Setup", @"soft": @"Memory", @"title": @"Memory Configuration", @"prev": @"Import Options", @"rows": @[
+            @[@"memprefer", @"Preset Memory", range(1, 405, @"%ld K")], @[@"seqmem", @"Sequence Memory", range(1, 405, @"%ld K"), @"derived"]]},
         // Master > Bank
-        @{@"menu": @"Bank", @"soft": @"Erase", @"title": @"Erase Bank", @"next": @"Rename Bank", @"message": @"The sampler's Erase clears all presets, samples and sequences of the bank in its RAM.\n\nHere it clears every preset of the open bank. The samples stay, because removing samples is not supported yet. Nothing is written until you save; reopen the bank to get it back.",
-          @"actions": @[@[@"Erase All Presets…", @"erasePresets"]]},
+        @{@"menu": @"Bank", @"soft": @"Erase", @"title": @"Erase Bank", @"next": @"Rename Bank", @"message": @"The sampler's Erase clears all presets, samples and sequences of the bank in its RAM.\n\nHere you can clear every preset, or every preset and sample, of the open bank. Nothing is written until you save (or auto-save runs); reopen the bank to get it back.",
+          @"actions": @[@[@"Erase All Presets…", @"erasePresets"], @[@"Erase All Presets and Samples…", @"eraseAll"]]},
         @{@"menu": @"Bank", @"soft": @"Name", @"title": @"Rename Bank", @"prev": @"Erase Bank", @"next": @"Bank Auto-Load", @"message": @"Bank: %@\n\nThe sampler asks for a bank name when you save. In the editor the bank name is its file name: use Save Bank As to give it a new one.",
           @"actions": @[@[@"Save Bank As…", @"saveAs"]]},
         @{@"menu": @"Bank", @"soft": @"Auto", @"title": @"Bank Auto-Load", @"prev": @"Rename Bank", @"next": @"Resident FLASH", @"fk": @[@"F1"], @"rows": @[
@@ -77,7 +80,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
 
     // the LCD screen
     _screen = [NSView new]; _screen.wantsLayer = YES; _screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor; _screen.layer.cornerRadius = 6;
-    _screen.layer.borderWidth = 6; _screen.layer.borderColor = NSColor.blackColor.CGColor;
+    _screen.layer.borderWidth = EDTheme.lcdFrameWidth; _screen.layer.borderColor = NSColor.blackColor.CGColor;
     _title = [NSTextField labelWithString:@""]; _title.font = [EDTheme lcdFont:26]; _title.textColor = EDTheme.lcdInk; _title.alignment = NSTextAlignmentCenter;
     _prev = [NSTextField labelWithString:@""]; _next = [NSTextField labelWithString:@""];
     for (NSTextField *t in @[_prev, _next]) { t.font = [EDTheme lcdFont:12]; t.textColor = EDTheme.lcdInk; }
@@ -131,6 +134,27 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     return self;
 }
 
+// Left / Right arrow = PREV / NEXT page of the sampler menu being shown (not while a field is being edited).
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    if (_keyMonitor) { [NSEvent removeMonitor:_keyMonitor]; _keyMonitor = nil; }
+    if (!self.window) return;
+    __weak EDMIDIEditor *w = self;
+    _keyMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
+        EDMIDIEditor *me = w; if (!me || e.window != me.window || me.isHiddenOrHasHiddenAncestor) return e;
+        if (e.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagShift)) return e;
+        if (e.keyCode != 123 && e.keyCode != 124) return e;
+        if ([me.window.firstResponder isKindOfClass:[NSText class]]) return e;
+        return [me stepPage:e.keyCode == 124 ? 1 : -1] ? nil : e;
+    }];
+}
+- (BOOL)stepPage:(NSInteger)d {
+    NSMutableArray *idx = [NSMutableArray array];
+    for (NSInteger gi = 0; gi < (NSInteger)_pages.count; gi++) if ([_pages[gi][@"menu"] isEqual:_menu]) [idx addObject:@(gi)];
+    NSInteger pos = [idx indexOfObject:@(_page)], to = pos + d;
+    if (pos == NSNotFound || to < 0 || to >= (NSInteger)idx.count) return NO;
+    [self showPage:[idx[to] integerValue]]; return YES;
+}
 - (void)softKey:(NSButton *)b { [self showPage:b.tag]; }
 // The soft keys follow the sampler's menu: "MIDI" (Master > MIDI) or "Setup" (Master > Setup).
 - (void)setMenu:(NSString *)m {
@@ -182,7 +206,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     NSPopUpButton *pop = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO]; pop.bordered = NO; pop.font = [EDTheme lcdFont:17]; pop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];   // dark arrows on the green
     NSDictionary *attr = @{NSFontAttributeName: [EDTheme lcdFont:17], NSForegroundColorAttributeName: EDTheme.lcdInk};
     for (NSString *o in spec[2]) { NSMenuItem *mi = [pop.menu addItemWithTitle:o action:nil keyEquivalent:@""]; mi.attributedTitle = [[NSAttributedString alloc] initWithString:o attributes:attr]; }
-    [pop selectItemWithTitle:_profile[spec[0]] ?: spec[2][0]]; pop.identifier = spec[0]; pop.target = self; pop.action = @selector(profileChanged:);
+    [EDTheme styleLCDPopup:pop]; [pop selectItemWithTitle:_profile[spec[0]] ?: spec[2][0]]; pop.identifier = spec[0]; pop.target = self; pop.action = @selector(profileChanged:);
     if (spec.count > 3) pop.enabled = NO;
     [pop.widthAnchor constraintGreaterThanOrEqualToConstant:130].active = YES;
     NSStackView *row = [NSStackView stackViewWithViews:@[box, lab, pop]]; row.spacing = 8; row.alignment = NSLayoutAttributeCenterY;
@@ -192,6 +216,11 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
 - (void)setBankTitle:(NSString *)t { _bankTitle = [t copy]; if (_pages[_page][@"message"]) [self showPage:_page]; }
 - (void)profileChanged:(NSPopUpButton *)p {
     _profile[p.identifier] = p.titleOfSelectedItem;
+    if ([p.identifier isEqual:@"memprefer"]) {   // Sequence Memory takes whatever Preset Memory leaves of the 406 K
+        NSInteger v = p.titleOfSelectedItem.integerValue; _profile[@"seqmem"] = [NSString stringWithFormat:@"%ld K", (long)(406 - v)];
+        if (self.memoryChanged) self.memoryChanged(v);
+        [NSUserDefaults.standardUserDefaults setObject:_profile forKey:@"SamplerMIDIProfile"]; [self showPage:_page]; return;
+    }
     [NSUserDefaults.standardUserDefaults setObject:_profile forKey:@"SamplerMIDIProfile"];
     if ([p.identifier isEqual:@"devid"]) [NSUserDefaults.standardUserDefaults setObject:p.titleOfSelectedItem forKey:@"SDSDevice"];   // same device ID as the sample dump panel
 }

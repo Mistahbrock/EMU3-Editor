@@ -256,6 +256,7 @@ static const NSUInteger kGuard = 4;   // the sampler pads each channel with 4 ze
     NSMutableArray<EDChunk *> *_chunks;
     NSMutableArray<EDSample *> *_samples;
     NSMutableArray<EDPreset *> *_presets;
+    NSArray<EDSample *> *_loadedSamples;   // same for the sample list
     NSArray<EDPreset *> *_loadedPresets;   // preset list as loaded: a different list (added, removed, reordered) means the bank changed
     NSInteger _tocChunk;          // index of TOC1 in _chunks, -1 when absent
     BOOL _tocBigEndian;           // byte order of the size/position fields in TOC records
@@ -300,8 +301,10 @@ static void putBE32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v >> 24, v >
 - (NSArray<EDChunk *> *)chunks { return _chunks; }
 - (NSArray<EDSample *> *)samples { return _samples; }
 - (NSArray<EDPreset *> *)presets { return _presets; }
+- (void)markClean { for (EDSample *s in _samples) s.dirty = NO; for (EDPreset *p in _presets) p.dirty = NO; _loadedPresets = [_presets copy]; _loadedSamples = [_samples copy]; }
 - (BOOL)dirty {
     if (_loadedPresets && ![_presets isEqualToArray:_loadedPresets]) return YES;
+    if (_loadedSamples && ![_samples isEqualToArray:_loadedSamples]) return YES;
     for (EDSample *s in _samples) if (s.dirty) return YES;
     for (EDPreset *p in _presets) if (p.dirty) return YES;
     return NO;
@@ -360,7 +363,7 @@ static void putBE32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v >> 24, v >
     [bank resolveTOCWithOffsets:offsets];
     for (EDSample *s in bank->_samples) s.dirty = NO;
     for (EDPreset *p in bank->_presets) p.dirty = NO;
-    bank->_loadedPresets = [bank->_presets copy];
+    bank->_loadedPresets = [bank->_presets copy]; bank->_loadedSamples = [bank->_samples copy];
     return bank;
 }
 
@@ -476,6 +479,25 @@ static void putBE32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v >> 24, v >
 }
 
 - (BOOL)removePreset:(EDPreset *)preset { return [self detachPreset:preset] != nil; }
+
+/// Removes a sample chunk and its table-of-contents record (E4B banks only). Presets that used it keep a dangling number, like on the sampler.
+- (BOOL)removeSample:(EDSample *)sample {
+    if (![_formType hasPrefix:@"E4B"] || ![_samples containsObject:sample]) return NO;
+    NSUInteger at = sample.chunkIndex;
+    if (_tocChunk >= 0) for (NSUInteger r = 0; r < _tocMap.count; r++) if (_tocMap[r].integerValue == (NSInteger)at) {
+        [_chunks[_tocChunk].data replaceBytesInRange:NSMakeRange(r * 32, 32) withBytes:NULL length:0]; [_tocMap removeObjectAtIndex:r]; break; }
+    [_chunks removeObjectAtIndex:at]; [_samples removeObject:sample];
+    [self shiftChunkIndicesFrom:at + 1 by:-1];
+    return YES;
+}
+- (void)eraseAllPresetsAndSamples {
+    for (EDPreset *p in [_presets copy]) [self removePreset:p];
+    for (EDSample *s in [_samples copy]) [self removeSample:s];
+    if ([_formType hasPrefix:@"E4B"] && _chunks.count == 0) {   // keep an empty table of contents so the empty bank is still a valid file
+        EDChunk *toc = [EDChunk new]; toc.ident = @"TOC1"; toc.data = [NSMutableData data];
+        [_chunks addObject:toc]; _tocChunk = 0; [_tocMap removeAllObjects];
+    }
+}
 
 - (NSDictionary *)detachPreset:(EDPreset *)preset {
     if (![_formType hasPrefix:@"E4B"] || ![_presets containsObject:preset]) return nil;

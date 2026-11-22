@@ -12,4 +12,7 @@ build/smditest
 clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/EDLegacyBank.m Sources/Model/EDPreset+Params.m Tests/NewPresetTest.m -framework Foundation -framework AudioToolbox -o build/newpresettest
 build/newpresettest build/test.e4b
 [ -f build/real.e4b ] && build/newpresettest build/real.e4b
+clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/EDLegacyBank.m Sources/Model/EDPreset+Params.m Tests/EraseTest.m -framework Foundation -framework AudioToolbox -o build/erasetest
+build/erasetest build/test.e4b
+[ -f build/real.e4b ] && build/erasetest build/real.e4b
 true

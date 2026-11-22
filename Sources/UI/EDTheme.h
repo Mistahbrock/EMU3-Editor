@@ -26,6 +26,14 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSTableRowView *)lcdRowView;
 + (void)styleLCDText:(NSTextField *)f;
 + (NSTextField *)lcdLabel:(NSString *)s;
+/// Gives a context menu the LCD look: green rows, ink text, a darker green under the pointer.
+/// Thickness of the black frame around every green LCD window.
++ (CGFloat)lcdFrameWidth;
+/// Wraps a scroll view holding an LCD list in a view that adds that black frame (rounded, click-through). Use the returned view in the layout.
++ (NSView *)framedLCD:(NSScrollView *)s;
++ (void)styleLCDMenu:(NSMenu *)m;
+/// Same look for the dropdown list of a popup button (call after its items are added).
++ (void)styleLCDPopup:(NSPopUpButton *)p;
 + (void)styleWindow:(NSWindow *)w;
 @end
 

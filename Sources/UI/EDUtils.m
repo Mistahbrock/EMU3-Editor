@@ -23,7 +23,7 @@ static EDUtils *sCurrent;   // keeps the open sheet alive
     [EDTheme styleWindow:p]; u.panel = p;
     NSView *content = p.contentView;
     NSView *screen = [NSView new]; screen.wantsLayer = YES; screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor; screen.layer.cornerRadius = 6;
-    screen.layer.borderWidth = 6; screen.layer.borderColor = NSColor.blackColor.CGColor; screen.translatesAutoresizingMaskIntoConstraints = NO; [content addSubview:screen];
+    screen.layer.borderWidth = EDTheme.lcdFrameWidth; screen.layer.borderColor = NSColor.blackColor.CGColor; screen.translatesAutoresizingMaskIntoConstraints = NO; [content addSubview:screen];
     NSTextField *t = [NSTextField labelWithString:title]; t.font = [EDTheme lcdFont:26]; t.textColor = EDTheme.lcdInk; t.translatesAutoresizingMaskIntoConstraints = NO; [screen addSubview:t];
     NSButton *close = [NSButton buttonWithTitle:@"Done" target:u action:@selector(done:)]; close.keyEquivalent = @"\r"; close.translatesAutoresizingMaskIntoConstraints = NO; [content addSubview:close];
     [NSLayoutConstraint activateConstraints:@[
@@ -41,7 +41,7 @@ static NSPopUpButton *lcdPopup(NSArray<NSString *> *items, NSString *sel) {
     NSPopUpButton *pop = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO]; pop.bordered = NO; pop.font = [EDTheme lcdFont:17]; pop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];   // dark arrows on the green
     NSDictionary *attr = @{NSFontAttributeName: [EDTheme lcdFont:17], NSForegroundColorAttributeName: EDTheme.lcdInk};
     for (NSString *o in items) { NSMenuItem *mi = [pop.menu addItemWithTitle:o action:nil keyEquivalent:@""]; mi.attributedTitle = [[NSAttributedString alloc] initWithString:o attributes:attr]; }
-    if (sel) [pop selectItemWithTitle:sel];
+    [EDTheme styleLCDPopup:pop]; if (sel) [pop selectItemWithTitle:sel];
     [pop.widthAnchor constraintGreaterThanOrEqualToConstant:170].active = YES; return pop;
 }
 static void place(NSView *screen, NSView *v, CGFloat top) {

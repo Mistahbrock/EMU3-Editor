@@ -9,6 +9,8 @@ targets:
     platform: macOS
     sources:
       - Sources
+      - path: Graphics/emu-logo.png
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: EMU3Editor

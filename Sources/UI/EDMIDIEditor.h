@@ -8,6 +8,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) void (^edited)(void);     // called after every change
 @property (nonatomic, copy, nullable) void (^action)(NSString *name);   // "erasePresets", "saveAs"
 @property (nonatomic, copy, nullable) NSString *bankTitle;
+@property (nonatomic, copy, nullable) void (^memoryChanged)(NSInteger presetK);   // Setup > Memory: Preset Memory changed
 - (void)reload;
 /// "MIDI", "Setup" or "Bank": which of the sampler's Master menus the soft keys show.
 - (void)setMenu:(NSString *)menu;

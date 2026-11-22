@@ -34,6 +34,54 @@
 - (void)setHighlighted:(BOOL)h { [super setHighlighted:NO]; }
 @end
 
+// One row of an LCD context menu: the item's own title and action, drawn in the LCD colours.
+@interface EDLCDMenuItemView : NSView
+@property (nonatomic, weak) NSMenuItem *item;
+@property (nonatomic, weak) NSPopUpButton *popup;   // set for the rows of a popup button's list
+@end
+@implementation EDLCDMenuItemView { BOOL _hover; }
+- (instancetype)initWithItem:(NSMenuItem *)i {
+    NSDictionary *a = @{NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold]};
+    CGFloat w = ceil([i.title sizeWithAttributes:a].width) + 36;
+    if (!(self = [super initWithFrame:NSMakeRect(0, 0, w, 24)])) return nil;
+    _item = i; self.autoresizingMask = NSViewWidthSizable; return self;
+}
+- (void)updateTrackingAreas {
+    [super updateTrackingAreas]; for (NSTrackingArea *t in self.trackingAreas.copy) [self removeTrackingArea:t];
+    [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect owner:self userInfo:nil]];
+}
+- (void)mouseEntered:(NSEvent *)e { _hover = YES; [self setNeedsDisplay:YES]; }
+- (void)mouseExited:(NSEvent *)e { _hover = NO; [self setNeedsDisplay:YES]; }
+- (void)drawRect:(NSRect)r {
+    BOOL on = _item.enabled;
+    [(on && _hover ? [[EDTheme lcdBackground] shadowWithLevel:0.25] : [EDTheme lcdBackground]) setFill]; NSRectFill(self.bounds);
+    NSDictionary *a = @{NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold],
+                        NSForegroundColorAttributeName: on ? [EDTheme lcdInk] : [[EDTheme lcdInk] colorWithAlphaComponent:0.4]};
+    NSSize sz = [_item.title sizeWithAttributes:a];
+    [_item.title drawAtPoint:NSMakePoint(16, NSMidY(self.bounds) - sz.height / 2) withAttributes:a];
+    if (_popup && _item.state == NSControlStateValueOn) [@"✓" drawAtPoint:NSMakePoint(3, NSMidY(self.bounds) - sz.height / 2) withAttributes:a];
+}
+- (void)mouseUp:(NSEvent *)e {
+    if (!_item.enabled) return;
+    NSMenuItem *i = _item; NSPopUpButton *p = _popup; [i.menu cancelTracking];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (p) { [p selectItem:i]; if (p.action) [NSApp sendAction:p.action to:p.target from:p]; }
+        else if (i.action) [NSApp sendAction:i.action to:i.target from:i];
+    });
+}
+@end
+
+@interface EDLCDFrameView : NSView
+@end
+@implementation EDLCDFrameView
+- (NSView *)hitTest:(NSPoint)p { return nil; }
+- (void)drawRect:(NSRect)r {
+    CGFloat w = EDTheme.lcdFrameWidth;
+    NSBezierPath *b = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(self.bounds, w / 2, w / 2) xRadius:5 yRadius:5];
+    b.lineWidth = w; [NSColor.blackColor setStroke]; [b stroke];
+}
+@end
+
 @implementation EDLCDTableView
 - (void)highlightSelectionInClipRect:(NSRect)clip {
     BOOL active = self.window.isKeyWindow && self.window.firstResponder == self;
@@ -47,8 +95,8 @@
 + (NSColor *)body { return [NSColor colorWithCalibratedRed:0.16 green:0.16 blue:0.165 alpha:1]; }
 + (NSColor *)bodyDark { return [NSColor colorWithCalibratedRed:0.10 green:0.10 blue:0.105 alpha:1]; }
 + (NSColor *)accent { return [NSColor colorWithCalibratedRed:0.80 green:0.09 blue:0.13 alpha:1]; }
-+ (NSColor *)lcdBackground { return [NSColor colorWithCalibratedRed:0.43 green:0.74 blue:0.50 alpha:1]; }
-+ (NSColor *)lcdInk { return [NSColor colorWithCalibratedRed:0.02 green:0.14 blue:0.33 alpha:1]; }
++ (NSColor *)lcdBackground { return [NSColor colorWithCalibratedRed:0.28 green:0.50 blue:0.19 alpha:1]; }
++ (NSColor *)lcdInk { return [NSColor colorWithCalibratedRed:0.0 green:0.05 blue:0.06 alpha:1]; }
 + (NSColor *)labelWhite { return [NSColor colorWithCalibratedWhite:0.93 alpha:1]; }
 + (NSColor *)logoBlue { return [NSColor colorWithCalibratedRed:0.10 green:0.45 blue:0.90 alpha:1]; }
 + (NSFont *)lcdFont:(CGFloat)size {
@@ -66,6 +114,23 @@
     for (NSTableColumn *c in t.tableColumns) { EDLCDHeaderCell *h = [[EDLCDHeaderCell alloc] initTextCell:c.title]; c.headerCell = h;
         if (![t isKindOfClass:[NSOutlineView class]]) { EDLCDCell *dc = [[EDLCDCell alloc] initTextCell:@""]; dc.editable = [(NSCell *)c.dataCell isEditable]; dc.drawsBackground = NO; dc.lineBreakMode = NSLineBreakByTruncatingTail; c.dataCell = dc; } }
     t.headerView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];   // dark header text on the green panel
+}
++ (CGFloat)lcdFrameWidth { return 3; }
++ (NSView *)framedLCD:(NSScrollView *)s {
+    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 5; box.layer.masksToBounds = YES;
+    EDLCDFrameView *f = [EDLCDFrameView new];
+    for (NSView *v in @[s, f]) { v.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:v];
+        [NSLayoutConstraint activateConstraints:@[[v.topAnchor constraintEqualToAnchor:box.topAnchor], [v.bottomAnchor constraintEqualToAnchor:box.bottomAnchor],
+            [v.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [v.trailingAnchor constraintEqualToAnchor:box.trailingAnchor]]]; }
+    return box;
+}
++ (void)styleLCDMenu:(NSMenu *)m {
+    m.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    for (NSMenuItem *i in m.itemArray) if (!i.isSeparatorItem) i.view = [[EDLCDMenuItemView alloc] initWithItem:i];
+}
++ (void)styleLCDPopup:(NSPopUpButton *)p {
+    p.menu.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    for (NSMenuItem *i in p.menu.itemArray) { EDLCDMenuItemView *v = [[EDLCDMenuItemView alloc] initWithItem:i]; v.popup = p; i.view = v; }
 }
 + (void)styleWindow:(NSWindow *)w {
     w.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
