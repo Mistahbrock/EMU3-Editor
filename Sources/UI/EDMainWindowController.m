@@ -500,15 +500,35 @@ static NSTextField *label(NSString *s) {
         _presetEditor.bank = _bank; _midiEditor.bank = _bank; [self refreshBankStatus]; [self updateTitle]; [self modelChanged];
     }
 }
+/// The disk image the Disk Manager's helper is serving to the sampler (its first command-line argument).
+- (nullable NSURL *)servedImageURL {
+    NSTask *t = [NSTask new]; t.executableURL = [NSURL fileURLWithPath:@"/bin/ps"]; t.arguments = @[@"-axww", @"-o", @"args="];
+    NSPipe *p = [NSPipe pipe]; t.standardOutput = p; t.standardError = NSFileHandle.fileHandleWithNullDevice;
+    if (![t launchAndReturnError:nil]) return nil;
+    NSData *d = [p.fileHandleForReading readDataToEndOfFile]; [t waitUntilExit];
+    NSString *out = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
+    for (NSString *line in [out componentsSeparatedByString:@"\n"]) {
+        NSRange r = [line rangeOfString:@"emu3nfs "]; if (r.location == NSNotFound) continue;
+        NSString *rest = [line substringFromIndex:NSMaxRange(r)];
+        NSRange e = [rest rangeOfString:@".hda" options:NSCaseInsensitiveSearch]; if (e.location == NSNotFound) { e = [rest rangeOfString:@".img" options:NSCaseInsensitiveSearch]; if (e.location == NSNotFound) continue; }
+        NSString *path = [rest substringToIndex:NSMaxRange(e)];
+        if ([NSFileManager.defaultManager fileExistsAtPath:path]) return [NSURL fileURLWithPath:path];
+    }
+    return nil;
+}
 - (void)openDiskItem:(EDDiskItem *)it {
-    if (it.sampler) { [self selectTabNamed:@"master"]; return; }
+    if (it.sampler) {
+        NSURL *img = [self servedImageURL];
+        if (img) { [self openImageAtURL:img]; return; }
+        [self selectTabNamed:@"master"]; return;
+    }
     if (it.url) [self openImageAtURL:it.url];
 }
 /// The drives the Disk page shows while no image is open: the disk the sampler sees, and recently opened images.
 - (void)refreshDiskIcons {
     NSMutableArray *items = [NSMutableArray array];
     NSURL *d = [self samplerDiskFolder]; NSURL *root = [d.lastPathComponent isEqual:@"Default Folder"] ? d.URLByDeletingLastPathComponent : d;
-    if (root) { EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = root.lastPathComponent; it.subtitle = @"sampler disk · served"; it.sampler = YES; it.url = root; [items addObject:it]; }
+    if (root) { EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = root.lastPathComponent; it.subtitle = @"served to the sampler · double-click to browse"; it.sampler = YES; it.url = root; [items addObject:it]; }
     for (NSString *path in [NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"]) {
         if (![NSFileManager.defaultManager fileExistsAtPath:path]) continue;
         EDDiskItem *it = [EDDiskItem new]; NSString *ext = path.pathExtension.lowercaseString;
