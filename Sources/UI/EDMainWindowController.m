@@ -186,7 +186,12 @@ static NSTextField *label(NSString *s) {
     _outline.outlineTableColumn = oc; _outline.dataSource = self; _outline.delegate = self;
     _outline.style = NSTableViewStyleSourceList; _outline.doubleAction = @selector(outlineDoubleClick:); _outline.target = self;
     [EDTheme styleLCDTable:_outline];
-    NSView *left = [EDTheme framedLCD:[self scroll:_outline]];
+    NSTextField *diskNote = [NSTextField labelWithString:@"Click a bank to load it; double-click to edit its samples."];
+    diskNote.font = [EDTheme lcdFont:11]; diskNote.textColor = EDTheme.lcdInk;
+    NSStackView *diskBar = [NSStackView stackViewWithViews:@[[EDTheme lcdKey:@"Open Disk Image…" target:self action:@selector(openDiskImage:)],
+        [EDTheme lcdKey:@"Open Bank File…" target:self action:@selector(openBankFile:)], diskNote]];
+    diskBar.spacing = 8;
+    NSView *left = [EDTheme framedLCD:[self scroll:_outline] footer:diskBar];
 
     // sample list
     _sampleTable = [self table:@[@[@"num", @"#", @"40"], @[@"name", @"Sample", @"170"], @[@"rate", @"Rate", @"64"], @[@"len", @"Frames", @"80"], @[@"loop", @"Loop", @"44"]]];
@@ -238,22 +243,18 @@ static NSTextField *label(NSString *s) {
     NSMenuItem *m4 = [pm addItemWithTitle:@"Clear All Presets…" action:@selector(clearAllPresets:) keyEquivalent:@""]; m4.target = self;
     [EDTheme styleLCDMenu:pm]; _presetEditor.presetMenu = pm;
 
-    // Disk tab: open buttons over the source list
-    NSStackView *diskBar = [NSStackView stackViewWithViews:@[[self button:@"Open Disk Image…" action:@selector(openDiskImage:)],
-        [self button:@"Open Bank File…" action:@selector(openBankFile:)], label(@"Click a bank to load it; double-click to edit its samples.")]];
-    diskBar.spacing = 8;
+    // Disk tab: open keys live in the green screen
     NSView *diskView = [NSView new];
     EDLCDSideTab *diskTab = [[EDLCDSideTab alloc] initWithTitle:@"DISK"];
-    for (NSView *v in @[diskBar, left, diskTab]) { v.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:v]; }
+    for (NSView *v in @[left, diskTab]) { v.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:v]; }
     _diskHint = [[EDDiskIcons alloc] initWithFrame:NSZeroRect];
     _diskHint.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:_diskHint];
-    [NSLayoutConstraint activateConstraints:@[[_diskHint.topAnchor constraintEqualToAnchor:left.topAnchor constant:26], [_diskHint.bottomAnchor constraintEqualToAnchor:left.bottomAnchor],
+    [NSLayoutConstraint activateConstraints:@[[_diskHint.topAnchor constraintEqualToAnchor:left.topAnchor constant:26], [_diskHint.bottomAnchor constraintEqualToAnchor:left.bottomAnchor constant:-44],
         [_diskHint.leadingAnchor constraintEqualToAnchor:left.leadingAnchor], [_diskHint.trailingAnchor constraintEqualToAnchor:left.trailingAnchor]]];
     __weak EDMainWindowController *weakSelf = self;
     _diskHint.onOpen = ^(EDDiskItem *it) { [weakSelf openDiskItem:it]; };
     [NSLayoutConstraint activateConstraints:@[
-        [diskBar.topAnchor constraintEqualToAnchor:diskView.topAnchor constant:10], [diskBar.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10],
-        [left.topAnchor constraintEqualToAnchor:diskBar.bottomAnchor constant:8], [left.leadingAnchor constraintEqualToAnchor:diskTab.trailingAnchor constant:6],
+        [left.topAnchor constraintEqualToAnchor:diskView.topAnchor constant:10], [left.leadingAnchor constraintEqualToAnchor:diskTab.trailingAnchor constant:6],
         [diskTab.topAnchor constraintEqualToAnchor:left.topAnchor], [diskTab.bottomAnchor constraintEqualToAnchor:left.bottomAnchor],
         [diskTab.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10], [diskTab.widthAnchor constraintEqualToConstant:46],
         [left.trailingAnchor constraintEqualToAnchor:diskView.trailingAnchor constant:-10], [left.bottomAnchor constraintEqualToAnchor:diskView.bottomAnchor constant:-10]]];
