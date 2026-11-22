@@ -868,10 +868,7 @@ static NSTextField *label(NSString *s) {
     if (!bank) { [self alertError:[NSError errorWithDomain:EDErrorDomain code:1 userInfo:@{NSLocalizedDescriptionKey: @"Only presets from EOS (E4B) banks can be exported this way."}] title:@"Cannot export"]; return nil; }
     if (missing.count) {
         NSMutableArray *names = [NSMutableArray array]; for (NSNumber *n in missing) [names addObject:n.integerValue >= 1000 ? [NSString stringWithFormat:@"ROM %@", n] : [NSString stringWithFormat:@"S%03ld", (long)n.integerValue]];
-        NSAlert *a = [NSAlert new]; a.messageText = @"Some of the preset's samples are not in this bank";
-        a.informativeText = [NSString stringWithFormat:@"%@ will not be in the exported bank (ROM samples, or samples this bank does not contain). The preset will still point at them, so load the bank on a sampler that has them.", [names componentsJoinedByString:@", "]];
-        [a addButtonWithTitle:@"Continue"]; [a addButtonWithTitle:@"Cancel"];
-        if ([a runModal] != NSAlertFirstButtonReturn) return nil;
+        if (![EDTheme confirm:[NSString stringWithFormat:@"%@ will not be in the exported bank (ROM samples, or samples this bank does not contain). The preset will still point at them, so load the bank on a sampler that has them. Continue?", [names componentsJoinedByString:@", "]] okTitle:@"Continue" cancelTitle:@"Cancel"]) return nil;
     }
     return bank;
 }
@@ -978,12 +975,9 @@ static NSTextField *label(NSString *s) {
 
 - (BOOL)confirmDiscard {
     if (!_bank.dirty) return YES;
-    NSAlert *a = [NSAlert new]; a.messageText = [NSString stringWithFormat:@"“%@” has unsaved changes.", _bankTitle];
-    a.informativeText = @"Save them before continuing?";
-    [a addButtonWithTitle:@"Save"]; [a addButtonWithTitle:@"Discard"]; [a addButtonWithTitle:@"Cancel"];
-    NSModalResponse r = [a runModal];
-    if (r == NSAlertFirstButtonReturn) { [self saveBank:nil]; return !_bank.dirty; }
-    return r == NSAlertSecondButtonReturn;
+    NSInteger r = [EDTheme choose:[NSString stringWithFormat:@"“%@” has unsaved changes. Save them before continuing?", _bankTitle] buttons:@[@"Cancel", @"Discard", @"Save"]];
+    if (r == 2) { [self saveBank:nil]; return !_bank.dirty; }
+    return r == 1;
 }
 - (BOOL)confirmQuit { return [self confirmDiscard]; }
 - (BOOL)windowShouldClose:(NSWindow *)w { return [self confirmDiscard]; }

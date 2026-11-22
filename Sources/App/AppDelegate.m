@@ -61,7 +61,7 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     NSMenu *bar = [NSMenu new]; NSApp.mainMenu = bar;
     #define SUB(title) ({ NSMenuItem *mi = [bar addItemWithTitle:title action:nil keyEquivalent:@""]; NSMenu *sm = [[NSMenu alloc] initWithTitle:title]; mi.submenu = sm; sm; })
     NSMenu *app = SUB(@"EMU3 Editor");
-    item(app, @"About EMU3 Editor", @selector(orderFrontStandardAboutPanel:), nil, NSApp);
+    item(app, @"About EMU3 Editor", @selector(showAbout:), nil, self);
     [app addItem:NSMenuItem.separatorItem];
     item(app, @"Hide EMU3 Editor", @selector(hide:), @"h", NSApp);
     [app addItem:NSMenuItem.separatorItem];
@@ -139,4 +139,44 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
 }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)a { return [_main confirmQuit] ? NSTerminateNow : NSTerminateCancel; }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)a { return YES; }
+// MARK: About
+
+static NSTextField *aboutLine(NSString *text, CGFloat size, NSColor *color, NSArray *links) {   // links: @[@[word, url], ...]
+    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.alignment = NSTextAlignmentCenter;
+    NSMutableAttributedString *as = [[NSMutableAttributedString alloc] initWithString:text attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:size], NSForegroundColorAttributeName: color, NSParagraphStyleAttributeName: ps}];
+    for (NSArray *l in links) { NSRange r = [text rangeOfString:l[0]]; if (r.location != NSNotFound) [as addAttributes:@{NSLinkAttributeName: l[1], NSForegroundColorAttributeName: NSColor.linkColor} range:r]; }
+    NSTextField *f = [NSTextField wrappingLabelWithString:@""]; f.attributedStringValue = as; f.allowsEditingTextAttributes = YES; f.selectable = YES;
+    f.preferredMaxLayoutWidth = 320; f.alignment = NSTextAlignmentCenter;
+    return f;
+}
+static NSPanel *sAbout;
+- (void)showAbout:(id)sender {
+    if (sAbout) { [sAbout makeKeyAndOrderFront:nil]; return; }
+    NSString *ver = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.1";
+    NSString *bld = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"1";
+    NSColor *dim = NSColor.secondaryLabelColor;
+    NSImageView *iv = [NSImageView imageViewWithImage:[NSImage imageNamed:NSImageNameApplicationIcon]];
+    [iv.widthAnchor constraintEqualToConstant:90].active = YES; [iv.heightAnchor constraintEqualToConstant:90].active = YES;
+    NSTextField *title = [NSTextField labelWithString:@"EMU3 Editor"]; title.font = [NSFont boldSystemFontOfSize:17];
+    NSButton *ok = [NSButton buttonWithTitle:@"OK" target:self action:@selector(closeAbout:)]; ok.keyEquivalent = @"\r";
+    NSStackView *st = [NSStackView stackViewWithViews:@[
+        aboutLine([NSString stringWithFormat:@"version %@ build %@ (work in progress)", ver, bld], 9, dim, @[]),
+        iv,
+        aboutLine(@"Rhyno Audio", 12, dim, @[@[@"Rhyno Audio", @"https://www.rhyno-audio.net"]]),
+        title,
+        aboutLine(@"Built with Claude", 11, dim, @[@[@"Claude", @"https://claude.ai"]]),
+        aboutLine(@"Edit the samples, presets and master settings of E-mu Emulator IV / EOS and Emulator 3X / ESI-32 sampler banks and disk images.", 11, dim, @[]),
+        aboutLine(@"Free and open source. If it saved you time:\nBuy me a coffee ☕", 10, dim, @[@[@"Buy me a coffee ☕", @"https://www.paypal.com/donate/?hosted_button_id=92QGBZBYGBBXY"]]),
+        aboutLine(@"Source code: github.com/Mistahbrock/EMU3-Editor (GPLv3)", 10, dim, @[@[@"github.com/Mistahbrock/EMU3-Editor", @"https://github.com/Mistahbrock/EMU3-Editor"]]),
+        aboutLine(@"Format knowledge based on dagargo/emu3fs · dagargo/emu3bm (GPLv3)", 10, dim, @[@[@"dagargo/emu3fs", @"https://github.com/dagargo/emu3fs"], @[@"dagargo/emu3bm", @"https://github.com/dagargo/emu3bm"]]),
+        ok]];
+    st.orientation = NSUserInterfaceLayoutOrientationVertical; st.alignment = NSLayoutAttributeCenterX; st.spacing = 8;
+    [st setCustomSpacing:14 afterView:st.views.lastObject == ok ? st.views[st.views.count - 2] : ok];
+    st.edgeInsets = NSEdgeInsetsMake(14, 20, 18, 20);
+    NSPanel *p = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 380, 200) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
+    p.title = @"About EMU3 Editor"; p.releasedWhenClosed = NO; p.contentView = st;
+    [p setContentSize:st.fittingSize]; [p center]; sAbout = p; [p makeKeyAndOrderFront:nil];
+}
+- (void)closeAbout:(id)s { [sAbout close]; sAbout = nil; }
+
 @end
