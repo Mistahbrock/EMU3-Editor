@@ -124,6 +124,18 @@
             [v.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [v.trailingAnchor constraintEqualToAnchor:box.trailingAnchor]]]; }
     return box;
 }
++ (NSView *)framedLCD:(NSScrollView *)s footer:(NSView *)footer {
+    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 5; box.layer.masksToBounds = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
+    EDLCDFrameView *f = [EDLCDFrameView new];
+    for (NSView *v in @[s, footer, f]) { v.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:v]; }
+    NSLayoutConstraint *fl = [footer.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:8];
+    [NSLayoutConstraint activateConstraints:@[
+        [s.topAnchor constraintEqualToAnchor:box.topAnchor], [s.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [s.trailingAnchor constraintEqualToAnchor:box.trailingAnchor],
+        [s.bottomAnchor constraintEqualToAnchor:footer.topAnchor constant:-6],
+        fl, [footer.trailingAnchor constraintLessThanOrEqualToAnchor:box.trailingAnchor constant:-8], [footer.bottomAnchor constraintEqualToAnchor:box.bottomAnchor constant:-8],
+        [f.topAnchor constraintEqualToAnchor:box.topAnchor], [f.bottomAnchor constraintEqualToAnchor:box.bottomAnchor], [f.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [f.trailingAnchor constraintEqualToAnchor:box.trailingAnchor]]];
+    return box;
+}
 + (void)styleLCDMenu:(NSMenu *)m {
     m.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
     for (NSMenuItem *i in m.itemArray) if (!i.isSeparatorItem) i.view = [[EDLCDMenuItemView alloc] initWithItem:i];
@@ -141,16 +153,24 @@
 // MARK: LCD dialogs
 
 @interface EDLCDButton : NSButton
+@property (nonatomic) BOOL filled;   // a green key on the dark window: filled LCD green, black outline
 @end
 @implementation EDLCDButton
+- (NSSize)intrinsicContentSize {
+    NSSize ts = [self.title sizeWithAttributes:@{NSFontAttributeName: [EDTheme lcdFont:self.font.pointSize > 0 ? self.font.pointSize : 15]}];
+    return NSMakeSize(ceil(ts.width) + 28, 28);
+}
+- (void)setEnabled:(BOOL)e { [super setEnabled:e]; self.needsDisplay = YES; }
 - (void)drawRect:(NSRect)r {
     NSRect b = NSInsetRect(self.bounds, 2, 2);
     NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:b xRadius:6 yRadius:6];
     BOOL on = self.state == NSControlStateValueOn;
+    CGFloat dim = self.enabled ? 1 : 0.45;
+    if (self.filled) { [[EDTheme.lcdBackground colorWithAlphaComponent:dim] setFill]; [p fill]; }
     if (on) { [EDTheme.lcdInk setFill]; [p fill]; }
     else if (self.isHighlighted) { [[EDTheme.lcdInk colorWithAlphaComponent:0.25] setFill]; [p fill]; }
-    [EDTheme.lcdInk setStroke]; p.lineWidth = 2; [p stroke];
-    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:self.font.pointSize > 0 ? self.font.pointSize : 15], NSForegroundColorAttributeName: on ? EDTheme.lcdBackground : EDTheme.lcdInk};
+    [(self.filled ? NSColor.blackColor : EDTheme.lcdInk) setStroke]; p.lineWidth = 2; [p stroke];
+    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:self.font.pointSize > 0 ? self.font.pointSize : 15], NSForegroundColorAttributeName: [(on ? EDTheme.lcdBackground : EDTheme.lcdInk) colorWithAlphaComponent:dim]};
     NSSize ts = [self.title sizeWithAttributes:at];
     [self.title drawAtPoint:NSMakePoint(NSMidX(b) - ts.width / 2, NSMidY(b) - ts.height / 2) withAttributes:at];
 }
@@ -175,6 +195,13 @@
     b.font = [EDTheme lcdFont:13]; [b setButtonType:NSButtonTypePushOnPushOff]; b.translatesAutoresizingMaskIntoConstraints = NO;
     [b.heightAnchor constraintEqualToConstant:30].active = YES;
     return b;
+}
+@end
+
+@implementation EDTheme (LCDKeys)
++ (NSButton *)lcdKey:(NSString *)title target:(id)t action:(SEL)a {
+    EDLCDButton *b = [[EDLCDButton alloc] initWithFrame:NSMakeRect(0, 0, 100, 28)]; b.title = title; b.target = t; b.action = a; b.bordered = NO; b.filled = YES;
+    b.font = [EDTheme lcdFont:13]; [b setButtonType:NSButtonTypeMomentaryPushIn]; return b;
 }
 @end
 

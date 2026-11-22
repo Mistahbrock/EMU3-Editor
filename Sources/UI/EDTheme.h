@@ -31,6 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (CGFloat)lcdFrameWidth;
 /// Wraps a scroll view holding an LCD list in a view that adds that black frame (rounded, click-through). Use the returned view in the layout.
 + (NSView *)framedLCD:(NSScrollView *)s;
+/// The same frame with a row of keys inside it, under the list.
++ (NSView *)framedLCD:(NSScrollView *)s footer:(NSView *)footer;
 + (void)styleLCDMenu:(NSMenu *)m;
 /// Same look for the dropdown list of a popup button (call after its items are added).
 + (void)styleLCDPopup:(NSPopUpButton *)p;
@@ -39,6 +41,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)confirm:(NSString *)message okTitle:(NSString *)ok cancelTitle:(NSString *)cancel;
 /// A soft-key style button for the LCD: outlined, filled with ink while its state is On.
 + (NSButton *)lcdButton:(NSString *)title target:(nullable id)target action:(nullable SEL)action;
+/// A green LCD-coloured key for the dark window (filled green, black outline).
++ (NSButton *)lcdKey:(NSString *)title target:(nullable id)target action:(nullable SEL)action;
 /// Returns the index of the pressed button (the last one is the default); -1 for Esc.
 + (NSInteger)choose:(NSString *)message buttons:(NSArray<NSString *> *)titles;
 + (void)notice:(NSString *)message;

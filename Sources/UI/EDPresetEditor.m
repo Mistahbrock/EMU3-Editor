@@ -138,6 +138,7 @@ static NSView *column(NSString *title, NSView *content) {
 }
 static NSScrollView *scrollOf(NSView *v) { NSScrollView *s = [[NSScrollView alloc] init]; s.documentView = v; s.hasVerticalScroller = YES; s.borderType = NSNoBorder; return s; }
 static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; }
+static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD:scrollOf(v) footer:footer]; }
 
 - (void)build {
     _presetTable = [[NSTableView alloc] init]; _presetTable.dataSource = self; _presetTable.delegate = self; _presetTable.usesAlternatingRowBackgroundColors = YES; _presetTable.rowHeight = 24;
@@ -147,9 +148,7 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
     _newPreset = [self button:@"＋ New preset" action:@selector(newPreset:)];
     _deletePreset = [self button:@"Delete preset" action:@selector(deletePresetAction:)];
     NSStackView *presetBtns = [NSStackView stackViewWithViews:@[_newPreset, _deletePreset]]; presetBtns.spacing = 4;
-    NSStackView *left = [NSStackView stackViewWithViews:@[lcdScrollOf(_presetTable), presetBtns]];
-    left.orientation = NSUserInterfaceLayoutOrientationVertical; left.alignment = NSLayoutAttributeLeading; left.spacing = 6;
-    [left.arrangedSubviews[0].widthAnchor constraintEqualToAnchor:left.widthAnchor].active = YES;
+    NSView *left = lcdPanelOf(_presetTable, presetBtns);
 
     _outline = [[NSOutlineView alloc] init]; _outline.dataSource = self; _outline.delegate = self; _outline.rowHeight = 24;
     NSTableColumn *oc = [[NSTableColumn alloc] initWithIdentifier:@"n"]; oc.title = @"Structure"; [_outline addTableColumn:oc]; _outline.outlineTableColumn = oc;
@@ -165,11 +164,11 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:c[0]]; col.title = c[1]; col.width = [c[2] doubleValue]; [_sampleList addTableColumn:col];
     }
     _sampleList.doubleAction = @selector(assignSample:); _sampleList.target = self;
-    _assign = [self button:@"Use selected sample for this zone" action:@selector(assignSample:)];
-    NSView *sampleScroll = lcdScrollOf(_sampleList); [sampleScroll.heightAnchor constraintEqualToConstant:150].active = YES;
+    _assign = [self button:@"Use for this zone" action:@selector(assignSample:)];
+    NSView *sampleScroll = lcdPanelOf(_sampleList, _assign); [sampleScroll.heightAnchor constraintEqualToConstant:150].active = YES;
     NSTextField *sampleCap = [NSTextField labelWithString:@"CHOOSE A SAMPLE  (double-click to assign to the selected zone)"];
     sampleCap.font = [NSFont systemFontOfSize:11 weight:NSFontWeightBold]; sampleCap.textColor = NSColor.secondaryLabelColor;
-    NSStackView *mid = [NSStackView stackViewWithViews:@[lcdScrollOf(_outline), btns, sampleCap, sampleScroll, _assign]];
+    NSStackView *mid = [NSStackView stackViewWithViews:@[lcdPanelOf(_outline, btns), sampleCap, sampleScroll]];
     [sampleScroll.widthAnchor constraintEqualToAnchor:mid.widthAnchor].active = YES;
     mid.orientation = NSUserInterfaceLayoutOrientationVertical; mid.alignment = NSLayoutAttributeLeading; mid.spacing = 4;
     [mid.arrangedSubviews[0].widthAnchor constraintEqualToAnchor:mid.widthAnchor].active = YES;
@@ -219,7 +218,7 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
     [split setHoldingPriority:NSLayoutPriorityDefaultHigh forSubviewAtIndex:0]; [split setHoldingPriority:NSLayoutPriorityDefaultHigh forSubviewAtIndex:1];
     [self addSubview:split];
 }
-- (NSButton *)button:(NSString *)t action:(SEL)a { NSButton *b = [NSButton buttonWithTitle:t target:self action:a]; b.controlSize = NSControlSizeRegular; return b; }
+- (NSButton *)button:(NSString *)t action:(SEL)a { return [EDTheme lcdKey:t target:self action:a]; }
 
 // MARK: data
 
@@ -398,7 +397,7 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
 - (void)updateAssign {
     BOOL ok = [self assignableSampleParam] != nil && _sampleList.selectedRow >= 0;
     _assign.enabled = ok;
-    _assign.title = [self assignableSampleParam] ? @"Use selected sample for this zone" : @"Select a zone (a sample line) in Structure first";
+    _assign.title = [self assignableSampleParam] ? @"Use for this zone" : @"Select a zone first";
 }
 - (void)assignSample:(id)sender {
     EDParam *sp = [self assignableSampleParam]; NSInteger row = _sampleList.clickedRow >= 0 ? _sampleList.clickedRow : _sampleList.selectedRow;
