@@ -166,7 +166,7 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     _sampleList.doubleAction = @selector(assignSample:); _sampleList.target = self;
     _assign = [self button:@"Use for this zone" action:@selector(assignSample:)];
     NSView *sampleScroll = lcdPanelOf(_sampleList, _assign); [sampleScroll.heightAnchor constraintEqualToConstant:150].active = YES;
-    NSTextField *sampleCap = [NSTextField labelWithString:@"CHOOSE A SAMPLE  (double-click to assign to the selected zone)"];
+    NSTextField *sampleCap = [NSTextField labelWithString:@"BANK SAMPLES  (double-click to assign)"];
     sampleCap.font = [NSFont systemFontOfSize:11 weight:NSFontWeightBold]; sampleCap.textColor = NSColor.secondaryLabelColor;
     NSStackView *mid = [NSStackView stackViewWithViews:@[lcdPanelOf(_outline, btns), sampleCap, sampleScroll]];
     [sampleScroll.widthAnchor constraintEqualToAnchor:mid.widthAnchor].active = YES;
