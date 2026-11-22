@@ -87,7 +87,7 @@
     NSOutlineView *_outline;
     NSTableView *_sampleTable;
     EDWaveformView *_wave;
-    NSTextField *_nameField, *_rateField, *_loopStartField, *_loopEndField, *_info, *_status;
+    NSTextField *_presetNote, *_nameField, *_rateField, *_loopStartField, *_loopEndField, *_info, *_status;
     NSButton *_loopCheck, *_releaseCheck, *_playButton;
     NSTabView *_tabs;
     NSSegmentedControl *_tabPicker;
@@ -364,7 +364,8 @@ static NSTextField *label(NSString *s) {
     [rule2.heightAnchor constraintEqualToConstant:1].active = YES;
 
     _status = label(@"Open a disk image (File ▸ Open Disk Image…) or a bank file.");
-    NSStackView *foot = [NSStackView stackViewWithViews:@[_status]]; foot.edgeInsets = NSEdgeInsetsMake(2, 14, 0, 14);
+    _presetNote = label(@"Pages follow the sampler's Preset Edit menus. Changes go straight into the preset (Edit ▸ Undo works).");
+    NSStackView *foot = [NSStackView stackViewWithViews:@[_status, _presetNote]]; foot.spacing = 40; _presetNote.hidden = YES; foot.edgeInsets = NSEdgeInsetsMake(2, 14, 0, 14);
     NSStackView *root = [NSStackView stackViewWithViews:@[head, rule, bar, rule2, _tabs, foot]];
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.spacing = 0; root.alignment = NSLayoutAttributeLeading;
     root.translatesAutoresizingMaskIntoConstraints = NO;
@@ -422,8 +423,9 @@ static NSTextField *label(NSString *s) {
 - (void)selectTabNamed:(NSString *)ident {
     if ([ident isEqual:@"editor"]) ident = @"samples";
     [_tabs selectTabViewItemWithIdentifier:ident];
+    _presetNote.hidden = ![ident isEqual:@"presets"];
 }
-- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; }
+- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; _presetNote.hidden = _tabPicker.selectedSegment != 3; }
 - (IBAction)showMasterTab:(id)s { [self selectTabNamed:@"master"]; }
 - (IBAction)showDiskTab:(id)s { [self selectTabNamed:@"disk"]; }
 - (IBAction)showSamplesTab:(id)s { [self selectTabNamed:@"samples"]; }

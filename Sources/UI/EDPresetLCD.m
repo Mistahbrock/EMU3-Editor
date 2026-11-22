@@ -77,7 +77,6 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     NSMutableArray<NSButton *> *_menuBtns; NSStackView *_menuRow;
     NSView *_screen; NSTextField *_title, *_context, *_empty; NSButton *_prevV, *_nextV;
     NSStackView *_grid, *_keys;
-    NSTextField *_note;
 }
 
 - (instancetype)initWithFrame:(NSRect)f {
@@ -97,9 +96,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     _grid = [NSStackView new]; _grid.orientation = NSUserInterfaceLayoutOrientationHorizontal; _grid.alignment = NSLayoutAttributeTop; _grid.spacing = 40;
     _keys = [NSStackView new]; _keys.orientation = NSUserInterfaceLayoutOrientationVertical; _keys.spacing = 6; _keys.translatesAutoresizingMaskIntoConstraints = NO;
     for (NSView *v in @[_title, _context, _prevV, _nextV, _empty, _grid, _menuRow, _keys]) { v.translatesAutoresizingMaskIntoConstraints = NO; [_screen addSubview:v]; }
-    _note = [NSTextField wrappingLabelWithString:@"Pages follow the sampler's Preset Edit menus. Changes go straight into the preset (Edit ▸ Undo works)."];
-    _note.font = [EDTheme lcdFont:10]; _note.textColor = [EDTheme.lcdInk colorWithAlphaComponent:0.75]; _note.alignment = NSTextAlignmentRight; _note.translatesAutoresizingMaskIntoConstraints = NO;
-    [self addSubview:_screen]; [_screen addSubview:_note];
+    [self addSubview:_screen];
     [NSLayoutConstraint activateConstraints:@[
         [_screen.topAnchor constraintEqualToAnchor:self.topAnchor], [_screen.leadingAnchor constraintEqualToAnchor:self.leadingAnchor], [_screen.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [_screen.heightAnchor constraintGreaterThanOrEqualToConstant:380],
@@ -111,8 +108,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
         [_grid.topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:22], [_grid.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:24],
         [_empty.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_screen.centerYAnchor constant:-20], [_empty.widthAnchor constraintEqualToConstant:420],
         [_keys.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:14], [_keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-12],
-        [_note.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-14], [_note.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-12],
-        [_note.widthAnchor constraintEqualToConstant:330], [_screen.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]]];
+        [_screen.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]]];
     return self;
 }
 
