@@ -43,45 +43,48 @@
     return NSMakeRect(x0, top + i * rowH, MAX(x1 - x0, 3), MAX(rowH - 2, 3));
 }
 - (void)drawRect:(NSRect)dirty {
-    [[NSColor colorWithCalibratedRed:0.045 green:0.055 blue:0.07 alpha:1] setFill]; NSRectFill(self.bounds);
+    NSColor *bg = [EDTheme lcdBackground], *ink = [EDTheme lcdInk];
+    [bg setFill]; NSRectFill(self.bounds);
     CGFloat H = self.bounds.size.height, pianoH = 26, py = H - pianoH;
-    // octave guides
-    for (int n = 0; n < 128; n += 12) {
-        [[NSColor colorWithCalibratedWhite:0.16 alpha:1] setFill]; NSRectFill(NSMakeRect([self xForKey:n], 0, 1, py));
-    }
-    // bars
+    // octave guides: faint dotted ink
+    [[ink colorWithAlphaComponent:0.28] setFill];
+    for (int n = 0; n < 128; n += 12) for (CGFloat y = 0; y < py; y += 4) NSRectFill(NSMakeRect([self xForKey:n], y, 1, 2));
+    // bars: outlined in ink, the selected one solid
     for (NSUInteger i = 0; i < self.bars.count; i++) {
         NSDictionary *b = self.bars[i]; NSRect r = [self barRect:i]; BOOL sel = [b[@"selected"] boolValue];
-        NSBezierPath *bp = [NSBezierPath bezierPathWithRoundedRect:r xRadius:3 yRadius:3];
-        [(sel ? [EDTheme lcdBackground] : [NSColor colorWithCalibratedRed:0.20 green:0.42 blue:0.62 alpha:1]) setFill]; [bp fill];
+        r = NSIntegralRect(r);
+        [ink setFill]; NSRectFill(r);
+        if (!sel) { [bg setFill]; NSRectFill(NSInsetRect(r, 1, 1)); [[ink colorWithAlphaComponent:0.18] setFill]; NSRectFill(NSInsetRect(r, 1, 1)); }
         if (r.size.height >= 12 && r.size.width > 60) {
             NSString *l = b[@"label"]; NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByTruncatingTail;
-            [l drawInRect:NSInsetRect(r, 5, 0) withAttributes:@{NSFontAttributeName: [NSFont systemFontOfSize:11 weight:NSFontWeightMedium],
-                NSForegroundColorAttributeName: sel ? [EDTheme lcdInk] : NSColor.whiteColor, NSParagraphStyleAttributeName: ps}];
+            [l drawInRect:NSInsetRect(r, 5, 0) withAttributes:@{NSFontAttributeName: [EDTheme lcdFont:10],
+                NSForegroundColorAttributeName: sel ? bg : ink, NSParagraphStyleAttributeName: ps}];
         }
     }
-    // keyboard
+    // keyboard: white keys are LCD background with ink edges, black keys solid ink
     static const BOOL black[12] = {0,1,0,1,0,0,1,0,1,0,1,0};
     CGFloat kw = ([self xForKey:128] - [self xForKey:0]) / 128;
+    [ink setFill]; NSRectFill(NSMakeRect(0, py - 1, self.bounds.size.width, 1));
     for (int n = 0; n < 128; n++) {
         if (black[n % 12]) continue;
-        NSRect k = NSMakeRect([self xForKey:n], py, kw * (n % 12 == 4 || n % 12 == 11 ? 1 : 1.5) , pianoH);
-        [[NSColor colorWithCalibratedWhite:0.90 alpha:1] setFill]; NSRectFill(NSInsetRect(k, 0.3, 0));
+        NSRect k = NSMakeRect([self xForKey:n], py, kw * (n % 12 == 4 || n % 12 == 11 ? 1 : 1.5), pianoH);
+        [ink setFill]; NSRectFill(NSMakeRect(NSMaxX(k) - 1, py, 1, pianoH));
     }
     for (int n = 0; n < 128; n++) {
         if (!black[n % 12]) continue;
-        [[NSColor colorWithCalibratedWhite:0.08 alpha:1] setFill]; NSRectFill(NSMakeRect([self xForKey:n], py, kw, pianoH * 0.62));
+        [ink setFill]; NSRectFill(NSMakeRect([self xForKey:n], py, kw, pianoH * 0.62));
     }
-    NSDictionary *at = @{NSFontAttributeName: [NSFont systemFontOfSize:9 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: [NSColor colorWithCalibratedWhite:0.35 alpha:1]};
-    for (int n = 0; n < 128; n += 12) [[EDParam noteName:n] drawAtPoint:NSMakePoint([self xForKey:n] + 1, py + pianoH - 12) withAttributes:at];
-    // selected range shading on the keyboard
+    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:8], NSForegroundColorAttributeName: ink};
+    for (int n = 0; n < 128; n += 12) [[EDParam noteName:n] drawAtPoint:NSMakePoint([self xForKey:n] + 1, py + pianoH - 11) withAttributes:at];
+    // selected range marker on the keyboard
     for (NSDictionary *b in self.bars) if ([b[@"selected"] boolValue]) {
-        [[EDTheme accent] setFill]; NSRectFill(NSMakeRect([self xForKey:[b[@"lo"] doubleValue]], py - 3, [self xForKey:[b[@"hi"] doubleValue] + 1] - [self xForKey:[b[@"lo"] doubleValue]], 3));
+        [ink setFill]; NSRectFill(NSMakeRect([self xForKey:[b[@"lo"] doubleValue]], py - 4, [self xForKey:[b[@"hi"] doubleValue] + 1] - [self xForKey:[b[@"lo"] doubleValue]], 3));
     }
-    if (self.pressedKey >= 0) {   // the key being played
-        [[[EDTheme lcdBackground] colorWithAlphaComponent:0.85] setFill];
+    if (self.pressedKey >= 0) {   // the key being played: inverted
+        [[ink colorWithAlphaComponent:0.55] setFill];
         NSRectFillUsingOperation(NSMakeRect([self xForKey:self.pressedKey], py, MAX([self xForKey:self.pressedKey + 1] - [self xForKey:self.pressedKey], 3), pianoH), NSCompositingOperationSourceOver);
     }
+    [ink setFill]; NSFrameRectWithWidth(self.bounds, 2);
 }
 - (int)keyAtPoint:(NSPoint)p {
     CGFloat w = self.bounds.size.width - 16; int k = (int)floor((p.x - 8) / w * 128);
