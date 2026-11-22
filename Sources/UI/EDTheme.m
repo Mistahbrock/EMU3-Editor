@@ -96,18 +96,26 @@
 @end
 @implementation EDLCDScroller
 + (CGFloat)scrollerWidthForControlSize:(NSControlSize)c scrollerStyle:(NSScrollerStyle)st { return 14; }
+- (BOOL)isOpaque { return YES; }
 - (void)drawRect:(NSRect)r { [self drawKnobSlotInRect:self.bounds highlight:NO]; [self drawKnob]; }
+// Pixel-style like the sampler's LCD: a framed track filled with a fine checkerboard, and a solid block for the knob.
 - (void)drawKnobSlotInRect:(NSRect)slot highlight:(BOOL)h {
+    slot = NSIntegralRect(slot);
     [EDTheme.lcdBackground setFill]; NSRectFill(slot);
-    [[EDTheme.lcdInk colorWithAlphaComponent:0.7] setFill];   // dotted track: a 2 px dot every 4 px
-    for (CGFloat y = NSMinY(slot) + 1; y + 2 <= NSMaxY(slot); y += 4) for (CGFloat x = NSMinX(slot) + 2; x + 2 <= NSMaxX(slot); x += 4) NSRectFill(NSMakeRect(x, y, 2, 2));
+    NSRect f = NSInsetRect(slot, 2, 0);
+    [EDTheme.lcdInk setFill];
+    NSRectFill(NSMakeRect(NSMinX(f), NSMinY(f), 1, NSHeight(f))); NSRectFill(NSMakeRect(NSMaxX(f) - 1, NSMinY(f), 1, NSHeight(f)));
+    NSRect in = NSInsetRect(f, 2, 1);
+    NSInteger cols = (NSInteger)floor(NSWidth(in) / 2), rows = (NSInteger)floor(NSHeight(in) / 2);
+    CGFloat x0 = NSMinX(in) + (NSWidth(in) - cols * 2) / 2;
+    for (NSInteger j = 0; j < rows; j++) for (NSInteger i = 0; i < cols; i++) if (((i + j) & 1) == 0) NSRectFill(NSMakeRect(floor(x0 + i * 2), NSMinY(in) + j * 2, 2, 2));
 }
 - (void)drawKnob {
-    NSRect k = NSInsetRect([self rectForPart:NSScrollerKnob], 2, 0); if (NSIsEmptyRect(k)) return;
-    NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:k xRadius:2 yRadius:2];
-    [EDTheme.lcdBackground setFill]; [p fill]; [EDTheme.lcdInk setStroke]; p.lineWidth = 2; [p stroke];
-    [EDTheme.lcdInk setFill];
-    for (CGFloat y = NSMinY(k) + 3; y + 2 <= NSMaxY(k) - 2; y += 4) for (CGFloat x = NSMinX(k) + 3; x + 2 <= NSMaxX(k) - 2; x += 4) NSRectFill(NSMakeRect(x, y, 2, 2));
+    NSRect k = [self rectForPart:NSScrollerKnob]; if (NSIsEmptyRect(k)) return;
+    k = NSIntegralRect(NSInsetRect(k, 2, 0));
+    [EDTheme.lcdInk setFill]; NSRectFill(k);
+    NSRect in = NSInsetRect(k, 2, 2);   // thin LCD-coloured line inside the block, like the sampler's raised knob
+    if (in.size.width > 2 && in.size.height > 2) { [EDTheme.lcdBackground setFill]; NSFrameRectWithWidth(in, 1); }
 }
 @end
 
