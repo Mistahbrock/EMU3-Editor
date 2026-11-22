@@ -207,6 +207,7 @@ static NSView *lcdScrollOf(NSView *v) { return [EDTheme framedLCD:scrollOf(v)]; 
     right.orientation = NSUserInterfaceLayoutOrientationVertical; right.alignment = NSLayoutAttributeLeading; right.spacing = 8;
     [right.arrangedSubviews[1].widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
     [_lcd.widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
+    [_lcd setContentHuggingPriority:NSLayoutPriorityDefaultLow - 1 forOrientation:NSLayoutConstraintOrientationVertical];
     [_paramScroll.widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
     _paramScroll.hidden = YES;
 

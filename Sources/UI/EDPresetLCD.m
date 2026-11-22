@@ -102,7 +102,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     for (NSView *v in @[_screen, _note]) [self addSubview:v];
     [NSLayoutConstraint activateConstraints:@[
         [_screen.topAnchor constraintEqualToAnchor:self.topAnchor], [_screen.leadingAnchor constraintEqualToAnchor:self.leadingAnchor], [_screen.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-        [_screen.heightAnchor constraintEqualToConstant:430],
+        [_screen.heightAnchor constraintGreaterThanOrEqualToConstant:380],
         [_menuRow.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:12], [_menuRow.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:14],
         [_title.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor], [_title.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor],
         [_nextV.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-14], [_nextV.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor],
