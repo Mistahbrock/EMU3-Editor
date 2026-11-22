@@ -4,6 +4,8 @@
 #import <poll.h>
 #import <unistd.h>
 #import <glob.h>
+#import <signal.h>
+#import <unistd.h>
 
 NSString * const EDSMDIErrorDomain = @"EDSMDI";
 static NSError *MErr(NSInteger code, NSString *m) { return [NSError errorWithDomain:EDSMDIErrorDomain code:code userInfo:@{NSLocalizedDescriptionKey: m}]; }
@@ -36,6 +38,21 @@ enum { kSMDIErrNoSample = 0x00200002, kSMDIErrOutOfRange = 0x00200000, kSMDIErrN
     if (saved && [p containsObject:saved]) return saved;
     return p.count >= 2 ? p[1] : p.firstObject;     // the board shows two serial ports; the second carries the passthrough
 }
++ (pid_t)suspendLinkHelper {
+    NSTask *t = [NSTask new]; t.executableURL = [NSURL fileURLWithPath:@"/usr/bin/pgrep"]; t.arguments = @[@"-x", @"-u", @(getuid()).stringValue, @"emu3linkd"];
+    NSPipe *p = [NSPipe pipe]; t.standardOutput = p; t.standardError = NSFileHandle.fileHandleWithNullDevice;
+    if (![t launchAndReturnError:nil]) return 0;
+    NSData *d = [p.fileHandleForReading readDataToEndOfFile]; [t waitUntilExit];
+    pid_t pid = (pid_t)[[[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding] intValue];
+    if (pid <= 1 || kill(pid, SIGSTOP) != 0) return 0;
+    // safety net: if this process disappears while the helper is frozen, thaw it
+    NSTask *w = [NSTask new]; w.executableURL = [NSURL fileURLWithPath:@"/bin/sh"];
+    w.arguments = @[@"-c", [NSString stringWithFormat:@"while kill -0 %d 2>/dev/null; do sleep 2; done; kill -CONT %d", getpid(), pid]];
+    w.standardOutput = NSFileHandle.fileHandleWithNullDevice; w.standardError = NSFileHandle.fileHandleWithNullDevice;
+    [w launchAndReturnError:nil];
+    return pid;
+}
++ (void)resumeLinkHelper:(pid_t)pid { if (pid > 1) kill(pid, SIGCONT); }
 + (NSString *)consolePortForPassthrough:(NSString *)pt {
     NSString *stem = [pt substringToIndex:pt.length - 1], *best = nil;
     for (NSString *p in [self availablePorts]) if ([p hasPrefix:stem] && p.length == pt.length && [p compare:pt] == NSOrderedAscending) best = p;   // sorted ascending: last lower one wins

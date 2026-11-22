@@ -33,6 +33,10 @@ typedef EDSMDIResult * _Nullable (^EDSMDIExec)(uint8_t target, NSData *cdb, NSDa
 + (nullable NSString *)consolePortForPassthrough:(NSString *)passthroughPort;
 /// Asks the board to reboot into 'i' (SCSI initiator / SMDI) or 't' (SCSI target / disk) mode through its console port, then
 /// waits for it to re-enumerate. Blocking (up to ~15 s): call it off the main thread. Returns the board's new passthrough port, or nil.
+/// emu3linkd (the Disk Manager's login helper) keeps the board's passthrough port open and fights SMDI for its bytes.
+/// Freezes it (SIGSTOP) for the SMDI session; a detached watchdog thaws it if this app dies. Returns its pid or 0 if none/unable.
++ (pid_t)suspendLinkHelper;
++ (void)resumeLinkHelper:(pid_t)pid;
 + (nullable NSString *)switchMode:(char)mode passthroughPort:(NSString *)port;
 @property (nonatomic, readonly, copy, nullable) NSString *path;
 @property (nonatomic, readonly) uint8_t ownID;

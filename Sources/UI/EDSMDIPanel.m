@@ -8,7 +8,7 @@
     NSProgressIndicator *_bar;
     NSButton *_sendBtn, *_recvBtn, *_scanBtn, *_cancelBtn, *_delBtn;
     EDSMDIBoard *_board; EDSMDIClient *_client;
-    BOOL _busy, _restoreTarget;
+    BOOL _busy, _restoreTarget; pid_t _frozenLink;
 }
 
 - (instancetype)init {
@@ -60,7 +60,7 @@
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeLeading; root.spacing = 12;
     root.edgeInsets = NSEdgeInsetsMake(18, 18, 18, 18);
     _bar.translatesAutoresizingMaskIntoConstraints = NO; [_bar.widthAnchor constraintEqualToConstant:520].active = YES;
-    self.window.delegate = (id)self; [EDTheme styleWindow:self.window]; self.window.contentView = [EDTheme lcdScreenAround:root]; [self.window setContentSize:root.fittingSize];
+    self.window.delegate = (id)self; [EDTheme styleWindow:self.window]; self.window.contentView = [EDTheme lcdScreenAround:root]; { NSSize fs = root.fittingSize; [self.window setContentSize:NSMakeSize(MAX(fs.width, 700), fs.height)]; }
     [self refresh:nil];
 }
 
@@ -101,6 +101,10 @@
     EDSMDIBoard *have = (_board && [_board.path isEqual:port]) ? _board : nil;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         EDSMDIBoard *b = have; NSError *e = nil; BOOL switched = NO;
+        if (!b && !self->_frozenLink) {
+            pid_t fp = [EDSMDIBoard suspendLinkHelper];       // the Disk Manager helper would otherwise eat the board's replies
+            if (fp) dispatch_sync(dispatch_get_main_queue(), ^{ self->_frozenLink = fp; });
+        }
         if (!b) {
             b = [EDSMDIBoard new];
             if (![b openPath:port error:&e]) {
@@ -173,10 +177,12 @@
 - (void)windowWillClose:(NSNotification *)n {
     [_client cancel];
     // we took the board out of disk mode for SMDI: put it back so the sampler sees the served disk again
-    if (_restoreTarget && _board.path) {
-        NSString *port = _board.path; [_board close]; _board = nil; _restoreTarget = NO;
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ [EDSMDIBoard switchMode:'t' passthroughPort:port]; });
-    }
+    NSString *port = _board.path; BOOL restore = _restoreTarget && port; pid_t fp = _frozenLink;
+    [_board close]; _board = nil; _restoreTarget = NO; _frozenLink = 0;
+    if (restore || fp) dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        if (restore) [EDSMDIBoard switchMode:'t' passthroughPort:port];
+        [EDSMDIBoard resumeLinkHelper:fp];                     // let the Disk Manager helper have the board again
+    });
 }
 
 // MARK: list
