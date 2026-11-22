@@ -105,19 +105,19 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     _softKeys = [NSMutableArray array];
     NSStackView *keys = [NSStackView new]; keys.spacing = 12; keys.translatesAutoresizingMaskIntoConstraints = NO;
     for (NSInteger i = 0; i < 6; i++) {
-        NSButton *b = [NSButton buttonWithTitle:@"" target:self action:@selector(softKey:)];
-        b.tag = i; b.bezelStyle = NSBezelStyleRounded; b.font = [NSFont systemFontOfSize:14 weight:NSFontWeightSemibold]; [b setButtonType:NSButtonTypePushOnPushOff];
+        NSButton *b = [EDTheme lcdButton:@"" target:self action:@selector(softKey:)];
+        b.tag = i;
         [b.widthAnchor constraintEqualToConstant:130].active = YES; [_softKeys addObject:b]; [keys addArrangedSubview:b];
     }
     _note = [NSTextField wrappingLabelWithString:@""];
     _note.textColor = NSColor.secondaryLabelColor; _note.font = [NSFont systemFontOfSize:12]; _note.translatesAutoresizingMaskIntoConstraints = NO;
-    [self addSubview:keys]; [self addSubview:_note];
+    [_screen addSubview:keys]; [self addSubview:_note];   // the soft keys live in the green screen
 
     [NSLayoutConstraint activateConstraints:@[
         [_screen.topAnchor constraintEqualToAnchor:self.topAnchor constant:40], [_screen.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-        [_screen.widthAnchor constraintEqualToConstant:1100], [_screen.heightAnchor constraintEqualToConstant:380],
+        [_screen.widthAnchor constraintEqualToConstant:1100], [_screen.heightAnchor constraintEqualToConstant:430],
         [_screen.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.leadingAnchor constant:20], [_screen.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-20],
-        [keys.topAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:18],
+        [keys.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:16], [keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-14],
         [_title.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:14], [_title.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor],
         [_prev.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:14], [_prev.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:16],
         [_next.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:14], [_next.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-16],
@@ -125,11 +125,11 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         [_msg.topAnchor constraintEqualToAnchor:_title.bottomAnchor constant:24], [_msg.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:40], [_msg.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-40],
         [_actions.topAnchor constraintEqualToAnchor:_msg.bottomAnchor constant:22], [_actions.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:40],
         [_tableScroll.topAnchor constraintEqualToAnchor:_title.bottomAnchor constant:16], [_tableScroll.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:12],
-        [_tableScroll.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-12], [_tableScroll.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-12],
+        [_tableScroll.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-12], [_tableScroll.bottomAnchor constraintEqualToAnchor:keys.topAnchor constant:-10],
         [_empty.centerXAnchor constraintEqualToAnchor:_tableScroll.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_tableScroll.centerYAnchor],
         [keys.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
         [_note.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor], [_note.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor],
-        [_note.topAnchor constraintEqualToAnchor:keys.bottomAnchor constant:18]]];
+        [_note.topAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:14]]];
     [self setMenu:@"MIDI"];
     return self;
 }
@@ -179,8 +179,8 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     if (isMsg) {
         _msg.stringValue = [(NSString *)pg[@"message"] containsString:@"%@"] ? [NSString stringWithFormat:pg[@"message"], self.bankTitle ?: @"(no bank open)"] : pg[@"message"];
         for (NSArray *a in pg[@"actions"]) {
-            NSButton *b = [NSButton buttonWithTitle:a[0] target:self action:@selector(pageAction:)]; b.identifier = a[1]; b.bezelStyle = NSBezelStyleRounded;
-            b.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua]; b.enabled = _bank != nil; [_actions addArrangedSubview:b];
+            NSButton *b = [EDTheme lcdKey:a[0] target:self action:@selector(pageAction:)]; b.identifier = a[1];
+            b.enabled = _bank != nil; [_actions addArrangedSubview:b];
         }
     }
     _rows.hidden = isTable; _tableScroll.hidden = !isTable; _empty.hidden = !isTable || _bank.presets.count > 0;
