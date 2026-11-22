@@ -31,6 +31,7 @@
 		BA95491ABC32E190A50E1668 /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9231905B8D63C6BF41FF1E05 /* UniformTypeIdentifiers.framework */; };
 		BD17F57AE720013B8EB3BA72 /* EDPresetLCD.m in Sources */ = {isa = PBXBuildFile; fileRef = 985465B681A9864B69A13D3A /* EDPresetLCD.m */; };
 		C10F1AD1B43441CE12AAC3F8 /* EMU3Directory.m in Sources */ = {isa = PBXBuildFile; fileRef = BC9B9B29623B7E1A1A9D8CF3 /* EMU3Directory.m */; };
+		CB17EF8C02477FCA5AE4B578 /* NSData+EDWrite.m in Sources */ = {isa = PBXBuildFile; fileRef = A4A10A9CCD3B8D6486172DC1 /* NSData+EDWrite.m */; };
 		D1D188E1A11076E900D4BE80 /* EDSDSPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 9B7323018C68460DE03AC920 /* EDSDSPanel.m */; };
 		DBABA829B47AEA4A9F5132DD /* EDSample+Ops.m in Sources */ = {isa = PBXBuildFile; fileRef = FDB83EEC7537BB9A96DA457B /* EDSample+Ops.m */; };
 		DBDD8D36AD4E0E9E50F0FF9B /* EDSDS.m in Sources */ = {isa = PBXBuildFile; fileRef = 0ADE04AA74FB7123A801404C /* EDSDS.m */; };
@@ -62,6 +63,7 @@
 		435C82BF19E62527A14ABAF9 /* EDSample+Ops.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "EDSample+Ops.h"; sourceTree = "<group>"; };
 		4702EB4CDBEE22A37830AA5B /* EDMIDIPort.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDMIDIPort.m; sourceTree = "<group>"; };
 		488B2EA03956BF25532F5FF8 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+		50B3202D45D4DB3A6A118000 /* NSData+EDWrite.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "NSData+EDWrite.h"; sourceTree = "<group>"; };
 		5193AFF9AA18746931282579 /* EDSMDI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSMDI.h; sourceTree = "<group>"; };
 		62EBEF7779DF24CB2C61D80A /* EDPresetEditor.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDPresetEditor.m; sourceTree = "<group>"; };
 		67EEADACC5BFF0C89BC924B4 /* EMU3Filesystem.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EMU3Filesystem.m; sourceTree = "<group>"; };
@@ -83,6 +85,7 @@
 		9B7323018C68460DE03AC920 /* EDSDSPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSDSPanel.m; sourceTree = "<group>"; };
 		9C36094669FEF944346A3CFD /* EMU3Editor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EMU3Editor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9EFCE0EC7C3A74FD460C454B /* EDPlayer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDPlayer.m; sourceTree = "<group>"; };
+		A4A10A9CCD3B8D6486172DC1 /* NSData+EDWrite.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "NSData+EDWrite.m"; sourceTree = "<group>"; };
 		B13449E07912359328239D63 /* EDLegacyBank.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDLegacyBank.m; sourceTree = "<group>"; };
 		B785C6D42D66DD5DA8D175AF /* EDWaveformView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDWaveformView.h; sourceTree = "<group>"; };
 		BC9B9B29623B7E1A1A9D8CF3 /* EMU3Directory.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EMU3Directory.m; sourceTree = "<group>"; };
@@ -130,6 +133,8 @@
 				EEDACCC676DFA9154A12C218 /* EDPreset+Params.m */,
 				435C82BF19E62527A14ABAF9 /* EDSample+Ops.h */,
 				FDB83EEC7537BB9A96DA457B /* EDSample+Ops.m */,
+				50B3202D45D4DB3A6A118000 /* NSData+EDWrite.h */,
+				A4A10A9CCD3B8D6486172DC1 /* NSData+EDWrite.m */,
 			);
 			path = Model;
 			sourceTree = "<group>";
@@ -355,6 +360,7 @@
 				C10F1AD1B43441CE12AAC3F8 /* EMU3Directory.m in Sources */,
 				F484D772D92927546094E490 /* EMU3File.m in Sources */,
 				59E1ADC00564F6699A11DE96 /* EMU3Filesystem.m in Sources */,
+				CB17EF8C02477FCA5AE4B578 /* NSData+EDWrite.m in Sources */,
 				6FE6325A296C1CD7A0B2F90D /* main.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

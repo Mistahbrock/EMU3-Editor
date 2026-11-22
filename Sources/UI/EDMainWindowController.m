@@ -1,3 +1,4 @@
+#import "NSData+EDWrite.h"
 #import "EDMainWindowController.h"
 #import "EDSDSPanel.h"
 #import "EDSMDIPanel.h"
@@ -467,7 +468,7 @@ static NSTextField *label(NSString *s) {
     NSError *e = nil; NSData *out = [_bank serializeWithError:&e];
     if (!out) { _status.stringValue = @"Auto-save failed: cannot serialize the bank"; return; }
     if (!_autoBackedUp) { [self backupOriginal]; _autoBackedUp = YES; }
-    if (![out writeToURL:_standaloneURL options:NSDataWritingAtomic error:&e]) { _status.stringValue = [@"Auto-save failed: " stringByAppendingString:e.localizedDescription ?: @"write error"]; return; }
+    if (![out ed_writeToURL:_standaloneURL error:&e]) { _status.stringValue = [@"Auto-save failed: " stringByAppendingString:e.localizedDescription ?: @"write error"]; return; }
     [_bank markClean]; [self updateTitle]; [self modelChanged];
     _status.stringValue = [NSString stringWithFormat:@"Auto-saved %@ to the sampler disk (%@) — rescan the SCSI bus on the sampler, then load the bank", _bankTitle, EMU3FormatBytes(out.length)];
 }
@@ -914,7 +915,7 @@ static NSTextField *label(NSString *s) {
     p.nameFieldStringValue = [(base.length ? base : @"Sample") stringByAppendingString:@".e4b"];
     if ([p runModal] != NSModalResponseOK) return;
     NSError *e = nil;
-    if (![bank writeToURL:p.URL options:NSDataWritingAtomic error:&e]) { [self alertError:e title:@"Could not write the bank"]; return; }
+    if (![bank ed_writeToURL:p.URL error:&e]) { [self alertError:e title:@"Could not write the bank"]; return; }
     _status.stringValue = [NSString stringWithFormat:@"Wrote %@ (%@)%@", p.URL.lastPathComponent, EMU3FormatBytes(bank.length),
         [self urlIsOnSamplerDisk:p.URL] ? @" to the sampler's SCSI disk — rescan the SCSI bus on the sampler, then load the bank" : @""];
 }
@@ -947,7 +948,7 @@ static NSTextField *label(NSString *s) {
     sp.nameFieldStringValue = [(base.length ? base : @"Preset") stringByAppendingString:@".e4b"];
     if ([sp runModal] != NSModalResponseOK) return;
     NSError *e = nil;
-    if (![bank writeToURL:sp.URL options:NSDataWritingAtomic error:&e]) { [self alertError:e title:@"Could not write the bank"]; return; }
+    if (![bank ed_writeToURL:sp.URL error:&e]) { [self alertError:e title:@"Could not write the bank"]; return; }
     _status.stringValue = [NSString stringWithFormat:@"Wrote %@ (%@)%@", sp.URL.lastPathComponent, EMU3FormatBytes(bank.length),
         [self urlIsOnSamplerDisk:sp.URL] ? @" to the sampler's SCSI disk — rescan the SCSI bus on the sampler, then load the bank" : @""];
 }
@@ -997,7 +998,7 @@ static NSTextField *label(NSString *s) {
     if (!out) { [self alertError:e title:@"Cannot save"]; return; }
     [self backupOriginal];
     if (_standaloneURL) {
-        if (![out writeToURL:_standaloneURL options:NSDataWritingAtomic error:&e]) { [self alertError:e title:@"Save failed"]; return; }
+        if (![out ed_writeToURL:_standaloneURL error:&e]) { [self alertError:e title:@"Save failed"]; return; }
     } else if (_currentNode.file) {
         if (![_fs replaceContentsOfFile:_currentNode.file withData:out error:&e]) { [self alertError:e title:@"Writing to the disk image failed"]; return; }
         [_fs synchronizeToDisk:nil];
@@ -1020,7 +1021,7 @@ static NSTextField *label(NSString *s) {
     if (!out) { [self alertError:e title:@"Cannot save"]; return; }
     NSSavePanel *p = [NSSavePanel savePanel]; p.nameFieldStringValue = [_bankTitle stringByAppendingString:@".e4b"];
     if ([p runModal] != NSModalResponseOK) return;
-    if (![out writeToURL:p.URL options:NSDataWritingAtomic error:&e]) [self alertError:e title:@"Save failed"];
+    if (![out ed_writeToURL:p.URL error:&e]) [self alertError:e title:@"Save failed"];
 }
 
 /// Every save keeps a copy of the bank as it was loaded: ~/Library/Application Support/EMU3 Editor/Backups

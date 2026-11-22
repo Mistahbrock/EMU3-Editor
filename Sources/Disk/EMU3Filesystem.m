@@ -3,6 +3,7 @@
 // Copyright (C) 2018 David García Goñi <dagargo@gmail.com>, GNU GPL version 3 or later.
 // The rest is Copyright (C) 2026 Rhyno Audio. Part of EMU3 Disk Manager, free software under the GPLv3.
 
+#import "NSData+EDWrite.h"
 #import "EMU3Filesystem.h"
 #import "EMU3File.h"
 #import "EMU3Directory.h"
@@ -1358,7 +1359,7 @@ static void EMU3EditEnd(EMU3EditToken *t) { if (t->active) [t->fs _endEdit]; }
 - (BOOL)exportFile:(EMU3File *)file toURL:(NSURL *)destURL error:(NSError **)error {
     NSData *data = [self dataForFile:file error:error];
     if (!data) return NO;
-    return [data writeToURL:destURL options:NSDataWritingAtomic error:error];
+    return [data ed_writeToURL:destURL error:error];
 }
 
 - (BOOL)renameFile:(EMU3File *)file

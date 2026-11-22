@@ -1,5 +1,6 @@
 // EDBank.m — E4B (EOS) bank model. Copyright (C) 2026 Rhyno Audio. GPL-3.0-or-later.
 
+#import "NSData+EDWrite.h"
 #import "EDBank.h"
 #import <AudioToolbox/AudioToolbox.h>
 #import "EDLegacyBank.h"
@@ -186,7 +187,7 @@ static const NSUInteger kGuard = 4;   // the sampler pads each channel with 4 ze
     }
 #undef W32
 #undef W16
-    return [w writeToURL:url options:NSDataWritingAtomic error:error];
+    return [w ed_writeToURL:url error:error];
 }
 
 // MARK: audio import (any format AudioToolbox reads)
