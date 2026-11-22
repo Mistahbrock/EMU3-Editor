@@ -199,3 +199,30 @@
 + (BOOL)confirm:(NSString *)message okTitle:(NSString *)ok cancelTitle:(NSString *)cancel { return [self runLCDDialogGlyph:@"?" message:message buttons:@[cancel ?: @"Cancel", ok]] == 1; }
 + (void)notice:(NSString *)message { [self runLCDDialogGlyph:@"!" message:message buttons:@[@"OK"]]; }
 @end
+
+@implementation EDLCDSideTab { NSString *_title; }
+- (instancetype)initWithTitle:(NSString *)title { if ((self = [super initWithFrame:NSZeroRect])) { _title = [title copy]; } return self; }
+- (BOOL)isFlipped { return YES; }
+- (void)drawRect:(NSRect)dirty {
+    NSRect b = NSInsetRect(self.bounds, 1.5, 1.5);
+    NSBezierPath *frame = [NSBezierPath bezierPathWithRoundedRect:b xRadius:3 yRadius:3];
+    [EDTheme.lcdBackground setFill]; [frame fill];
+    [NSGraphicsContext saveGraphicsState]; [frame addClip];
+    // cross-hatch like the LCD's dithered strip
+    [[EDTheme.lcdInk colorWithAlphaComponent:0.55] setFill];
+    for (CGFloat y = NSMinY(b); y < NSMaxY(b); y += 3) for (CGFloat x = NSMinX(b) + (fmod(y - NSMinY(b), 6) < 3 ? 0 : 1.5); x < NSMaxX(b); x += 3) NSRectFill(NSMakeRect(x, y, 1.5, 1.5));
+    [NSGraphicsContext restoreGraphicsState];
+    [NSColor.blackColor setStroke]; frame.lineWidth = EDTheme.lcdFrameWidth; [frame stroke];
+    NSUInteger n = _title.length; if (!n) return;
+    CGFloat cell = MIN(NSWidth(b) - 8, (NSHeight(b) - 16) / n), top = NSMinY(b) + 8;
+    cell = MIN(cell, 56);
+    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:MIN(cell * 0.8, 30)], NSForegroundColorAttributeName: EDTheme.lcdInk};
+    for (NSUInteger i = 0; i < n; i++) {
+        NSString *ch = [_title substringWithRange:NSMakeRange(i, 1)];
+        NSRect c = NSMakeRect(NSMidX(b) - cell / 2, top + i * (cell + 4), cell, cell);
+        [EDTheme.lcdBackground setFill]; [[NSBezierPath bezierPathWithRoundedRect:c xRadius:3 yRadius:3] fill];
+        NSSize ts = [ch sizeWithAttributes:at];
+        [ch drawAtPoint:NSMakePoint(NSMidX(c) - ts.width / 2, NSMidY(c) - ts.height / 2) withAttributes:at];
+    }
+}
+@end

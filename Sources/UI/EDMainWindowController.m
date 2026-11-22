@@ -242,7 +242,8 @@ static NSTextField *label(NSString *s) {
         [self button:@"Open Bank File…" action:@selector(openBankFile:)], label(@"Click a bank to load it; double-click to edit its samples.")]];
     diskBar.spacing = 8;
     NSView *diskView = [NSView new];
-    for (NSView *v in @[diskBar, left]) { v.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:v]; }
+    EDLCDSideTab *diskTab = [[EDLCDSideTab alloc] initWithTitle:@"DISK"];
+    for (NSView *v in @[diskBar, left, diskTab]) { v.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:v]; }
     _diskHint = [NSTextField wrappingLabelWithString:@"No disk image open.\n\nUse Open Disk in the bar above, or pick a bank from the Master tab."];
     _diskHint.alignment = NSTextAlignmentCenter; _diskHint.font = [EDTheme lcdFont:15]; _diskHint.textColor = EDTheme.lcdInk;
     _diskHint.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:_diskHint];
@@ -250,7 +251,9 @@ static NSTextField *label(NSString *s) {
         [_diskHint.widthAnchor constraintEqualToConstant:360]]];
     [NSLayoutConstraint activateConstraints:@[
         [diskBar.topAnchor constraintEqualToAnchor:diskView.topAnchor constant:10], [diskBar.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10],
-        [left.topAnchor constraintEqualToAnchor:diskBar.bottomAnchor constant:8], [left.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10],
+        [left.topAnchor constraintEqualToAnchor:diskBar.bottomAnchor constant:8], [left.leadingAnchor constraintEqualToAnchor:diskTab.trailingAnchor constant:6],
+        [diskTab.topAnchor constraintEqualToAnchor:left.topAnchor], [diskTab.bottomAnchor constraintEqualToAnchor:left.bottomAnchor],
+        [diskTab.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10], [diskTab.widthAnchor constraintEqualToConstant:46],
         [left.trailingAnchor constraintEqualToAnchor:diskView.trailingAnchor constant:-10], [left.bottomAnchor constraintEqualToAnchor:diskView.bottomAnchor constant:-10]]];
 
     // Master tab: sampler status and shortcuts | banks to open (sampler disk + recent) | current bank

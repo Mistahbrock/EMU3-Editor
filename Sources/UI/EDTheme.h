@@ -42,4 +42,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)notice:(NSString *)message;
 @end
 
+/// The sampler's vertical page label (hatched strip with stacked letters), e.g. D I S K.
+@interface EDLCDSideTab : NSView
+- (instancetype)initWithTitle:(NSString *)title;
+@end
+
 NS_ASSUME_NONNULL_END
