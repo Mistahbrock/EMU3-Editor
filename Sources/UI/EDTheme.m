@@ -130,8 +130,58 @@ static void EDUseLCDScroller(NSView *v) {
 + (NSColor *)body { return [NSColor colorWithCalibratedRed:0.16 green:0.16 blue:0.165 alpha:1]; }
 + (NSColor *)bodyDark { return [NSColor colorWithCalibratedRed:0.10 green:0.10 blue:0.105 alpha:1]; }
 + (NSColor *)accent { return [NSColor colorWithCalibratedRed:0.80 green:0.09 blue:0.13 alpha:1]; }
-+ (NSColor *)lcdBackground { return [NSColor colorWithCalibratedRed:0.28 green:0.50 blue:0.19 alpha:1]; }
-+ (NSColor *)lcdInk { return [NSColor colorWithCalibratedRed:0.0 green:0.05 blue:0.06 alpha:1]; }
+// LCD contrast: t = contrast / 8. Higher = a paler screen (more difference to the ink); lower = a darker screen and ink that fades into it.
+static NSInteger sContrast; static BOOL sContrastLoaded;
+static NSInteger LoadContrast(void) {
+    if (!sContrastLoaded) {
+        sContrastLoaded = YES;
+        NSString *v = [NSUserDefaults.standardUserDefaults dictionaryForKey:@"SamplerMIDIProfile"][@"contrast"];
+        sContrast = MAX(-8, MIN(7, v.integerValue));
+    }
+    return sContrast;
+}
+static NSColor *ContrastBackground(NSInteger c) {
+    CGFloat t = c / 8.0, k = 1 + 0.12 * t;
+    return [NSColor colorWithCalibratedRed:MIN(1, 0.28 * k) green:MIN(1, 0.50 * k) blue:MIN(1, 0.19 * k) alpha:1];
+}
+static NSColor *ContrastInk(NSInteger c) {
+    CGFloat t = c / 8.0, f = t < 0 ? -t * 0.65 : 0;
+    NSColor *bg = ContrastBackground(c);
+    return [NSColor colorWithCalibratedRed:0.0 * (1 - f) + bg.redComponent * f green:0.05 * (1 - f) + bg.greenComponent * f blue:0.06 * (1 - f) + bg.blueComponent * f alpha:1];
+}
+static BOOL SameColor(NSColor *a, NSColor *b) {
+    a = [a colorUsingColorSpace:NSColorSpace.genericRGBColorSpace]; b = [b colorUsingColorSpace:NSColorSpace.genericRGBColorSpace];
+    if (!a || !b) return NO;
+    return fabs(a.redComponent - b.redComponent) < 0.004 && fabs(a.greenComponent - b.greenComponent) < 0.004 && fabs(a.blueComponent - b.blueComponent) < 0.004 && fabs(a.alphaComponent - b.alphaComponent) < 0.004;
+}
+static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, NSColor *newInk) {
+    if (v.layer) {
+        if (v.layer.backgroundColor && SameColor([NSColor colorWithCGColor:v.layer.backgroundColor], oldBg)) v.layer.backgroundColor = newBg.CGColor;
+        if (v.layer.borderColor && SameColor([NSColor colorWithCGColor:v.layer.borderColor], oldInk)) v.layer.borderColor = newInk.CGColor;
+    }
+    if ([v isKindOfClass:NSTextField.class]) {
+        NSTextField *t = (NSTextField *)v;
+        if (t.textColor && SameColor(t.textColor, oldInk)) t.textColor = newInk;
+        if (t.drawsBackground && t.backgroundColor && SameColor(t.backgroundColor, [oldInk colorWithAlphaComponent:0.14])) t.backgroundColor = [newInk colorWithAlphaComponent:0.14];
+    }
+    if ([v isKindOfClass:NSTableView.class]) {
+        NSTableView *tv = (NSTableView *)v;
+        if (SameColor(tv.backgroundColor, oldBg)) tv.backgroundColor = newBg;
+        tv.gridColor = [newInk colorWithAlphaComponent:0.22];
+        [tv reloadData];
+    }
+    for (NSView *s in v.subviews) Recolor(s, oldBg, newBg, oldInk, newInk);
+    v.needsDisplay = YES;
+}
++ (NSColor *)lcdBackground { return ContrastBackground(LoadContrast()); }
++ (NSColor *)lcdInk { return ContrastInk(LoadContrast()); }
++ (NSInteger)lcdContrast { return LoadContrast(); }
++ (void)setLcdContrast:(NSInteger)c {
+    c = MAX(-8, MIN(7, c)); NSInteger old = LoadContrast(); if (c == old) return;
+    NSColor *ob = ContrastBackground(old), *oi = ContrastInk(old), *nb = ContrastBackground(c), *ni = ContrastInk(c);
+    sContrast = c;
+    for (NSWindow *w in NSApp.windows) if (w.contentView) Recolor(w.contentView, ob, nb, oi, ni);
+}
 + (NSColor *)labelWhite { return [NSColor colorWithCalibratedWhite:0.93 alpha:1]; }
 + (NSColor *)logoBlue { return [NSColor colorWithCalibratedRed:0.10 green:0.45 blue:0.90 alpha:1]; }
 + (NSFont *)lcdFont:(CGFloat)size {

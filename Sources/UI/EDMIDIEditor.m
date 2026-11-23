@@ -237,6 +237,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         [NSUserDefaults.standardUserDefaults setObject:_profile forKey:@"SamplerMIDIProfile"]; [self showPage:_page]; return;
     }
     [NSUserDefaults.standardUserDefaults setObject:_profile forKey:@"SamplerMIDIProfile"];
+    if ([p.identifier isEqual:@"contrast"]) { [EDTheme setLcdContrast:p.titleOfSelectedItem.integerValue]; [self showPage:_page]; return; }   // like the sampler: the screens change at once
     if ([p.identifier isEqual:@"devid"]) [NSUserDefaults.standardUserDefaults setObject:p.titleOfSelectedItem forKey:@"SDSDevice"];   // same device ID as the sample dump panel
 }
 

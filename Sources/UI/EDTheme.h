@@ -14,6 +14,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSColor *)accent;        // the red stripe
 + (NSColor *)lcdBackground; // pale green-blue
 + (NSColor *)lcdInk;        // blue-black
+/// The sampler's Master > Setup > Contrast (-8 ... +7). 0 = the stock look; lower fades the ink into the screen, higher makes the screen paler.
++ (NSInteger)lcdContrast;
+/// Sets the contrast and recolours every green screen in all open windows.
++ (void)setLcdContrast:(NSInteger)c;
 + (NSColor *)labelWhite;
 + (NSColor *)logoBlue;       // the EMU wordmark
 + (NSFont *)lcdFont:(CGFloat)size;
