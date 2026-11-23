@@ -198,7 +198,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     NSInteger v = self.getValue ? self.getValue(p, [self vIndex], [self rIndex]) : 0;
     CGFloat w = p.names ? (wide ? 190 : 120) : (wide ? 90 : 70);
     if (p.names) {
-        NSPopUpButton *pop = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO]; pop.bordered = NO; pop.font = [EDTheme lcdFont:wide ? 16 : 13];
+        NSPopUpButton *pop = [[EDWheelPopUp alloc] initWithFrame:NSZeroRect pullsDown:NO]; pop.bordered = NO; pop.font = [EDTheme lcdFont:wide ? 16 : 13];
         pop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
         NSDictionary *attr = @{NSFontAttributeName: [EDTheme lcdFont:wide ? 16 : 13], NSForegroundColorAttributeName: EDTheme.lcdInk};
         NSMutableArray<NSNumber *> *keys = [[p.names.allKeys sortedArrayUsingSelector:@selector(compare:)] mutableCopy];

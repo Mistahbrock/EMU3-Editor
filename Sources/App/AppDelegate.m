@@ -61,8 +61,6 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     NSMenu *bar = [NSMenu new]; NSApp.mainMenu = bar;
     #define SUB(title) ({ NSMenuItem *mi = [bar addItemWithTitle:title action:nil keyEquivalent:@""]; NSMenu *sm = [[NSMenu alloc] initWithTitle:title]; mi.submenu = sm; sm; })
     NSMenu *app = SUB(@"EMU3 Editor");
-    item(app, @"About EMU3 Editor", @selector(showAbout:), nil, self);
-    [app addItem:NSMenuItem.separatorItem];
     item(app, @"Hide EMU3 Editor", @selector(hide:), @"h", NSApp);
     [app addItem:NSMenuItem.separatorItem];
     item(app, @"Quit EMU3 Editor", @selector(terminate:), @"q", NSApp);
@@ -160,7 +158,7 @@ static NSView *aboutLine(NSString *text, CGFloat size, NSColor *color, NSArray *
 }
 static NSPanel *sAbout;
 - (void)showAbout:(id)sender {
-    if (sAbout) { [sAbout makeKeyAndOrderFront:nil]; return; }
+    if (sAbout) return;     // already showing (modal)
     NSString *ver = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.1";
     NSString *bld = [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"1";
     NSColor *dim = NSColor.secondaryLabelColor;
@@ -184,8 +182,12 @@ static NSPanel *sAbout;
     st.edgeInsets = NSEdgeInsetsMake(14, 20, 18, 20);
     NSPanel *p = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 380, 200) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
     p.title = @"About EMU3 Editor"; p.releasedWhenClosed = NO; p.contentView = st;
-    [p setContentSize:st.fittingSize]; [p center]; sAbout = p; [p makeKeyAndOrderFront:nil];
+    [p setContentSize:st.fittingSize]; [p center]; sAbout = p;
+    // modal: stays in front of the main window until OK or the close button
+    __block id tok = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification object:p queue:nil usingBlock:^(NSNotification *n) {
+        [NSNotificationCenter.defaultCenter removeObserver:tok]; sAbout = nil; [NSApp stopModal]; }];
+    [NSApp runModalForWindow:p];
 }
-- (void)closeAbout:(id)s { [sAbout close]; sAbout = nil; }
+- (void)closeAbout:(id)s { [sAbout close]; }
 
 @end

@@ -99,12 +99,20 @@ static void put32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v, v >> 8, v >
 - (void)drain { uint8_t junk[512]; struct pollfd pf = {_fd, POLLIN, 0}; while (poll(&pf, 1, 0) > 0 && read(_fd, junk, sizeof junk) > 0) {} }
 
 /// Reads one 'X' 'S' 1 response frame (skipping stray bytes the CDC link may carry); nil on timeout.
-- (EDSMDIResult *)readResponseUntil:(NSDate *)end {
+- (EDSMDIResult *)readResponseUntil:(NSDate *)end tag:(uint8_t)wantTag {
+    for (;;) {
+        BOOL stale = NO;
+        EDSMDIResult *r = [self readFrameUntil:end tag:wantTag stale:&stale];
+        if (!r || !stale) return r;       // stale = a duplicate of an earlier reply (tag mismatch): ignore it
+    }
+}
+- (EDSMDIResult *)readFrameUntil:(NSDate *)end tag:(uint8_t)wantTag stale:(BOOL *)stale {
     uint8_t m[3] = {0};
     if (![self readExact:m count:3 deadline:end]) return nil;
     while (!(m[0] == 'X' && m[1] == 'S' && m[2] == 1)) { m[0] = m[1]; m[1] = m[2]; if (![self readExact:m + 2 count:1 deadline:end]) return nil; }
     uint8_t r[13]; if (![self readExact:r count:13 deadline:end]) return nil;
     EDSMDIResult *res = [EDSMDIResult new]; res.result = r[2]; res.status = r[3];
+    *stale = (r[1] != wantTag);
     uint8_t senseLen = r[4]; uint32_t dl = r[5] | (r[6] << 8) | (r[7] << 16) | ((uint32_t)r[8] << 24);
     _ownID = r[9];
     NSMutableData *sense = [NSMutableData dataWithLength:senseLen], *data = [NSMutableData dataWithLength:dl];
@@ -127,7 +135,21 @@ static void put32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v, v >> 8, v >
         [f appendData:cdb]; if (out) [f appendData:out];
         if (![self writeAll:f timeout:5]) { if (error) *error = MErr(EDSMDIErrorTransport, @"Writing to the BlueSCSI board timed out."); return nil; }
         NSDate *end = [NSDate dateWithTimeIntervalSinceNow:timeout];
-        EDSMDIResult *res = [self readResponseUntil:end];
+        // A reply frame can get lost on the USB link. After 0.4 s of silence ask the board to send the stored reply
+        // again (op 6, the SCSI command is not re-run), up to 6 times, then keep waiting until the full timeout.
+        EDSMDIResult *res = nil;
+        for (int attempt = 0; attempt < 7 && !res; attempt++) {
+            NSDate *slice = (attempt < 6 && op == 1) ? [NSDate dateWithTimeIntervalSinceNow:0.4] : end;
+            if ([slice compare:end] == NSOrderedDescending) slice = end;
+            res = [self readResponseUntil:slice tag:tag];
+            if (res || [end timeIntervalSinceNow] <= 0) break;
+            if (attempt < 6 && op == 1) {
+                NSMutableData *rf = [NSMutableData data];
+                uint8_t rh[8] = {'S', 'X', 1, 6, tag, 0, 0, 0};
+                [rf appendBytes:rh length:8]; put32(rf, 0); put32(rf, 0); put32(rf, 0);
+                [self writeAll:rf timeout:2];
+            }
+        }
         if (!res && error) *error = MErr(EDSMDIErrorTransport, @"The BlueSCSI board did not answer. Is it in initiator mode with the SMDI firmware, and is Disk Manager's link closed?");
         return res;
     } @finally { [_lock unlock]; }

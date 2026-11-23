@@ -1,6 +1,7 @@
 #import "EDMIDIEditor.h"
 #import "EDPreset+Params.h"
 #import "EDTheme.h"
+#import "EDMIDIPort.h"
 
 // The MIDI tab mirrors the sampler's Master > MIDI menus (Mode, Cntrls 1, Cntrls 2, Prefs 1, Prefs 2) as one LCD screen with soft keys,
 // plus a "Presets" page that edits MIDI A–D of every preset in the open bank.
@@ -40,7 +41,8 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     _pages = @[
         @{@"menu": @"MIDI", @"soft": @"Mode", @"title": @"MIDI Mode", @"next": @"MIDI Controllers 1", @"fk": @[@"F1", @"F2", @"F3", @"F4"], @"rows": @[
             @[@"basic", @"Basic Channel", range(1, 16, @"%ld")], @[@"mode", @"MIDI mode", @[@"omni", @"poly", @"multi"]],
-            @[@"devid", @"MIDI Device ID", range(0, 127, @"%ld")], @[@"local", @"Local Control", onoff, @"disabled"]]},
+            @[@"devid", @"MIDI Device ID", range(0, 127, @"%ld")], @[@"local", @"Local Control", onoff, @"disabled"],
+            @[@"ifout", @"MIDI Interface Out", @[]], @[@"ifin", @"MIDI Interface In", @[]]]},
         @{@"menu": @"MIDI", @"soft": @"Cntrls 1", @"title": @"MIDI Controllers 1", @"prev": @"MIDI Mode", @"next": @"MIDI Controllers 2", @"fk": @[@"F1", @"F2", @"F3", @"F4", @"F5", @"", @""], @"rows": @[
             @[@"pitch", @"Pitch Control", ccList(@[@"ptwheel", @"chnpres", @"off"])], @[@"mod", @"Mod Control", ccList(@[@"ptwheel", @"chnpres", @"off"])],
             @[@"press", @"Pressure Control", ccList(@[@"chnpres", @"ptwheel", @"off"])], @[@"pedal", @"Pedal Control", ccList(@[@"chnpres", @"ptwheel", @"off"])],
@@ -203,10 +205,18 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     NSTextField *box = [NSTextField labelWithString:fk]; box.font = [EDTheme lcdFont:12]; box.textColor = EDTheme.lcdInk; box.alignment = NSTextAlignmentCenter;
     box.wantsLayer = YES; box.layer.borderWidth = fk.length ? 1.5 : 0; box.layer.borderColor = EDTheme.lcdInk.CGColor; [box.widthAnchor constraintEqualToConstant:28].active = YES;
     NSTextField *lab = [NSTextField labelWithString:spec[1]]; lab.font = [EDTheme lcdFont:17]; lab.textColor = EDTheme.lcdInk; [lab.widthAnchor constraintGreaterThanOrEqualToConstant:210].active = YES;
-    NSPopUpButton *pop = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO]; pop.bordered = NO; pop.font = [EDTheme lcdFont:17]; pop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];   // dark arrows on the green
+    NSPopUpButton *pop = [[EDWheelPopUp alloc] initWithFrame:NSZeroRect pullsDown:NO]; pop.bordered = NO; pop.font = [EDTheme lcdFont:17]; pop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];   // dark arrows on the green
     NSDictionary *attr = @{NSFontAttributeName: [EDTheme lcdFont:17], NSForegroundColorAttributeName: EDTheme.lcdInk};
-    for (NSString *o in spec[2]) { NSMenuItem *mi = [pop.menu addItemWithTitle:o action:nil keyEquivalent:@""]; mi.attributedTitle = [[NSAttributedString alloc] initWithString:o attributes:attr]; }
-    [EDTheme styleLCDPopup:pop]; [pop selectItemWithTitle:_profile[spec[0]] ?: spec[2][0]]; pop.identifier = spec[0]; pop.target = self; pop.action = @selector(profileChanged:);
+    // the MIDI interface rows list the CoreMIDI ports present right now; the choice is shared with the MIDI Sample Dump panel (SDSOut / SDSIn)
+    NSArray *options = spec[2]; NSString *current = nil; BOOL isIf = [spec[0] isEqual:@"ifout"] || [spec[0] isEqual:@"ifin"];
+    if (isIf) {
+        BOOL out = [spec[0] isEqual:@"ifout"]; NSMutableArray *names = [NSMutableArray array];
+        for (EDMIDIEndpointInfo *e in (out ? EDMIDIPort.destinations : EDMIDIPort.sources)) [names addObject:e.name];
+        if (!names.count) [names addObject:out ? @"(no MIDI outputs found)" : @"(no MIDI inputs found)"];
+        options = names; current = [NSUserDefaults.standardUserDefaults stringForKey:out ? @"SDSOut" : @"SDSIn"];
+    }
+    for (NSString *o in options) { NSMenuItem *mi = [pop.menu addItemWithTitle:o action:nil keyEquivalent:@""]; mi.attributedTitle = [[NSAttributedString alloc] initWithString:o attributes:attr]; }
+    [EDTheme styleLCDPopup:pop]; [pop selectItemWithTitle:isIf ? (current ?: options[0]) : (_profile[spec[0]] ?: options[0])]; if (isIf && pop.indexOfSelectedItem < 0) [pop selectItemAtIndex:0]; pop.identifier = spec[0]; pop.target = self; pop.action = @selector(profileChanged:);
     if (spec.count > 3) pop.enabled = NO;
     [pop.widthAnchor constraintGreaterThanOrEqualToConstant:130].active = YES;
     NSStackView *row = [NSStackView stackViewWithViews:@[box, lab, pop]]; row.spacing = 8; row.alignment = NSLayoutAttributeCenterY;
@@ -215,6 +225,10 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
 - (void)pageAction:(NSButton *)b { if (self.action) self.action(b.identifier); }
 - (void)setBankTitle:(NSString *)t { _bankTitle = [t copy]; if (_pages[_page][@"message"]) [self showPage:_page]; }
 - (void)profileChanged:(NSPopUpButton *)p {
+    if ([p.identifier isEqual:@"ifout"] || [p.identifier isEqual:@"ifin"]) {
+        NSString *t = p.titleOfSelectedItem; if ([t hasPrefix:@"(no MIDI"]) return;
+        [NSUserDefaults.standardUserDefaults setObject:t forKey:[p.identifier isEqual:@"ifout"] ? @"SDSOut" : @"SDSIn"]; return;
+    }
     _profile[p.identifier] = p.titleOfSelectedItem;
     if ([p.identifier isEqual:@"memprefer"]) {   // Sequence Memory takes whatever Preset Memory leaves of the 406 K
         NSInteger v = p.titleOfSelectedItem.integerValue; _profile[@"seqmem"] = [NSString stringWithFormat:@"%ld K", (long)(406 - v)];

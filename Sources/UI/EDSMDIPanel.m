@@ -152,7 +152,7 @@
         NSError *e = nil;
         if (![c masterIdentify:&e]) return [@"The sampler did not answer SMDI: " stringByAppendingString:e.localizedDescription];
         BOOL ok = [c sendSample:smp number:num name:smp.name.length ? smp.name : @"EDITOR" progress:^(double f, NSString *t) { [self progress:f text:t]; } error:&e];
-        return ok ? [NSString stringWithFormat:@"Sent as sample %u. %@ The sampler's panel may be busy for a few seconds.", num, c.timingSummary] : (e.localizedDescription ?: @"Send failed");
+        return ok ? [NSString stringWithFormat:@"Sent as sample %u. %@ The sampler's display does not refresh by itself: press INC or DEC on the sampler to see the new sample.", num, c.timingSummary] : (e.localizedDescription ?: @"Send failed");
     }];
 }
 - (void)receive:(id)s {

@@ -38,7 +38,7 @@ static EDUtils *sCurrent;   // keeps the open sheet alive
 
 static NSTextField *lcdText(NSString *s, CGFloat size) { NSTextField *t = [NSTextField labelWithString:s]; t.font = [EDTheme lcdFont:size]; t.textColor = EDTheme.lcdInk; return t; }
 static NSPopUpButton *lcdPopup(NSArray<NSString *> *items, NSString *sel) {
-    NSPopUpButton *pop = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO]; pop.bordered = NO; pop.font = [EDTheme lcdFont:17]; pop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];   // dark arrows on the green
+    NSPopUpButton *pop = [[EDWheelPopUp alloc] initWithFrame:NSZeroRect pullsDown:NO]; pop.bordered = NO; pop.font = [EDTheme lcdFont:17]; pop.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];   // dark arrows on the green
     NSDictionary *attr = @{NSFontAttributeName: [EDTheme lcdFont:17], NSForegroundColorAttributeName: EDTheme.lcdInk};
     for (NSString *o in items) { NSMenuItem *mi = [pop.menu addItemWithTitle:o action:nil keyEquivalent:@""]; mi.attributedTitle = [[NSAttributedString alloc] initWithString:o attributes:attr]; }
     [EDTheme styleLCDPopup:pop]; if (sel) [pop selectItemWithTitle:sel];

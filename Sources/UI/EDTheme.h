@@ -57,3 +57,8 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 NS_ASSUME_NONNULL_END
+
+/// A popup button that also answers the mouse wheel / trackpad scroll like the sampler's data wheel:
+/// scroll up = next entry, scroll down = previous entry, and the popup's action fires for each step.
+@interface EDWheelPopUp : NSPopUpButton
+@end

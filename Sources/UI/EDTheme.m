@@ -323,3 +323,26 @@ static void EDUseLCDScroller(NSView *v) {
     }
 }
 @end
+
+
+@implementation EDWheelPopUp {
+    CGFloat _acc;
+}
+- (void)scrollWheel:(NSEvent *)e {
+    if (!self.isEnabled || self.numberOfItems < 2) { [super scrollWheel:e]; return; }
+    CGFloat dy = e.scrollingDeltaY;
+    if (dy == 0) { [super scrollWheel:e]; return; }
+    // a mouse wheel click = one entry, whatever its acceleration; trackpads send many small deltas, so those accumulate
+    CGFloat step = e.hasPreciseScrollingDeltas ? 10 : 1;
+    if (e.phase == NSEventPhaseBegan || e.phase == NSEventPhaseMayBegin) _acc = 0;
+    _acc += e.hasPreciseScrollingDeltas ? dy : (dy > 0 ? 1 : -1);
+    while (fabs(_acc) >= step) {
+        NSInteger dir = _acc > 0 ? 1 : -1; _acc -= dir * step;
+        NSInteger i = self.indexOfSelectedItem + dir;
+        while (i >= 0 && i < self.numberOfItems && ![self itemAtIndex:i].isEnabled) i += dir;
+        if (i < 0 || i >= self.numberOfItems) { _acc = 0; break; }
+        [self selectItemAtIndex:i];
+        [self sendAction:self.action to:self.target];
+    }
+}
+@end

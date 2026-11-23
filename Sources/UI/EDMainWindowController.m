@@ -34,6 +34,11 @@
 @end
 @implementation EDLogoView
 - (NSSize)intrinsicContentSize { return NSMakeSize(210, 44); }
+// clicking the logo opens the About box (the app menu no longer has an About item)
+- (BOOL)acceptsFirstMouse:(NSEvent *)e { return YES; }
+- (void)mouseDown:(NSEvent *)e { [NSApp sendAction:NSSelectorFromString(@"showAbout:") to:NSApp.delegate from:self]; }
+- (void)resetCursorRects { [self addCursorRect:self.bounds cursor:NSCursor.pointingHandCursor]; }
+- (NSString *)toolTip { return @"About EMU3 Editor"; }
 - (void)drawRect:(NSRect)r {
     // the logo is Graphics/emu-logo.png (copied into the app); drawn in code only if that file is missing
     static NSImage *img; static dispatch_once_t once;
@@ -54,20 +59,16 @@
 @property (nonatomic, copy) NSString *line1, *line2;
 @end
 @implementation EDLCDStrip
-- (NSSize)intrinsicContentSize { return NSMakeSize(NSViewNoIntrinsicMetric, 50); }
+- (NSSize)intrinsicContentSize { return NSMakeSize(NSViewNoIntrinsicMetric, 36); }
 - (void)setLine1:(NSString *)l { _line1 = [l copy]; self.needsDisplay = YES; }
 - (void)setLine2:(NSString *)l { _line2 = [l copy]; self.needsDisplay = YES; }
 - (void)drawRect:(NSRect)r {
-    NSRect b = NSInsetRect(self.bounds, EDTheme.lcdFrameWidth, EDTheme.lcdFrameWidth);
-    NSBezierPath *bez = [NSBezierPath bezierPathWithRoundedRect:b xRadius:6 yRadius:6];
-    [[NSColor blackColor] setFill]; [[NSBezierPath bezierPathWithRoundedRect:self.bounds xRadius:8 yRadius:8] fill];
-    [EDTheme.lcdBackground setFill]; [bez fill];
-    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByTruncatingMiddle;
-    NSDictionary *a1 = @{NSFontAttributeName: [EDTheme lcdFont:15], NSForegroundColorAttributeName: EDTheme.lcdInk, NSParagraphStyleAttributeName: ps};
-    NSDictionary *a2 = @{NSFontAttributeName: [EDTheme lcdFont:12], NSForegroundColorAttributeName: [EDTheme.lcdInk colorWithAlphaComponent:0.8], NSParagraphStyleAttributeName: ps};
-    CGFloat w = NSWidth(b) - 24;
-    [_line1 ?: @"" drawInRect:NSMakeRect(12, 4, w, 20) withAttributes:a1];
-    [_line2 ?: @"" drawInRect:NSMakeRect(12, 27, w, 18) withAttributes:a2];
+    // plain right-aligned text in the same grey as the status line on the left (no green panel)
+    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByTruncatingMiddle; ps.alignment = NSTextAlignmentLeft;
+    NSDictionary *a1 = @{NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: NSColor.secondaryLabelColor, NSParagraphStyleAttributeName: ps};
+    CGFloat w = NSWidth(self.bounds);
+    NSString *one = _line2.length ? [NSString stringWithFormat:@"%@ — %@", _line1 ?: @"", _line2] : (_line1 ?: @"");
+    [one drawInRect:NSMakeRect(0, 10, w, 16) withAttributes:a1];
 }
 - (BOOL)isFlipped { return YES; }
 @end
@@ -309,7 +310,7 @@ static NSTextField *label(NSString *s) {
     for (NSView *v in @[leftCol, gOpen, gBank]) { v.translatesAutoresizingMaskIntoConstraints = NO; [masterView addSubview:v]; [v.topAnchor constraintEqualToAnchor:masterView.topAnchor constant:30].active = YES; }
     [NSLayoutConstraint activateConstraints:@[
         [leftCol.leadingAnchor constraintEqualToAnchor:masterView.leadingAnchor constant:40], [leftCol.widthAnchor constraintEqualToConstant:270],
-        [gOpen.leadingAnchor constraintEqualToAnchor:leftCol.trailingAnchor constant:40], [gOpen.bottomAnchor constraintEqualToAnchor:masterView.bottomAnchor constant:-30],
+        [gOpen.leadingAnchor constraintEqualToAnchor:leftCol.trailingAnchor constant:40], [gOpen.bottomAnchor constraintEqualToAnchor:masterView.bottomAnchor constant:-8],
         [gBank.leadingAnchor constraintEqualToAnchor:gOpen.trailingAnchor constant:40], [gBank.trailingAnchor constraintEqualToAnchor:masterView.trailingAnchor constant:-40],
         [gBank.widthAnchor constraintEqualToConstant:420]]];
 
@@ -344,13 +345,11 @@ static NSTextField *label(NSString *s) {
     _lcd = [EDLCDStrip new];
     EDLogoView *logo = [EDLogoView new];
     NSView *head = [NSView new]; head.wantsLayer = YES; head.layer.backgroundColor = EDTheme.bodyDark.CGColor;
-    for (NSView *v in @[logo, _tabPicker, _lcd]) { v.translatesAutoresizingMaskIntoConstraints = NO; [head addSubview:v]; }
+    for (NSView *v in @[logo, _tabPicker]) { v.translatesAutoresizingMaskIntoConstraints = NO; [head addSubview:v]; }
     [NSLayoutConstraint activateConstraints:@[
         [head.heightAnchor constraintEqualToConstant:72],
         [logo.leadingAnchor constraintEqualToAnchor:head.leadingAnchor constant:18], [logo.centerYAnchor constraintEqualToAnchor:head.centerYAnchor],
-        [_tabPicker.leadingAnchor constraintEqualToAnchor:logo.trailingAnchor constant:24], [_tabPicker.centerYAnchor constraintEqualToAnchor:head.centerYAnchor],
-        [_lcd.trailingAnchor constraintEqualToAnchor:head.trailingAnchor constant:-18], [_lcd.centerYAnchor constraintEqualToAnchor:head.centerYAnchor],
-        [_lcd.leadingAnchor constraintEqualToAnchor:_tabPicker.trailingAnchor constant:24], [_lcd.heightAnchor constraintEqualToConstant:50]]];
+        [_tabPicker.centerXAnchor constraintEqualToAnchor:head.centerXAnchor], [_tabPicker.centerYAnchor constraintEqualToAnchor:head.centerYAnchor]]];
     NSView *rule = [NSView new]; rule.wantsLayer = YES; rule.layer.backgroundColor = EDTheme.accent.CGColor;
     [rule.heightAnchor constraintEqualToConstant:3].active = YES;
 
@@ -371,9 +370,20 @@ static NSTextField *label(NSString *s) {
     NSView *rule2 = [NSView new]; rule2.wantsLayer = YES; rule2.layer.backgroundColor = [EDTheme.accent colorWithAlphaComponent:0.55].CGColor;
     [rule2.heightAnchor constraintEqualToConstant:1].active = YES;
 
-    _status = label(@"Open a disk image (File ▸ Open Disk Image…) or a bank file.");
+    _status = label(@"Open a disk image or a bank file.");
     _presetNote = label(@"Pages follow the sampler's Preset Edit menus. Changes go straight into the preset (Edit ▸ Undo works).");
-    NSStackView *foot = [NSStackView stackViewWithViews:@[_status]]; _presetNote.hidden = YES; foot.edgeInsets = NSEdgeInsetsMake(2, 14, 0, 14);
+    // footer: status text on the left, the green LCD readout on the right
+    NSView *foot = [NSView new]; _presetNote.hidden = YES;
+    // the readout lines up with the left edge of the bank list above (x = 350); the status text wraps in the space to its left
+    _status.lineBreakMode = NSLineBreakByTruncatingTail; _status.maximumNumberOfLines = 1; _status.preferredMaxLayoutWidth = 322;
+    [_status setContentCompressionResistancePriority:250 forOrientation:NSLayoutConstraintOrientationHorizontal];
+    for (NSView *v in @[_status, _lcd]) { v.translatesAutoresizingMaskIntoConstraints = NO; [foot addSubview:v]; }
+    [NSLayoutConstraint activateConstraints:@[
+        [foot.heightAnchor constraintEqualToConstant:36],
+        [_status.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:14], [_status.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor],
+        [_status.widthAnchor constraintLessThanOrEqualToConstant:322],
+        [_lcd.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:350], [_lcd.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-18],
+        [_lcd.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor], [_lcd.heightAnchor constraintEqualToConstant:36]]];
     NSStackView *root = [NSStackView stackViewWithViews:@[head, rule, bar, rule2, _tabs, foot]];
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.spacing = 0; root.alignment = NSLayoutAttributeLeading;
     root.translatesAutoresizingMaskIntoConstraints = NO;
@@ -382,7 +392,7 @@ static NSTextField *label(NSString *s) {
         [root.leadingAnchor constraintEqualToAnchor:content.leadingAnchor], [root.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
         [root.topAnchor constraintEqualToAnchor:content.topAnchor], [root.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-4],
         [head.widthAnchor constraintEqualToAnchor:root.widthAnchor], [bar.widthAnchor constraintEqualToAnchor:root.widthAnchor], [rule2.widthAnchor constraintEqualToAnchor:root.widthAnchor], [rule.widthAnchor constraintEqualToAnchor:root.widthAnchor],
-        [_tabs.widthAnchor constraintEqualToAnchor:root.widthAnchor]]];
+        [_tabs.widthAnchor constraintEqualToAnchor:root.widthAnchor], [foot.widthAnchor constraintEqualToAnchor:root.widthAnchor]]];
     // the Presets note lines up with the left edge of the LCD screen, on the status line
     _presetNote.translatesAutoresizingMaskIntoConstraints = NO; [foot addSubview:_presetNote];
     [_presetNote.centerYAnchor constraintEqualToAnchor:_status.centerYAnchor].active = YES;
@@ -441,7 +451,9 @@ static NSTextField *label(NSString *s) {
     // the note lines up with the LCD screen's left edge; that view only joins the hierarchy once its tab is shown
     if (show && !_presetNoteLeading) { _presetNoteLeading = [_presetNote.leadingAnchor constraintEqualToAnchor:_presetEditor.lcdView.leadingAnchor]; _presetNoteLeading.active = YES; }
 }
-- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; [self showPresetNote:_tabPicker.selectedSegment == 3]; }
+// the readout line only belongs on Master > Overview
+- (void)refreshLCDVisibility { _lcd.hidden = !(_tabPicker.selectedSegment == 0 && _masterPicker.selectedSegment == 0); }
+- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; [self showPresetNote:_tabPicker.selectedSegment == 3]; [self refreshLCDVisibility]; }
 - (IBAction)showMasterTab:(id)s { [self selectTabNamed:@"master"]; }
 - (IBAction)showDiskTab:(id)s { [self selectTabNamed:@"disk"]; }
 - (IBAction)showSamplesTab:(id)s { [self selectTabNamed:@"samples"]; }
@@ -512,7 +524,7 @@ static NSTextField *label(NSString *s) {
     [self selectTabNamed:@"master"]; _masterPicker.selectedSegment = i; [self masterPicked:_masterPicker];
 }
 - (IBAction)masterPicked:(NSSegmentedControl *)s {
-    NSInteger i = s.selectedSegment; _masterOverview.hidden = i != 0; _midiEditor.hidden = i == 0;
+    NSInteger i = s.selectedSegment; _masterOverview.hidden = i != 0; _midiEditor.hidden = i == 0; [self refreshLCDVisibility];
     if (i > 0) { [_midiEditor setMenu:i == 1 ? @"MIDI" : (i == 2 ? @"Setup" : @"Bank")]; [_midiEditor reload]; }
 }
 - (IBAction)showMIDITab:(id)s { [self showMasterPage:1]; }
@@ -585,7 +597,7 @@ static NSTextField *label(NSString *s) {
     if (_sample) l2 = [NSString stringWithFormat:@"S%03u  %@   %u Hz", _sample.number, _sample.name, _sample.sampleRate];
     else if (_bank) l2 = [NSString stringWithFormat:@"%lu samples · %lu presets", (unsigned long)_bank.samples.count, (unsigned long)_bank.presets.count];
     else l2 = @"Open a disk image or bank file to begin";
-    _lcd.line1 = l1; _lcd.line2 = l2;
+    _lcd.line1 = l1; _lcd.line2 = l2; [self refreshLCDVisibility];
     for (NSButton *b in _sampleBtns) b.enabled = _sample && !_sample.locked;
     for (NSButton *b in _bankBtns) b.enabled = _bank != nil;
     NSMutableString *m = [NSMutableString string];
@@ -711,7 +723,7 @@ static NSTextField *label(NSString *s) {
 
 // sample names may have changed: refresh the preset editor's lookups when its tab is shown
 - (void)tabView:(NSTabView *)tv didSelectTabViewItem:(NSTabViewItem *)item {
-    _tabPicker.selectedSegment = [tv indexOfTabViewItem:item];
+    _tabPicker.selectedSegment = [tv indexOfTabViewItem:item]; [self refreshLCDVisibility];
     if ([item.identifier isEqual:@"presets"]) [_presetEditor reload];
     if ([item.identifier isEqual:@"master"]) [self refreshSamplerStatus];
 }
