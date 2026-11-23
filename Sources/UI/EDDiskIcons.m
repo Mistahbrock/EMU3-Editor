@@ -6,9 +6,11 @@
 
 static const CGFloat kTileW = 200, kTileH = 128, kGap = 6, kPad = 14, kRowH = 28, kColMin = 340;
 
-@implementation EDDiskIcons
+@implementation EDDiskIcons {
+    NSInteger _peckedIndex, _peckedTick;   // easter egg: the icon the emu is pecking
+}
 - (instancetype)initWithFrame:(NSRect)f {
-    if ((self = [super initWithFrame:f])) { _selectedIndex = -1; _emptyText = @"No disks seen.\nOpen a disk image with Open Disk, or start the Disk Manager."; }
+    if ((self = [super initWithFrame:f])) { _selectedIndex = -1; _peckedIndex = -1; _emptyText = @"No disks seen.\nOpen a disk image with Open Disk, or start the Disk Manager."; }
     return self;
 }
 - (BOOL)isFlipped { return YES; }
@@ -26,6 +28,9 @@ static const CGFloat kTileW = 200, kTileH = 128, kGap = 6, kPad = 14, kRowH = 28
     NSInteger per = [self perRow];
     return NSMakeRect(kPad + (i % per) * (kTileW + kGap), 10 + (i / per) * (kTileH + kGap), kTileW, kTileH);
 }
+- (NSArray<NSValue *> *)itemRects { NSMutableArray *a = [NSMutableArray array]; for (NSInteger i = 0; i < (NSInteger)_items.count; i++) [a addObject:[NSValue valueWithRect:[self tileRect:i]]]; return a; }
+- (void)setPecked:(NSInteger)index { _peckedIndex = index; _peckedTick = index >= 0 ? _peckedTick + 1 : 0; self.needsDisplay = YES; }
+- (NSRect)usedRect { NSRect u = NSZeroRect; for (NSInteger i = 0; i < (NSInteger)_items.count; i++) u = NSUnionRect(u, [self tileRect:i]); return u; }
 // the view is the document of a scroll view: as tall as its icons, at least as tall as the window
 - (void)viewDidMoveToSuperview {
     NSClipView *c = [self.superview isKindOfClass:NSClipView.class] ? (NSClipView *)self.superview : nil;
@@ -35,7 +40,7 @@ static const CGFloat kTileW = 200, kTileH = 128, kGap = 6, kPad = 14, kRowH = 28
 - (void)fitToClip {
     NSClipView *c = [self.superview isKindOfClass:NSClipView.class] ? (NSClipView *)self.superview : nil; if (!c) return;
     NSInteger per = [self perRow], rows = (NSInteger)((_items.count + per - 1) / per);
-    CGFloat h = MAX(NSHeight(c.bounds), _listMode ? 20 + [self listRows] * kRowH : 20 + rows * (kTileH + kGap));
+    CGFloat h = MAX(NSHeight(c.bounds), (_listMode ? 20 + [self listRows] * kRowH : 20 + rows * (kTileH + kGap)) + _bottomPad);
     if (fabs(NSHeight(self.frame) - h) > 0.5 || fabs(NSWidth(self.frame) - NSWidth(c.bounds)) > 0.5) [self setFrameSize:NSMakeSize(NSWidth(c.bounds), h)];
     self.needsDisplay = YES;
 }
@@ -123,6 +128,7 @@ static NSArray<NSString *> *miniArt(EDDiskKind k) {
     for (NSInteger i = 0; i < (NSInteger)_items.count; i++) {
         NSRect tr = [self tileRect:i]; if (!NSIntersectsRect(tr, dirty)) continue;
         EDDiskItem *it = _items[i]; BOOL sel = i == _selectedIndex;
+        if (i == _peckedIndex) { sel = !sel; tr.origin.x += (_peckedTick % 2 ? 5 : -5); tr.origin.y -= 4; }   // pecked: flashes and jumps aside
         drawIcon(it.kind, NSMakeRect(tr.origin.x, tr.origin.y, tr.size.width, 82), sel);
         NSRect nameBar = NSMakeRect(tr.origin.x + 10, tr.origin.y + 86, tr.size.width - 20, 22);
         if (sel) { [EDTheme.lcdInk setFill]; NSRectFill(nameBar); }

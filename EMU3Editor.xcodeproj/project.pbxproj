@@ -26,6 +26,7 @@
 		88ADF1D05448E513D3924C6B /* EDBank.m in Sources */ = {isa = PBXBuildFile; fileRef = CF51C182835E2EAEA8F8465A /* EDBank.m */; };
 		960F3B1B7C5D2F42829A0C1C /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = DDF25289DEACAAD9A728C4A1 /* AppDelegate.m */; };
 		9C1D2ADCA8E82ADA89929C98 /* EDMIDIEditor.m in Sources */ = {isa = PBXBuildFile; fileRef = F8546B5B43B8AB1C11E3073E /* EDMIDIEditor.m */; };
+		9EB8208B02FF3205B61F5976 /* EDEmuEgg.m in Sources */ = {isa = PBXBuildFile; fileRef = C47C203F32B4B95B751DB20A /* EDEmuEgg.m */; };
 		B51BD270A42BD9E0E62ABACD /* EDSMDI.m in Sources */ = {isa = PBXBuildFile; fileRef = C6C4E055C65AAEFB3F24748A /* EDSMDI.m */; };
 		B74764B5CE89A70A94B103B8 /* EDSMDIPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 796703E0E226082B0D4DAAB3 /* EDSMDIPanel.m */; };
 		B8C798363655B4210CC7E6C8 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 89C1DE170CE76C55E6C1C4CE /* AVFoundation.framework */; };
@@ -97,6 +98,7 @@
 		B785C6D42D66DD5DA8D175AF /* EDWaveformView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDWaveformView.h; sourceTree = "<group>"; };
 		BC9B9B29623B7E1A1A9D8CF3 /* EMU3Directory.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EMU3Directory.m; sourceTree = "<group>"; };
 		C12792A4EA81594A84AE4088 /* EDNewImage.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDNewImage.m; sourceTree = "<group>"; };
+		C47C203F32B4B95B751DB20A /* EDEmuEgg.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDEmuEgg.m; sourceTree = "<group>"; };
 		C6C4E055C65AAEFB3F24748A /* EDSMDI.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSMDI.m; sourceTree = "<group>"; };
 		CCFFF094349C7F4792DFC564 /* EDMemoryView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDMemoryView.m; sourceTree = "<group>"; };
 		CF51C182835E2EAEA8F8465A /* EDBank.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDBank.m; sourceTree = "<group>"; };
@@ -105,6 +107,7 @@
 		DDF25289DEACAAD9A728C4A1 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		E714E4D2A3A5A7743933833D /* EDSDS.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSDS.h; sourceTree = "<group>"; };
 		E9B2E8763796D4C17FB060BA /* EDMemoryView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDMemoryView.h; sourceTree = "<group>"; };
+		EAD5A8D0212D94547674EB6D /* EDEmuEgg.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDEmuEgg.h; sourceTree = "<group>"; };
 		EEDACCC676DFA9154A12C218 /* EDPreset+Params.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "EDPreset+Params.m"; sourceTree = "<group>"; };
 		F00B33DF6ACB49DA0BF1CFC8 /* EDLegacyBank.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDLegacyBank.h; sourceTree = "<group>"; };
 		F1D177BF2D4459915B9ADE31 /* EDAlert.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDAlert.m; sourceTree = "<group>"; };
@@ -212,6 +215,8 @@
 				310C9F6278ACEE1A7C6CEA06 /* EDBlueSCSIIni.m */,
 				323201CAA6DA2DC45E16C004 /* EDDiskIcons.h */,
 				0BD6DC64A92F8D097982F5F9 /* EDDiskIcons.m */,
+				EAD5A8D0212D94547674EB6D /* EDEmuEgg.h */,
+				C47C203F32B4B95B751DB20A /* EDEmuEgg.m */,
 				99A190C17BEED57349E83F37 /* EDHomeList.h */,
 				84DD7876BC48F72C7BBFD08A /* EDHomeList.m */,
 				7843E431F70C0C02AC53E619 /* EDMainWindowController.h */,
@@ -356,6 +361,7 @@
 				88ADF1D05448E513D3924C6B /* EDBank.m in Sources */,
 				37C639447D2F2C525C0F20E3 /* EDBlueSCSIIni.m in Sources */,
 				0A50FED468DCF7BCC5B27B76 /* EDDiskIcons.m in Sources */,
+				9EB8208B02FF3205B61F5976 /* EDEmuEgg.m in Sources */,
 				15B3A61A1137B26E26255C9B /* EDHomeList.m in Sources */,
 				EE8B8D48E7DDAB1CB84D9190 /* EDLegacyBank.m in Sources */,
 				9C1D2ADCA8E82ADA89929C98 /* EDMIDIEditor.m in Sources */,

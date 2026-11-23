@@ -171,7 +171,7 @@ static NSString *Hex(NSData *d, NSUInteger from) {
             NSError *e = nil;
             if ([c masterIdentify:&e]) [out appendFormat:@"%@ %@ (software %@) answered SMDI at ID %u.\n", found.vendor, found.product, found.revision, found.scsiID];
             else [out appendFormat:@"ID %u did not answer SMDI: %@\n", found.scsiID, e.localizedDescription];
-            dispatch_async(dispatch_get_main_queue(), ^{ self->_idField.intValue = found.scsiID; [NSUserDefaults.standardUserDefaults setObject:@(found.scsiID).stringValue forKey:@"SMDITarget"]; });
+            dispatch_async(dispatch_get_main_queue(), ^{ self->_idField.intValue = found.scsiID; [NSUserDefaults.standardUserDefaults setObject:[NSString stringWithFormat:@"%@ %@ %@", found.vendor, found.product, found.revision] forKey:@"SamplerModel"]; if (self->_foundSampler) self->_foundSampler(); [NSUserDefaults.standardUserDefaults setObject:@(found.scsiID).stringValue forKey:@"SMDITarget"]; });
             [out appendFormat:@"Sampler set to SCSI ID %u.", found.scsiID];
         } else [out appendString:@"None of them looks like a sampler. Pick the ID by hand."];
         return out;

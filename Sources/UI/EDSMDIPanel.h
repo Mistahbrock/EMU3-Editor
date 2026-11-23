@@ -7,6 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface EDSMDIPanel : NSWindowController
 @property (nonatomic, copy, nullable) EDSDSSample * (^currentSample)(void);
 @property (nonatomic, copy, nullable) void (^received)(EDSDSSample *sample, NSString *name);
+@property (nonatomic, copy, nullable) void (^foundSampler)(void);
 - (void)present;
 - (void)presentAndFind;   // opens the panel and scans the SCSI bus for the sampler
 @end

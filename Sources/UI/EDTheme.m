@@ -122,28 +122,72 @@ static void DrawGlare(NSRect b, CGFloat radius) {
 
 @interface EDLCDScroller : NSScroller
 @end
-@implementation EDLCDScroller
+@implementation EDLCDScroller {
+    NSTimer *_repeat;
+}
+// Classic Mac System 1 scroll bar: an arrow box at each end, a dithered track, and a square thumb with a black border.
+static const CGFloat kArrowH = 14;
 + (CGFloat)scrollerWidthForControlSize:(NSControlSize)c scrollerStyle:(NSScrollerStyle)st { return 14; }
 - (BOOL)isOpaque { return YES; }
-- (void)drawRect:(NSRect)r { [self drawKnobSlotInRect:self.bounds highlight:NO]; [self drawKnob]; }
-// Pixel-style like the sampler's LCD: a framed track filled with a fine checkerboard, and a solid block for the knob.
+- (NSRect)upBox { return NSMakeRect(0, self.isFlipped ? 0 : NSHeight(self.bounds) - kArrowH, NSWidth(self.bounds), kArrowH); }
+- (NSRect)downBox { return NSMakeRect(0, self.isFlipped ? NSHeight(self.bounds) - kArrowH : 0, NSWidth(self.bounds), kArrowH); }
+- (NSRect)trackRect { NSRect b = self.bounds; return NSMakeRect(0, kArrowH, NSWidth(b), MAX(NSHeight(b) - 2 * kArrowH, 0)); }   // symmetrical, so flipping does not matter
+- (NSRect)thumbRect {
+    NSRect t = [self trackRect]; CGFloat th = MAX(14, floor(NSHeight(t) * (self.knobProportion > 0 ? self.knobProportion : 1)));
+    th = MIN(th, NSHeight(t)); CGFloat v = MAX(0, MIN(1, self.doubleValue));
+    CGFloat off = (NSHeight(t) - th) * v;
+    return NSMakeRect(0, self.isFlipped ? NSMinY(t) + off : NSMaxY(t) - th - off, NSWidth(t), th);
+}
+- (NSRect)rectForPart:(NSScrollerPart)part {
+    switch (part) {
+        case NSScrollerKnobSlot: return [self trackRect];
+        case NSScrollerKnob: return self.knobProportion >= 1 ? NSZeroRect : [self thumbRect];
+        case NSScrollerDecrementLine: case NSScrollerDecrementPage: return self.isFlipped ? [self upBox] : [self upBox];
+        case NSScrollerIncrementLine: case NSScrollerIncrementPage: return [self downBox];
+        default: return [super rectForPart:part];
+    }
+}
+- (void)drawRect:(NSRect)r {
+    [EDTheme.lcdBackground setFill]; NSRectFill(self.bounds);
+    [self drawKnobSlotInRect:[self trackRect] highlight:NO];
+    [self drawArrow:[self upBox] up:YES]; [self drawArrow:[self downBox] up:NO];
+    [self drawKnob];
+}
+- (void)drawArrow:(NSRect)box up:(BOOL)up {
+    box = NSIntegralRect(NSInsetRect(box, 1, 0));
+    [EDTheme.lcdBackground setFill]; NSRectFill(box); [EDTheme.lcdInk setFill]; NSFrameRectWithWidth(box, 1);
+    CGFloat cx = NSMidX(box), cy = NSMidY(box);   // pixel triangle
+    for (int i = 0; i < 4; i++) { CGFloat w = 1 + 2 * i, y = up ? cy - 3 + i : cy + 3 - i - 1;   // narrow tip first
+        NSRectFill(NSMakeRect(round(cx - w / 2), self.isFlipped ? y : (up ? cy + 3 - i - 1 : cy - 3 + i), w, 1)); }
+}
 - (void)drawKnobSlotInRect:(NSRect)slot highlight:(BOOL)h {
     slot = NSIntegralRect(slot);
     [EDTheme.lcdBackground setFill]; NSRectFill(slot);
-    NSRect f = NSInsetRect(slot, 2, 0);
     [EDTheme.lcdInk setFill];
-    NSRectFill(NSMakeRect(NSMinX(f), NSMinY(f), 1, NSHeight(f))); NSRectFill(NSMakeRect(NSMaxX(f) - 1, NSMinY(f), 1, NSHeight(f)));
-    NSRect in = NSInsetRect(f, 2, 1);
-    NSInteger cols = (NSInteger)floor(NSWidth(in) / 2), rows = (NSInteger)floor(NSHeight(in) / 2);
-    CGFloat x0 = NSMinX(in) + (NSWidth(in) - cols * 2) / 2;
-    for (NSInteger j = 0; j < rows; j++) for (NSInteger i = 0; i < cols; i++) if (((i + j) & 1) == 0) NSRectFill(NSMakeRect(floor(x0 + i * 2), NSMinY(in) + j * 2, 2, 2));
+    NSRect in = NSInsetRect(slot, 1, 0);
+    for (NSInteger y = (NSInteger)NSMinY(in); y < (NSInteger)NSMaxY(in); y++) for (NSInteger x = (NSInteger)NSMinX(in); x < (NSInteger)NSMaxX(in); x++)
+        if (((x + y) & 1) == 0) NSRectFill(NSMakeRect(x, y, 1, 1));   // 50% dither, like System 1
 }
 - (void)drawKnob {
     NSRect k = [self rectForPart:NSScrollerKnob]; if (NSIsEmptyRect(k)) return;
-    k = NSIntegralRect(NSInsetRect(k, 2, 0));
-    [EDTheme.lcdInk setFill]; NSRectFill(k);
-    NSRect in = NSInsetRect(k, 2, 2);   // thin LCD-coloured line inside the block, like the sampler's raised knob
-    if (in.size.width > 2 && in.size.height > 2) { [EDTheme.lcdBackground setFill]; NSFrameRectWithWidth(in, 1); }
+    k = NSIntegralRect(NSInsetRect(k, 1, 0));
+    [EDTheme.lcdBackground setFill]; NSRectFill(k); [EDTheme.lcdInk setFill]; NSFrameRectWithWidth(k, 1);   // white-ish square thumb, black border
+}
+// the arrow boxes scroll by a line, repeating while held
+- (void)stepBy:(int)dir {
+    NSScrollView *sv = [self.superview isKindOfClass:NSScrollView.class] ? (NSScrollView *)self.superview : nil; if (!sv) return;
+    NSClipView *c = sv.contentView; NSRect vis = c.documentVisibleRect; CGFloat step = sv.verticalLineScroll > 0 ? MAX(sv.verticalLineScroll, 20) : 20;
+    CGFloat docH = NSHeight(sv.documentView.frame), y = NSMinY(vis) + dir * step * (c.isFlipped ? 1 : -1);
+    y = MAX(0, MIN(y, docH - NSHeight(vis))); [c scrollToPoint:NSMakePoint(vis.origin.x, y)]; [sv reflectScrolledClipView:c];
+}
+- (void)mouseDown:(NSEvent *)e {
+    NSPoint p = [self convertPoint:e.locationInWindow fromView:nil]; int dir = NSPointInRect(p, [self upBox]) ? -1 : (NSPointInRect(p, [self downBox]) ? 1 : 0);
+    if (!dir) { [super mouseDown:e]; return; }
+    [self stepBy:dir];
+    __weak EDLCDScroller *w = self; [_repeat invalidate];
+    _repeat = [NSTimer timerWithTimeInterval:0.07 repeats:YES block:^(NSTimer *t) { [w stepBy:dir]; }]; [NSRunLoop.mainRunLoop addTimer:_repeat forMode:NSRunLoopCommonModes];
+    NSEvent *n; while ((n = [self.window nextEventMatchingMask:NSEventMaskLeftMouseUp | NSEventMaskLeftMouseDragged untilDate:NSDate.distantFuture inMode:NSEventTrackingRunLoopMode dequeue:YES]) && n.type != NSEventTypeLeftMouseUp) {}
+    [_repeat invalidate]; _repeat = nil;
 }
 @end
 

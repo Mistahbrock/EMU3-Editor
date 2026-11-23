@@ -23,6 +23,14 @@ typedef NS_ENUM(NSInteger, EDDiskKind) { EDDiskHard, EDDiskCD, EDDiskFloppy, EDD
 @property (nonatomic, copy, nullable) void (^onOpen)(EDDiskItem *item);     // double-click / Return
 @property (nonatomic, copy, nullable) void (^onExit)(void);                 // Escape: back out one level
 @property (nonatomic, copy) NSString *emptyText;
+/// Union of the icon/row rectangles (view coordinates); NSZeroRect when empty.
+- (NSRect)usedRect;
+/// Easter egg: makes item `index` jump and flash as if pecked (index -1 stops it).
+- (void)setPecked:(NSInteger)index;
+/// One rectangle per item (view coordinates).
+- (NSArray<NSValue *> *)itemRects;
+/// Extra space below the last row, for something drawn over the bottom of the panel (the scroll bar still runs the full height).
+@property (nonatomic) CGFloat bottomPad;
 @property (nonatomic) BOOL listMode;     // View key: small icon + "S001 name" rows in columns, like the sampler's list view
 @end
 NS_ASSUME_NONNULL_END

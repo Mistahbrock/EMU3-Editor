@@ -3,6 +3,7 @@
 #import "EDMainWindowController.h"
 #import "EDSDSPanel.h"
 #import "EDSMDIPanel.h"
+#import "EDEmuEgg.h"
 #include <sys/mount.h>
 #import "EDBank.h"
 #import "EDSample+Ops.h"
@@ -76,6 +77,7 @@
 - (BOOL)isFlipped { return YES; }
 @end
 
+static NSString *ServedImagePath(void); static NSString *BoardIDText(void);
 @implementation EDMainWindowController {
     NSView *_cmdBar, *_cmdRule; NSPopUpButton *_linkSampler, *_linkHost; NSButton *_linkServe; NSPopUpButton *_linkID, *_linkAccess; NSTextField *_linkInfo; EDDiskIcons *_mountsIcons; NSTextField *_mountsDetail;
     NSLayoutConstraint *_statusWidth, *_statusWide, *_statusLead, *_lcdLead, *_lcdTrail; NSString *_autoStatus; NSMutableArray<NSNumber *> *_tabHistory; NSInteger _curTab; BOOL _tabBack; NSTimer *_statusTimer; NSString *_statusSig; BOOL _statusBusy;
@@ -109,7 +111,7 @@
     EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn; BOOL _autoBackedUp;
     EDHomeList *_home;
     EDMemoryView *_memory;
-    NSTextField *_samplerStatus; EDDiskIcons *_diskHint;
+    NSTextField *_samplerStatus; EDDiskIcons *_diskHint; NSView *_mountsBox; id _eggMonitor;
     NSScrollView *_diskScroll, *_outlineScroll; EDLCDSideTab *_diskSideTab; EDNode *_browseNode; BOOL _listView, _inBank, _bankList; NSArray<EDDiskItem *> *_diskItems; NSButton *_viewKey, *_loadKey, *_saveKey, *_infoKey;
 }
 
@@ -130,6 +132,21 @@
         _player.onStop = ^{ [weak playbackStopped]; };
         [self buildUI];
         [self refreshAll];
+        // Easter egg: Shift+F7 sends a small emu walking over the MOUNTS panel (like the bird in the Emax II's hidden menu).
+        _eggMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
+            EDMainWindowController *s = weak;
+            if (s && e.window == s.window && e.keyCode == 98 && (e.modifierFlags & NSEventModifierFlagShift) && s->_tabPicker.selectedSegment == 4) {   // Tools page only
+                NSMutableArray *rects = [NSMutableArray array]; NSRect mount = NSZeroRect; NSInteger mi = 0, k = 0;
+                for (EDDiskItem *it in s->_mountsIcons.items) if (it.sampler) { mi = k; break; } else k++;
+                k = 0;
+                for (NSValue *v in s->_mountsIcons.itemRects) {
+                    NSRect r = [s->_mountsIcons convertRect:v.rectValue toView:s->_mountsBox]; r = NSInsetRect(r, 36, 6);   // the artwork sits inside its tile
+                    [rects addObject:[NSValue valueWithRect:r]]; if (k++ == mi) mount = r; }
+                __weak EDDiskIcons *ic = s->_mountsIcons;
+                [EDEmuEgg playOver:s->_mountsBox avoiding:rects mount:mount leftLimit:78 peck:^(BOOL hit) { [ic setPecked:hit ? mi : -1]; }
+                    done:^(BOOL pecked) { EDDiskIcons *i2 = ic; if (pecked && i2 && mi < (NSInteger)i2.items.count && i2.onOpen) i2.onOpen(i2.items[mi]); }]; return nil;
+            }
+            return e; }];
         // Space = play / stop from anywhere in the window except while typing in a text field.
         _spaceMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
             EDMainWindowController *me = weak;
@@ -314,9 +331,9 @@ static NSTextField *toolNote(NSString *s) {
     _autoSaveBtn = [NSButton checkboxWithTitle:@"Save to sampler automatically" target:self action:@selector(autoSaveToggled:)];
     _autoSaveBtn.state = [NSUserDefaults.standardUserDefaults boolForKey:@"AutoSaveToSampler"] ? NSControlStateValueOn : NSControlStateValueOff;
     _autoSaveBtn.toolTip = @"When the open bank is on the sampler's disk, writes it back a few seconds after you stop editing. The sampler still needs a SCSI rescan and a bank reload to see the change. The original is backed up once per opened bank.";
-    NSStackView *gBank = [self group:@"Current bank" views:@[_masterSummary, _memory, ramRow, _autoSaveBtn,
-        [self wideButton:@"Save Bank" action:@selector(saveBank:)], [self wideButton:@"Save Bank As…" action:@selector(saveBankAs:)],
+    NSStackView *gBank = [self group:@"Current bank" views:@[_masterSummary, _memory, _autoSaveBtn,
         [self wideButton:@"Open Bank File…" action:@selector(openBankFile:)],
+        [self wideButton:@"Save Bank" action:@selector(saveBank:)], [self wideButton:@"Save Bank As…" action:@selector(saveBankAs:)],
         [self wideButton:@"Send Sample to Sampler Disk…" action:@selector(sendToSamplerDisk:)]]];
     NSView *masterView = [NSView new];
     for (NSView *v in @[leftCol, gOpen, gBank]) { v.translatesAutoresizingMaskIntoConstraints = NO; [masterView addSubview:v]; [v.topAnchor constraintEqualToAnchor:masterView.topAnchor constant:-10].active = YES; }
@@ -380,12 +397,15 @@ static NSTextField *toolNote(NSString *s) {
     _mountsIcons = [[EDDiskIcons alloc] initWithFrame:NSZeroRect]; _mountsIcons.autoresizingMask = NSViewWidthSizable; _mountsIcons.emptyText = @"No disk images on mounted drives.";
     NSScrollView *mScroll = [NSScrollView new]; mScroll.hasVerticalScroller = YES; mScroll.drawsBackground = NO; mScroll.documentView = _mountsIcons;
     _mountsDetail = [NSTextField wrappingLabelWithString:@" "]; _mountsDetail.font = [EDTheme lcdFont:12]; _mountsDetail.textColor = EDTheme.lcdInk; _mountsDetail.maximumNumberOfLines = 3;
-    NSView *mounts = [EDTheme framedLCD:mScroll footer:_mountsDetail];
+    NSView *mounts = [EDTheme framedLCD:mScroll]; _mountsBox = mounts; mounts.layer.backgroundColor = EDTheme.lcdBackground.CGColor;   // the scroll bar runs the full height; the description sits beside the MOUNTS tab
+    _mountsIcons.bottomPad = 58;
+    _mountsDetail.translatesAutoresizingMaskIntoConstraints = NO; [mounts addSubview:_mountsDetail positioned:NSWindowAbove relativeTo:mScroll];
     EDLCDSideTab *mTab = [[EDLCDSideTab alloc] initWithTitle:@"MOUNTS"]; mTab.translatesAutoresizingMaskIntoConstraints = NO; [mounts addSubview:mTab];
     for (NSLayoutConstraint *c in mounts.constraints) if (c.firstItem == mScroll && c.firstAttribute == NSLayoutAttributeLeading) c.constant = 60;
-    [NSLayoutConstraint activateConstraints:@[[mTab.topAnchor constraintEqualToAnchor:mounts.topAnchor constant:8], [mTab.bottomAnchor constraintEqualToAnchor:_mountsDetail.topAnchor constant:-8],
+    [NSLayoutConstraint activateConstraints:@[[mTab.topAnchor constraintEqualToAnchor:mounts.topAnchor constant:8], [mTab.bottomAnchor constraintEqualToAnchor:mounts.bottomAnchor constant:-8],
         [mTab.leadingAnchor constraintEqualToAnchor:mounts.leadingAnchor constant:8], [mTab.widthAnchor constraintEqualToConstant:70],
-        [_mountsDetail.heightAnchor constraintEqualToConstant:54], [_mountsDetail.trailingAnchor constraintEqualToAnchor:mounts.trailingAnchor constant:-12]]];
+        [_mountsDetail.leadingAnchor constraintEqualToAnchor:mTab.trailingAnchor constant:12], [_mountsDetail.bottomAnchor constraintEqualToAnchor:mounts.bottomAnchor constant:-10],
+        [_mountsDetail.trailingAnchor constraintEqualToAnchor:mounts.trailingAnchor constant:-28]]];
     _mountsIcons.onSelect = ^(EDDiskItem *it) { [weakSelf mountsSelectionChanged]; };
     _mountsIcons.onOpen = ^(EDDiskItem *it) { if (it.url) [weakSelf showImageOnDisk:it.url]; };
     for (NSView *v in @[gImages, gCard, gLink, gSamplerTools, mounts]) { v.translatesAutoresizingMaskIntoConstraints = NO; [toolsView addSubview:v]; }
@@ -527,7 +547,7 @@ static NSTextField *toolNote(NSString *s) {
         @"Disk: browse a disk like the sampler's Disk screen. Return opens, Esc goes back, Load… brings a bank into the editor.",
         @"Samples: select a sample to see its waveform, set loops, audition it and edit it with the toolbar.",
         @"Presets: here you can edit presets, voices and zones, as in the sampler's Preset Edit menus. Changes go straight into the preset (Edit ▸ Undo works).",
-        @"Tools: here you can make new floppy or hard disk images, open images from mounted drives and prepare a BlueSCSI SD card."];
+        @"Tools: make disk images, prepare an SD card, set up the server."];
 }
 // Escape always goes back to the page you came from
 - (void)cancelOperation:(id)sender {
@@ -575,13 +595,19 @@ static NSTextField *toolNote(NSString *s) {
 - (void)refreshLCDVisibility {
     BOOL overview = _tabPicker.selectedSegment == 0 && _masterPicker.selectedSegment == 0;
     BOOL samples = _tabPicker.selectedSegment == 2;   // Samples: bank summary under the sample list, sample facts under the waveform
-    BOOL split = overview || samples;
+    BOOL tools = _tabPicker.selectedSegment == 4;     // Tools: help on the left, the sampler and served disk on the LCD strip
+    BOOL split = overview || samples || tools;
     _lcd.hidden = !split; _cmdBar.hidden = _cmdRule.hidden = _tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2;
     _statusWidth.active = split; _statusWide.active = !split;
     _statusLead.constant = overview ? 40 : (samples ? 2 : 14); _statusWidth.constant = overview ? 270 : 414;
-    _lcdLead.constant = samples ? 424 : 350; _lcdTrail.constant = samples ? -2 : -501;
+    _lcdLead.constant = (samples || tools) ? 424 : 350; _lcdTrail.constant = (samples || tools) ? -2 : -501;
     _status.preferredMaxLayoutWidth = split ? _statusWidth.constant : 1500;
     if (samples) { _lcd.line1 = [self pageHelp]; _lcd.line2 = nil; }
+    if (tools) {
+        NSUserDefaults *d = NSUserDefaults.standardUserDefaults; NSString *model = [d stringForKey:@"SamplerModel"]; NSInteger mb = [d integerForKey:@"SamplerSampleMB"];
+        _lcd.line1 = model.length ? [NSString stringWithFormat:@"%@ · %ld MB", model, (long)(mb > 0 ? mb : 40)] : @"Sampler not scanned yet";
+        NSString *served = [ServedImagePath() lastPathComponent]; _lcd.line2 = served.length ? [NSString stringWithFormat:@"Serving %@ · ID %@", served, BoardIDText()] : @"Not serving a disk image";
+    }
     NSString *help = samples ? [self bankSummaryLine] : [self pageHelp], *cur = _status.stringValue;
     if (![cur isEqualToString:help] && (cur.length == 0 || [self isHelpText:cur] || [cur isEqualToString:_autoStatus])) _status.stringValue = help;
     _autoStatus = help;   // real messages stay until replaced
@@ -753,6 +779,8 @@ static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults o
     };
     line(root != nil, root ? [NSString stringWithFormat:@"Disk served: %@", root.lastPathComponent] : @"No sampler disk mounted");
     line(boards > 0, boards ? @"SCSI board connected" : @"SCSI board not found");
+    NSString *model = [NSUserDefaults.standardUserDefaults stringForKey:@"SamplerModel"];   // found by Tools ▸ Find Sampler
+    if (model.length) line(YES, model);
     _samplerStatus.attributedStringValue = as;
     [_home reloadWithSamplerDisk:d];
     [self refreshDiskIcons];
@@ -1578,7 +1606,10 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     [_sds present];
 }
 
-- (IBAction)findSampler:(id)sender { [self smdiTransfer:nil]; [_smdi presentAndFind]; }
+- (IBAction)findSampler:(id)sender {
+    [self smdiTransfer:nil]; [_smdi presentAndFind];
+    __weak EDMainWindowController *w = self; _smdi.foundSampler = ^{ [w refreshSamplerStatus]; };
+}
 - (IBAction)smdiTransfer:(id)sender {
     if (!_smdi) {
         _smdi = [EDSMDIPanel new];
