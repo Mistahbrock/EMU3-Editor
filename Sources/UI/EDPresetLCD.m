@@ -92,7 +92,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     _context = [NSTextField labelWithString:@""]; _context.font = [EDTheme lcdFont:14]; _context.textColor = EDTheme.lcdInk;
     _prevV = [EDTheme lcdButton:@"◀" target:self action:@selector(prevItem:)]; _nextV = [EDTheme lcdButton:@"▶" target:self action:@selector(nextItem:)];
     for (NSButton *b in @[_prevV, _nextV]) { [b setButtonType:NSButtonTypeMomentaryPushIn]; [b.widthAnchor constraintEqualToConstant:40].active = YES; }
-    _empty = [NSTextField wrappingLabelWithString:@""]; _empty.font = [EDTheme lcdFont:15]; _empty.textColor = EDTheme.lcdInk; _empty.alignment = NSTextAlignmentCenter;
+    _empty = [NSTextField ed_wrappingLabelWithString:@""]; _empty.font = [EDTheme lcdFont:15]; _empty.textColor = EDTheme.lcdInk; _empty.alignment = NSTextAlignmentCenter;
     _grid = [NSStackView new]; _grid.orientation = NSUserInterfaceLayoutOrientationHorizontal; _grid.alignment = NSLayoutAttributeTop; _grid.spacing = 40;
     _keys = [NSStackView new]; _keys.orientation = NSUserInterfaceLayoutOrientationVertical; _keys.spacing = 6; _keys.translatesAutoresizingMaskIntoConstraints = NO;
     for (NSView *v in @[_title, _context, _prevV, _nextV, _empty, _grid, _menuRow, _keys]) { v.translatesAutoresizingMaskIntoConstraints = NO; [_screen addSubview:v]; }

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EMU3 Editor Help</title>
+<style>
+:root{--bg:#1d1d1f;--panel:#2a2a2d;--ink:#ececee;--dim:#a0a0a8;--red:#cc1721;--lcd:#487f30;--lcdink:#05110f;--link:#5aa9ff}
+@media (prefers-color-scheme:light){:root{--bg:#f4f4f5;--panel:#fff;--ink:#1d1d1f;--dim:#5e5e66;--link:#0a60d0}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;display:flex}
+nav{position:sticky;top:0;align-self:flex-start;height:100vh;width:230px;flex:none;padding:22px 16px;border-right:2px solid var(--red);overflow:auto}
+nav h1{font-size:15px;margin:0 0 14px;letter-spacing:.04em}
+nav h1 b{color:var(--red)}
+nav a{display:block;color:var(--ink);text-decoration:none;padding:5px 8px;border-radius:5px}
+nav a:hover{background:var(--panel)}
+main{max-width:820px;padding:26px 38px 80px}
+h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;border-bottom:2px solid var(--red);padding-bottom:6px;margin:38px 0 14px}
+h2:first-child{margin-top:0}
+h3{font-size:14px;margin:20px 0 4px}
+a{color:var(--link)}
+kbd{background:var(--panel);border:1px solid var(--dim);border-bottom-width:2px;border-radius:4px;padding:0 5px;font:12px Menlo,monospace}
+code{font:12.5px Menlo,monospace;background:var(--panel);padding:1px 4px;border-radius:3px}
+.lcd{background:var(--lcd);color:var(--lcdink);font:600 13px Menlo,monospace;padding:10px 14px;border-radius:3px;margin:10px 0}
+.note{border-left:3px solid var(--red);background:var(--panel);padding:8px 12px;margin:12px 0}
+table{border-collapse:collapse;width:100%;margin:8px 0}
+td,th{border-bottom:1px solid var(--panel);padding:5px 8px;text-align:left;vertical-align:top}
+th{color:var(--dim);font-weight:600}
+@media (max-width:640px){nav{display:none}main{padding:18px}}
+</style></head><body>
+<nav>
+<h1><b>E-MU</b> Editor Help</h1>
+<a href="#start">Getting started</a>
+<a href="#pages">The five pages</a>
+<a href="#master">Master</a>
+<a href="#disk">Disk</a>
+<a href="#samples">Samples</a>
+<a href="#presets">Presets</a>
+<a href="#tools">Tools</a>
+<a href="#convert">Converting 3X banks</a>
+<a href="#sampler">Sampler &amp; BlueSCSI</a>
+<a href="#midi">MIDI transfer</a>
+<a href="#settings">Settings</a>
+<a href="#keys">Keyboard</a>
+<a href="#safety">Safety</a>
+<a href="#trouble">Troubleshooting</a>
+</nav>
+<main>
+
+<h2 id="start">Getting started</h2>
+<p>EMU3 Editor edits E-MU sampler disks and banks on the Mac: Emulator IV / E4 / E64 / E6400 (EOS) banks, and older Emulator 3X / ESI-32 banks. It works on a disk image, a bank file or the disk your sampler is reading.</p>
+<ol>
+<li><b>Open something.</b> <i>File ▸ Open Disk Image…</i> (<kbd>⌘O</kbd>) for a whole disk, or <i>Open Bank File…</i> (<kbd>⇧⌘O</kbd>) for a single bank. Files dropped on the app icon open too.</li>
+<li><b>Look around.</b> The <i>Disk</i> page lists banks, folders and samples like the sampler's own Disk screen.</li>
+<li><b>Edit.</b> Select a sample on <i>Samples</i>, or a preset on <i>Presets</i>.</li>
+<li><b>Save.</b> <i>Save Bank</i> (<kbd>⌘S</kbd>). A backup of the loaded bank is written first.</li>
+</ol>
+<div class="note">Hover over most buttons for a short hint. Hints can be switched off in Settings.</div>
+
+<h2 id="pages">The five pages</h2>
+<table>
+<tr><th>Page</th><th>Shortcut</th><th>What it is for</th></tr>
+<tr><td>Master</td><td><kbd>⌘1</kbd></td><td>Open files, the current bank, the sampler's MIDI, Setup, Bank and FX screens</td></tr>
+<tr><td>Disk</td><td><kbd>⌘2</kbd></td><td>Browse a disk, open banks and samples</td></tr>
+<tr><td>Samples</td><td><kbd>⌘3</kbd></td><td>Waveform, loops, audition, sample editing</td></tr>
+<tr><td>Presets</td><td><kbd>⌘4</kbd></td><td>Presets, voices, zones and their parameters</td></tr>
+<tr><td>Tools</td><td><kbd>⌘9</kbd></td><td>Disk images, SD card, sampler link, mounts</td></tr>
+</table>
+<p><kbd>Esc</kbd> always goes back to the page you came from.</p>
+
+<h2 id="master">Master</h2>
+<p>The left side holds the sampler-style screens (MIDI, Setup, Bank, FX) and the utilities <i>Assign Key</i>, <i>Channel Volume</i> and <i>Tones</i>. The <i>Current bank</i> group opens and saves banks and sends a sample to the sampler's disk.</p>
+<p>The sampler memory line is for information. Sample RAM is physical and cannot be read over SCSI or MIDI.</p>
+<p><b>Contrast</b> (Setup page): the screens change at once, like on the sampler. Hold <kbd>⇧</kbd> and scroll over the Contrast control to change the colour of the green screens. Double-click it to set contrast and colour back to the default.</p>
+
+<h2 id="disk">Disk</h2>
+<p>Pick a disk and press <kbd>Return</kbd> (or double-click) to open it; <kbd>Esc</kbd> goes up one level. A bank opens into the editor and shows its samples. <i>Load…</i> brings a bank into the editor without leaving the list.</p>
+<p>Right-click a bank for its type, <i>Open</i>, <i>Show in Finder</i> and, for 3X banks, <i>Convert</i>.</p>
+
+<h2 id="samples">Samples</h2>
+<ul>
+<li><b>Waveform:</b> drag the loop markers. Hold <kbd>⌥</kbd> to snap to a zero crossing.</li>
+<li><b>Audition:</b> <kbd>Space</kbd> plays or stops. Looped samples sustain in the loop.</li>
+<li><b>Sample edit:</b> Normalize, Reverse, Fade In/Out, Remove DC, Crop Loop, X-Fade Loop. <i>Edit ▸ Undo</i> works.</li>
+<li><b>Convert:</b> <i>Export WAV</i> and <i>Replace</i> from a WAV or other audio file.</li>
+<li><b>Transfer:</b> <i>SMDI</i> (SCSI), <i>MIDI Dump</i> (Sample Dump Standard) and <i>To Disk</i> (copy to the sampler's disk).</li>
+<li><b>Zoom:</b> <kbd>+</kbd> <kbd>−</kbd>, <kbd>0</kbd> fits, <kbd>L</kbd> zooms to the loop.</li>
+</ul>
+<p>Samples that do not follow the known layout are shown but locked, and are written back byte for byte.</p>
+
+<h2 id="presets">Presets</h2>
+<p>Pick a preset on the left. The middle shows its structure (preset ▸ voices ▸ sample references); the right shows the parameters, grouped like the sampler's Preset Edit menus. Changes go straight into the preset.</p>
+<ul>
+<li><b>EOS presets (E4B):</b> all parameter tables; you can add or remove sample references and duplicate or remove voices.</li>
+<li><b>3X / ESI-32 presets:</b> header, realtime controls, zone table and key map are editable. Voice blocks only show the sample number.</li>
+</ul>
+<p>Right-click a preset for its type and, for 3X presets, <i>Convert to EOS…</i>.</p>
+
+<h2 id="tools">Tools</h2>
+<ul>
+<li><b>Disk images:</b> create an empty, EOS-formatted floppy (1.44 MB) or disk image.</li>
+<li><b>BlueSCSI SD card:</b> copy an image to an SD card, write <code>bluescsi.ini</code>.</li>
+<li><b>Sampler link:</b> serve an image folder to the sampler through the board (see below).</li>
+<li><b>Sampler:</b> find the sampler on the SCSI bus, send samples by MIDI, show the disk it uses.</li>
+<li><b>Mounts:</b> the disks that are mounted now. Double-click one to open it.</li>
+</ul>
+
+<h2 id="convert">Converting 3X / ESI-32 banks</h2>
+<p>Emulator 3X and ESI-32 banks cannot be loaded by an E4 / E64 / E6400 as they are. The editor can write an EOS (E4B) copy of them. The original is never changed.</p>
+<ul>
+<li>When you open a 3X bank the editor offers to convert it (can be switched off in Settings).</li>
+<li>Right-click a 3X bank in the Disk list, or a 3X preset on the Presets page, and choose <i>Convert</i>. Converting a preset takes only the samples it uses.</li>
+</ul>
+<div class="note"><b>Check the result by ear.</b> Samples, preset names, key ranges, velocity splits and the sample assignment are converted. Tuning, envelopes, filters, root key and pitch-bend range are not decoded; converted voices use EOS default values. A converted bank has not been proven on a real sampler yet.</div>
+
+<h2 id="sampler">Sampler &amp; BlueSCSI</h2>
+<p>The sampler usually sits at SCSI ID 6 and the BlueSCSI board at ID 7; the served disk takes another ID (for example 3). Use <i>Find Sampler (SCSI scan)…</i> on the Tools page to read the model and EOS version.</p>
+<p>When the sampler's disk is mounted on the Mac, <i>To Disk</i> and <i>Send Sample to Sampler Disk…</i> copy straight to it. If <i>Save to the sampler's disk automatically</i> is on in Settings, a bank that was opened from the sampler's disk is written back a few seconds after you stop editing.</p>
+
+<h2 id="midi">MIDI transfer</h2>
+<p><i>MIDI Sample Dump…</i> (<kbd>⌘D</kbd>) sends the selected sample to the sampler, requests one by number, or waits for a dump started from the sampler. Choose the MIDI ports and device ID in the dialog. Never guess SysEx: only the documented dump messages are used.</p>
+
+<h2 id="settings">Settings</h2>
+<p><i>EMU3 Editor ▸ Settings…</i> (<kbd>⌘,</kbd>):</p>
+<ul>
+<li><b>Folders for file dialogs:</b> each dialog opens in the folder you used last. <i>Choose…</i> pins a folder; <i>Last Used</i> goes back to following your last one.</li>
+<li><b>Auto-save</b> to the sampler's disk, <b>convert offer</b> for 3X banks, <b>tool tips</b> on/off.</li>
+<li><b>Set Defaults</b> puts all of these back to the start values.</li>
+</ul>
+
+<h2 id="keys">Keyboard</h2>
+<table>
+<tr><td><kbd>⌘O</kbd> / <kbd>⇧⌘O</kbd></td><td>Open disk image / bank file</td></tr>
+<tr><td><kbd>⌘S</kbd> / <kbd>⇧⌘S</kbd></td><td>Save bank / Save bank as</td></tr>
+<tr><td><kbd>⌘1</kbd>…<kbd>⌘4</kbd>, <kbd>⌘9</kbd></td><td>Master, Disk, Samples, Presets, Tools</td></tr>
+<tr><td><kbd>⌘5</kbd>…<kbd>⌘8</kbd></td><td>Master ▸ MIDI, Setup, Bank, FX</td></tr>
+<tr><td><kbd>Space</kbd></td><td>Play / stop the selected sample</td></tr>
+<tr><td><kbd>Esc</kbd></td><td>Back to the previous page; up one level in the Disk list</td></tr>
+<tr><td><kbd>⌘E</kbd> / <kbd>⌘I</kbd></td><td>Export as WAV / Replace from audio</td></tr>
+<tr><td><kbd>⌘T</kbd> / <kbd>⌘D</kbd> / <kbd>⇧⌘D</kbd></td><td>SMDI transfer / MIDI Sample Dump / Send to sampler disk</td></tr>
+<tr><td><kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd></td><td>Undo / Redo</td></tr>
+<tr><td><kbd>⌘,</kbd></td><td>Settings</td></tr>
+</table>
+
+<h2 id="safety">Safety</h2>
+<ul>
+<li>Saving writes a backup of the loaded bank to <code>~/Library/Application Support/EMU3 Editor/Backups</code> first.</li>
+<li>Converting never changes the original file.</li>
+<li>Do not write to a disk image while the sampler is using it, and unmount it from the Mac before you power the sampler up.</li>
+</ul>
+
+<h2 id="trouble">Troubleshooting</h2>
+<h3>The sampler does not see my disk</h3>
+<p>Check the SCSI IDs: sampler 6, board 7, disk not equal to either. Run <i>Find Sampler</i> and check the USB cable to the board.</p>
+<h3>A bank will not open</h3>
+<p>Only EOS (E4B) and Emulator 3X / ESI-32 v3 banks are read. Original Emulator III banks are not supported yet.</p>
+<h3>A converted bank sounds wrong</h3>
+<p>Tuning, envelopes and filters are not converted (see above). Fix them in the Presets page.</p>
+<h3>MIDI transfer does nothing</h3>
+<p>Pick the right MIDI ports and device ID in the dialog; many samplers answer to ID 127 (all).</p>
+
+<p style="margin-top:40px;color:var(--dim)">EMU3 Editor — GPL-3.0-or-later, Rhyno Audio. See Credits for the sources of the parameter tables.</p>
+</main></body></html>

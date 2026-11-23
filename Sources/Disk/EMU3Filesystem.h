@@ -47,6 +47,13 @@ typedef NS_ENUM(NSInteger, EMU3ErrorCode) {
 @property (atomic, copy) BOOL (^editGateBegin)(void);
 @property (atomic, copy) void (^editGateEnd)(void);
 
+/// Remote disks (a drive read over SCSI into a sparse cache file): called before a range of blocks is read; NO = could not fetch.
+/// Registered per image path with +setRemoteFetcher:forImageURL: before the image is opened. A remote image opens read-only and does not
+/// read every bank's header while listing directories.
+typedef BOOL (^EMU3BlockFetcher)(NSUInteger firstBlock, NSUInteger blockCount);
++ (void)setRemoteFetcher:(EMU3BlockFetcher)fetcher forImageURL:(NSURL *)url;   // nil removes it
+@property (atomic, copy) EMU3BlockFetcher blockFetcher;
+
 /// While YES every write operation is refused (isReadOnly reports YES). Used for "sampler mode".
 @property (atomic) BOOL locked;
 

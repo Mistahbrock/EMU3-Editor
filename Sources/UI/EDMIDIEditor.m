@@ -115,7 +115,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     _next.alignment = NSTextAlignmentRight;
     _rows = [NSStackView new]; _rows.orientation = NSUserInterfaceLayoutOrientationHorizontal; _rows.alignment = NSLayoutAttributeTop; _rows.spacing = 40; _rows.distribution = NSStackViewDistributionFill;
 
-    _msg = [NSTextField wrappingLabelWithString:@""]; _msg.font = [EDTheme lcdFont:15]; _msg.textColor = EDTheme.lcdInk;
+    _msg = [NSTextField ed_wrappingLabelWithString:@""]; _msg.font = [EDTheme lcdFont:15]; _msg.textColor = EDTheme.lcdInk;
     _actions = [NSStackView new]; _actions.spacing = 12;
 
     _table = [EDLCDTableView new]; _table.dataSource = self; _table.delegate = self; _table.rowHeight = 26;
@@ -137,7 +137,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         b.tag = i;
         [b.widthAnchor constraintEqualToConstant:130].active = YES; [_softKeys addObject:b]; [keys addArrangedSubview:b];
     }
-    _note = [NSTextField wrappingLabelWithString:@""];
+    _note = [NSTextField ed_wrappingLabelWithString:@""];
     _note.textColor = NSColor.secondaryLabelColor; _note.font = [NSFont systemFontOfSize:12]; _note.translatesAutoresizingMaskIntoConstraints = NO;
     [_screen addSubview:keys]; [self addSubview:_note];   // the soft keys live in the green screen
     [EDTheme addGlareTo:_screen];
@@ -210,7 +210,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     if (isMsg) {
         _msg.stringValue = [(NSString *)pg[@"message"] containsString:@"%@"] ? [NSString stringWithFormat:pg[@"message"], self.bankTitle ?: @"(no bank open)"] : pg[@"message"];
         for (NSArray *a in pg[@"actions"]) {
-            NSButton *b = [EDTheme lcdKey:a[0] target:self action:@selector(pageAction:)]; b.identifier = a[1];
+            NSButton *b = [EDTheme lcdKey:a[0] target:self action:@selector(pageAction:)]; b.identifier = a[1]; b.toolTip = [NSString stringWithFormat:@"%@ (needs an open bank).", a[0]];
             b.enabled = _bank != nil; [_actions addArrangedSubview:b];
         }
     }
@@ -247,6 +247,8 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     for (NSString *o in options) { NSMenuItem *mi = [pop.menu addItemWithTitle:o action:nil keyEquivalent:@""]; mi.attributedTitle = [[NSAttributedString alloc] initWithString:o attributes:attr]; }
     [EDTheme styleLCDPopup:pop]; [pop selectItemWithTitle:isIf ? (current ?: options[0]) : (_profile[spec[0]] ?: options[0])]; if (isIf && pop.indexOfSelectedItem < 0) [pop selectItemAtIndex:0]; pop.identifier = spec[0]; pop.target = self; pop.action = @selector(profileChanged:);
     if (spec.count > 3) pop.enabled = NO;
+    pop.toolTip = [spec[0] isEqual:@"contrast"] ? @"Screen contrast. Scroll or click to change. Hold ⇧ and scroll to change the colour of the green screens; double-click to set both back to the default."
+        : [NSString stringWithFormat:@"%@: click to choose, or scroll over it to step through the values.", spec[1]];
     [pop.widthAnchor constraintGreaterThanOrEqualToConstant:130].active = YES;
     NSStackView *row = [NSStackView stackViewWithViews:@[box, lab, pop]]; row.spacing = 8; row.alignment = NSLayoutAttributeCenterY;
     return row;

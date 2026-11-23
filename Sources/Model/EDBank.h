@@ -80,6 +80,8 @@ typedef NS_ENUM(NSInteger, EDPresetKind) { EDPresetKindE4 = 0, EDPresetKindLegac
 + (nullable NSData *)singleSampleBankDataForSample:(EDSample *)sample;
 /// E3S1 chunk data (starting with the 2-byte sample number) for a sample read from a 3X bank, given that sample's original 0x5C-byte header.
 + (nullable NSData *)e3s1ChunkDataForLegacySample:(EDSample *)sample header:(NSData *)header number:(uint16_t)number;
+/// The bytes of a new, empty EOS bank (no samples, no presets), the starting point of File > New Bank.
++ (NSData *)emptyBankData;
 + (nullable instancetype)bankWithData:(NSData *)data error:(NSError **)error;
 - (nullable NSData *)serializeWithError:(NSError **)error;
 /// Call after the serialized data has been written somewhere: forgets the unsaved-changes state without reloading.
@@ -98,6 +100,10 @@ typedef NS_ENUM(NSInteger, EDPresetKind) { EDPresetKindE4 = 0, EDPresetKindLegac
 /// `missing` receives sample numbers the preset uses that are not in this bank (ROM samples, or samples left out of the bank). nil for 3X banks.
 - (nullable NSData *)bankDataForPreset:(EDPreset *)preset missingSamples:(NSArray<NSNumber *> *_Nullable *_Nullable)missing;
 - (void)reattachPreset:(NSDictionary *)state;
+/// Copies presets from another E4B bank into this one, with the samples they use. Copied samples take the lowest free sample numbers and the
+/// copied presets' voices are re-pointed to them; samples the source does not hold (ROM samples) keep their number and are listed in `missing`.
+/// Returns the new presets, or nil when either bank is not an E4B bank or no sample number is free.
+- (nullable NSArray<EDPreset *> *)importPresets:(NSArray<EDPreset *> *)presets fromBank:(EDBank *)source samplesCopied:(nullable NSUInteger *)copied missingSamples:(NSArray<NSNumber *> *_Nullable *_Nullable)missing;
 @end
 
 NS_ASSUME_NONNULL_END

@@ -15,7 +15,7 @@ typedef NS_ENUM(NSInteger, EggAct) { ActWalk, ActPeck, ActLook, ActTrot, ActMoun
     double _peck;                                // 0 head up .. 1 beak at the floor
     CGPoint _head, _headFrom;                    // head cell relative to the body centre
     BOOL _entering; double _wag; BOOL _stepping; BOOL _headBack; double _jump; int _actCount; CGFloat _us;
-    void (^_peckBlock)(BOOL); void (^_doneBlock)(BOOL); BOOL _pecked;   // _prev: last frame's pixels, drawn faintly like LCD ghosting; _headBack: the head looks over the shoulder
+    void (^_peckBlock)(BOOL); void (^_doneBlock)(BOOL); BOOL _pecked, _hit;   // _prev: last frame's pixels, drawn faintly like LCD ghosting; _headBack: the head looks over the shoulder
 }
 
 static __weak EDEmuEgg *sRunning;
@@ -38,6 +38,7 @@ static __weak EDEmuEgg *sRunning;
     _monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown | NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown handler:^NSEvent *(NSEvent *ev) {
         EDEmuEgg *s = w; if (!s) return ev;
         if (ev.window != s.window) return ev;            // dialogs and open/save panels keep their keys and clicks
+        if (ev.type == NSEventTypeKeyDown && ev.keyCode == 53) { s->_pecked = NO; [s finish]; return nil; }   // Esc: the bird goes away at once and nothing opens, you stay on this page
         if (s->_state == EggRoam) { s->_state = EggRaise; s->_t = 0; s->_headFrom = s->_head; s->_speed = 0; return nil; }   // the key or click that wakes the bird is not passed on
         return ev.type == NSEventTypeKeyDown ? nil : ev;   // while it leaves, keys are ignored; clicks work as usual
     }];
@@ -116,8 +117,8 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
                 _peck = 0;
             } else if (_act == ActMount) {              // reaching up to peck the mount icon, three times, then bolt before it opens
                 double sv = fabs(sin(_actT * M_PI / 0.42)); _head = CGPointMake(upHead.x + 3, upHead.y - 2 + 4 * sv); _peck = 0;   // the beak is highest, at the icon, when sv = 1
-                if (_peckBlock) _peckBlock(sv > 0.86); _pecked = YES;
-                if (_actT > 1.3) { _state = EggLook; _t = 0; _head = upHead; if (_peckBlock) _peckBlock(NO); }
+                _hit = sv > 0.86; if (_peckBlock) _peckBlock(_hit); _pecked = YES;
+                if (_actT > 1.3) { _state = EggLook; _t = 0; _head = upHead; _hit = NO; if (_peckBlock) _peckBlock(NO); }
             } else if (_act == ActPeck) {
                 double ph = fmod(_actT, 0.7) / 0.7; _peck = ph < 0.3 ? Ease(ph / 0.3) : (ph < 0.5 ? 1 - Ease((ph - 0.3) / 0.2) * 0.15 : 1 - Ease((ph - 0.5) / 0.5) * 1.0);
                 if (ph < 0.3 || ph >= 0.5) {} // keep value
@@ -194,6 +195,11 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
     int f = _headBack ? -1 : 1;   // beak side
     for (int y = hy; y <= hy + 1; y++) for (int x = (f > 0 ? hx : hx - 2); x <= (f > 0 ? hx + 2 : hx); x++) [self cx:x y:y];
     [self cx:hx + 3 * f y:hy]; [self cx:hx + 4 * f y:_peck > 0.4 ? hy - 1 : hy]; if (_peck > 0.4) [self cx:hx + 5 * f y:hy - 2];
+    if (_hit && _act == ActMount && _state == EggRoam) {   // impact lines around the beak tip when it strikes the mount icon
+        int tx = hx + 4 * f, ty = hy + 1;
+        static const int rays[7][2] = {{0,1},{1,1},{-1,1},{1,0},{-1,0},{2,1},{-2,1}};
+        for (int i = 0; i < 7; i++) for (int r = 3; r <= 5; r++) [self cx:tx + rays[i][0] * r / (abs(rays[i][0]) == 2 ? 2 : 1) y:ty + rays[i][1] * r];
+    }
     if (_state == EggLook || _state == EggJump) {   // scare rays burst around the head, flickering between two patterns
         BOOL alt = ((int)(_t * 14)) % 2; int cxh = hx + 1, cyh = hy + 1;
         static const int dirs[8][2] = {{1,0},{1,1},{0,1},{-1,1},{-1,0},{-1,-1},{0,-1},{1,-1}};

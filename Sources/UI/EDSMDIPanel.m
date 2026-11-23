@@ -19,6 +19,10 @@
     if ((self = [super initWithWindow:w])) { _rows = [NSMutableArray array]; _devs = [NSMutableArray array]; [self build]; }
     return self;
 }
+- (NSButton *)closeButton {
+    NSButton *b = [NSButton buttonWithTitle:@"Close" target:self.window action:@selector(performClose:)]; b.keyEquivalent = @"\e"; b.toolTip = @"Close this window.";
+    [b.widthAnchor constraintEqualToConstant:100].active = YES; return b;
+}
 - (NSButton *)button:(NSString *)t action:(SEL)a { return [NSButton buttonWithTitle:t target:self action:a]; }
 static NSTextField *Lbl(NSString *t) { NSTextField *l = [NSTextField labelWithString:t]; l.font = [NSFont systemFontOfSize:13]; return l; }
 
@@ -28,7 +32,7 @@ static NSTextField *Lbl(NSString *t) { NSTextField *l = [NSTextField labelWithSt
     _numField = [NSTextField textFieldWithString:@"1"];
     _idField.toolTip = @"The sampler's SCSI ID (Master ▸ Setup ▸ SCSI/Disk). The BlueSCSI board uses ID 7 — set \"Avoid Host on ID\" to 7 on the sampler.";
     _numField.toolTip = @"Sample number on the sampler, 1–999 (the number the sampler's display shows). Sample 0 is the sampler's clipboard and cannot be used over SMDI.";
-    _status = [NSTextField wrappingLabelWithString:@"Needs the BlueSCSI board with the SMDI firmware, connected to the sampler's SCSI port. If the board is serving a disk it is switched to SMDI mode automatically (it reboots, a few seconds) and switched back when you close this window."];
+    _status = [NSTextField ed_wrappingLabelWithString:@"Needs the BlueSCSI board with the SMDI firmware, connected to the sampler's SCSI port. If the board is serving a disk it is switched to SMDI mode automatically (it reboots, a few seconds) and switched back when you close this window."];
     _status.font = [NSFont systemFontOfSize:11]; _status.textColor = NSColor.secondaryLabelColor; _status.preferredMaxLayoutWidth = 520; _status.alignment = NSTextAlignmentCenter; _status.maximumNumberOfLines = 12;
     _bar = [NSProgressIndicator new]; _bar.style = NSProgressIndicatorStyleBar; _bar.indeterminate = NO; _bar.maxValue = 1;
     _scanBtn = [self button:@"Read sample list" action:@selector(scan:)];
@@ -38,6 +42,14 @@ static NSTextField *Lbl(NSString *t) { NSTextField *l = [NSTextField labelWithSt
     _delBtn = [self button:@"Delete on sampler" action:@selector(deleteRemote:)];
     _cancelBtn = [self button:@"Cancel" action:@selector(cancel:)]; _cancelBtn.enabled = NO;
     NSButton *refresh = [self button:@"Refresh ports" action:@selector(refresh:)];
+    _scanBtn.toolTip = @"Ask the sampler for its list of samples over SCSI.";
+    _findBtn.toolTip = @"Try each SCSI ID and list the devices that answer, so you can pick the sampler's ID.";
+    _sendBtn.toolTip = @"Send the selected sample to the sampler under the number given above (SMDI, over SCSI).";
+    _recvBtn.toolTip = @"Fetch the selected sampler sample into the selected sample in the editor.";
+    _delBtn.toolTip = @"Delete the selected sample from the sampler's memory. This cannot be undone.";
+    _cancelBtn.toolTip = @"Stop the transfer that is running.";
+    refresh.toolTip = @"Look for the BlueSCSI board's serial port again.";
+    _portPop.toolTip = @"The serial port of the BlueSCSI board (SMDI firmware).";
     for (NSTextField *f in @[_idField, _numField]) [f.widthAnchor constraintEqualToConstant:80].active = YES;
 
     _list = [NSTableView new];
@@ -57,7 +69,7 @@ static NSTextField *Lbl(NSString *t) { NSTextField *l = [NSTextField labelWithSt
     NSScrollView *dv = [NSScrollView new]; dv.documentView = _devList; dv.hasVerticalScroller = YES; dv.borderType = NSBezelBorder; dv.translatesAutoresizingMaskIntoConstraints = NO;
     [dv.widthAnchor constraintEqualToConstant:520].active = YES; [dv.heightAnchor constraintEqualToConstant:120].active = YES;
     _svSamples = sv; _svDevs = dv;
-    NSTextField *note = [NSTextField wrappingLabelWithString:@"1–999, as on the sampler's display (S001…). Sample 0 (S000) is the sampler's clipboard; SMDI refuses it."];
+    NSTextField *note = [NSTextField ed_wrappingLabelWithString:@"1–999, as on the sampler's display (S001…). Sample 0 (S000) is the sampler's clipboard; SMDI refuses it."];
     note.font = [NSFont systemFontOfSize:11]; note.textColor = NSColor.secondaryLabelColor; note.preferredMaxLayoutWidth = 391;
     NSGridView *g = [NSGridView gridViewWithViews:@[
         @[Lbl(@"BlueSCSI serial port"), _portPop],
@@ -71,7 +83,7 @@ static NSTextField *Lbl(NSString *t) { NSTextField *l = [NSTextField labelWithSt
     NSImageView *icon = [NSImageView imageViewWithImage:[NSImage imageNamed:NSImageNameApplicationIcon]];
     [icon.widthAnchor constraintEqualToConstant:64].active = YES; [icon.heightAnchor constraintEqualToConstant:64].active = YES;
     NSTextField *head = [NSTextField labelWithString:@"SMDI Transfer (SCSI)"]; head.font = [NSFont boldSystemFontOfSize:15];
-    NSStackView *root = [NSStackView stackViewWithViews:@[icon, head, g, sv, dv, r0, r1, r2, _bar, _status]];
+    NSStackView *root = [NSStackView stackViewWithViews:@[icon, head, g, sv, dv, r0, r1, r2, _bar, _status, [self closeButton]]];
     _head = head; _grid = g; _rowRead = r0; _rowXfer = r1; _rowDel = r2;
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeCenterX; root.spacing = 12;
     [icon.centerXAnchor constraintEqualToAnchor:root.centerXAnchor].active = YES; [head.centerXAnchor constraintEqualToAnchor:root.centerXAnchor].active = YES;

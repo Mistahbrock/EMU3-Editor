@@ -18,6 +18,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSInteger)lcdContrast;
 /// Sets the contrast and recolours every green screen in all open windows.
 + (void)setLcdContrast:(NSInteger)c;
+/// Screen colour: the stock green turned around the colour wheel in 1/48 steps (-23...24). 0 = stock green. Recolours every green screen.
++ (NSInteger)lcdHue;
++ (void)setLcdHue:(NSInteger)h;
++ (void)applyContrast:(NSInteger)c hue:(NSInteger)h;
 + (NSColor *)labelWhite;
 + (NSColor *)logoBlue;       // the EMU wordmark
 + (NSFont *)lcdFont:(CGFloat)size;
@@ -42,6 +46,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// The same frame with a row of keys inside it, under the list.
 + (NSView *)framedLCD:(NSView *)s footer:(NSView *)footer;
 + (void)styleLCDMenu:(NSMenu *)m;
+/// Opens `m` below (or above) `b` as a green LCD pop-up without the system menu's padding; items run their action as usual.
++ (void)popUpLCDMenu:(NSMenu *)m fromButton:(NSButton *)b;
+/// Right-click / Control-click on `v` shows v's `menu` as the LCD pop-up (the menu's delegate still updates it first).
++ (void)useLCDContextMenuOn:(NSView *)v;
 /// After changing a styled menu item's title or enabled state (e.g. in menuNeedsUpdate:): resizes its view to the new title and redraws it.
 + (void)refreshLCDMenuItem:(NSMenuItem *)i;
 /// Same look for the dropdown list of a popup button (call after its items are added).
@@ -74,4 +82,9 @@ NS_ASSUME_NONNULL_END
 /// A popup button that also answers the mouse wheel / trackpad scroll like the sampler's data wheel:
 /// scroll up = next entry, scroll down = previous entry, and the popup's action fires for each step.
 @interface EDWheelPopUp : NSPopUpButton
+@end
+
+/// Wrapping label that is plain display text: not selectable, so it has no right-click menu (Look Up, Translate, Services…).
+@interface NSTextField (EDLabels)
++ (instancetype)ed_wrappingLabelWithString:(NSString *)s;
 @end

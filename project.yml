@@ -13,6 +13,9 @@ targets:
         buildPhase: resources
       - path: Graphics/emu-logo.png
         buildPhase: resources
+      - path: Resources/Help
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: EMU3Editor
@@ -27,3 +30,4 @@ targets:
       - sdk: AVFoundation.framework
       - sdk: CoreMIDI.framework
       - sdk: UniformTypeIdentifiers.framework
+      - sdk: WebKit.framework

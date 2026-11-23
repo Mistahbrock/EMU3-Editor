@@ -16,9 +16,9 @@ static const CGFloat kTileW = 200, kTileH = 128, kGap = 6, kPad = 14, kRowH = 28
 - (BOOL)isFlipped { return YES; }
 - (BOOL)acceptsFirstResponder { return YES; }
 - (EDDiskItem *)selectedItem { return _selectedIndex >= 0 && _selectedIndex < (NSInteger)_items.count ? _items[_selectedIndex] : nil; }
-- (void)setItems:(NSArray<EDDiskItem *> *)items { _items = [items copy]; if (_selectedIndex >= (NSInteger)_items.count) _selectedIndex = -1; [self fitToClip]; self.needsDisplay = YES; }
+- (void)setItems:(NSArray<EDDiskItem *> *)items { _items = [items copy]; if (_selectedIndex >= (NSInteger)_items.count) _selectedIndex = -1; [self fitToClip]; [self refreshTips]; self.needsDisplay = YES; }
 - (void)setSelectedIndex:(NSInteger)i { _selectedIndex = i; [self scrollToSelection]; self.needsDisplay = YES; }
-- (void)setListMode:(BOOL)on { if (_listMode == on) return; _listMode = on; [self fitToClip]; [self scrollToSelection]; self.needsDisplay = YES; }
+- (void)setListMode:(BOOL)on { if (_listMode == on) return; _listMode = on; [self fitToClip]; [self refreshTips]; [self scrollToSelection]; self.needsDisplay = YES; }
 // list view: columns filled top to bottom, as many columns as fit
 - (NSInteger)listCols { return MAX(1, (NSInteger)((NSWidth(self.bounds) - 2 * kPad) / kColMin)); }
 - (NSInteger)listRows { NSInteger c = [self listCols]; return MAX(1, ((NSInteger)_items.count + c - 1) / c); }
@@ -27,6 +27,26 @@ static const CGFloat kTileW = 200, kTileH = 128, kGap = 6, kPad = 14, kRowH = 28
     if (_listMode) { NSInteger rows = [self listRows]; CGFloat colW = (NSWidth(self.bounds) - 2 * kPad) / [self listCols]; return NSMakeRect(kPad + (i / rows) * colW, 10 + (i % rows) * kRowH, colW - 8, kRowH); }
     NSInteger per = [self perRow];
     return NSMakeRect(kPad + (i % per) * (kTileW + kGap), 10 + (i / per) * (kTileH + kGap), kTileW, kTileH);
+}
+// tool tips: one rectangle per icon (they follow the Settings switch)
+- (void)refreshTips {
+    [self removeAllToolTips];
+    for (NSInteger i = 0; i < (NSInteger)_items.count; i++) [self addToolTipRect:[self tileRect:i] owner:self userData:(void *)(intptr_t)i];
+}
+- (void)setFrameSize:(NSSize)sz { [super setFrameSize:sz]; [self refreshTips]; }
+- (NSString *)view:(NSView *)v stringForToolTip:(NSToolTipTag)tag point:(NSPoint)p userData:(void *)d {
+    if ([NSUserDefaults.standardUserDefaults boolForKey:@"HideToolTips"]) return nil;
+    NSInteger i = (NSInteger)(intptr_t)d; if (i < 0 || i >= (NSInteger)_items.count) return nil;
+    EDDiskItem *it = _items[i];
+    switch (it.kind) {
+        case EDDiskHard: return it.sampler ? @"The disk the sampler is reading. Double-click to browse it here." : @"A disk. Double-click to browse its banks and samples.";
+        case EDDiskCD: return @"A CD-ROM disk. Double-click to browse it.";
+        case EDDiskFloppy: return @"A floppy image. Double-click to browse it.";
+        case EDDiskFolder: return @"A folder. Double-click or Return to go in; Esc goes back.";
+        case EDDiskBank: return @"A bank. Double-click to open it in the editor, with its samples and presets.";
+        case EDDiskSample: return @"A sample. Double-click to open it on the Samples page.";
+    }
+    return nil;
 }
 - (NSArray<NSValue *> *)itemRects { NSMutableArray *a = [NSMutableArray array]; for (NSInteger i = 0; i < (NSInteger)_items.count; i++) [a addObject:[NSValue valueWithRect:[self tileRect:i]]]; return a; }
 - (void)setPecked:(NSInteger)index { _peckedIndex = index; _peckedTick = index >= 0 ? _peckedTick + 1 : 0; self.needsDisplay = YES; }

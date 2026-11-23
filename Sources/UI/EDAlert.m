@@ -1,9 +1,10 @@
 #import "EDAlert.h"
+#import "EDTheme.h"
 
-@implementation EDAlert { NSMutableArray<NSString *> *_buttons; NSPanel *_panel; }
+@implementation EDAlert { NSMutableArray<NSString *> *_buttons; NSPanel *_panel; BOOL _answered; }
 - (instancetype)init { if ((self = [super init])) { _buttons = [NSMutableArray array]; _messageText = @""; _informativeText = @""; } return self; }
 - (void)addButtonWithTitle:(NSString *)title { [_buttons addObject:title]; }
-- (void)pressed:(NSButton *)b { [NSApp stopModalWithCode:NSAlertFirstButtonReturn + b.tag]; [_panel close]; }
+- (void)pressed:(NSButton *)b { _answered = YES; [NSApp stopModalWithCode:NSAlertFirstButtonReturn + b.tag]; [_panel close]; }
 - (NSModalResponse)runModal {
     if (!_buttons.count) [_buttons addObject:@"OK"];
     NSImageView *iv = [NSImageView imageViewWithImage:[NSImage imageNamed:NSImageNameApplicationIcon]];
@@ -13,7 +14,7 @@
     CGFloat w = MAX(340, _accessoryView.frame.size.width);
     title.preferredMaxLayoutWidth = w; [title.widthAnchor constraintLessThanOrEqualToConstant:w].active = YES;
     if (_informativeText.length) {
-        NSTextField *info = [NSTextField wrappingLabelWithString:_informativeText]; info.font = [NSFont systemFontOfSize:11]; info.textColor = NSColor.secondaryLabelColor; info.alignment = NSTextAlignmentCenter;
+        NSTextField *info = [NSTextField wrappingLabelWithString:_informativeText]; info.font = [NSFont systemFontOfSize:11]; info.textColor = EDTheme.labelWhite; info.alignment = NSTextAlignmentCenter;
         info.preferredMaxLayoutWidth = w; [info.widthAnchor constraintLessThanOrEqualToConstant:w].active = YES; [views addObject:info];
     }
     if (_accessoryView) { _accessoryView.translatesAutoresizingMaskIntoConstraints = NO; [_accessoryView.widthAnchor constraintEqualToConstant:_accessoryView.frame.size.width].active = YES; [_accessoryView.heightAnchor constraintEqualToConstant:_accessoryView.frame.size.height].active = YES; [views addObject:_accessoryView]; }
@@ -32,7 +33,7 @@
     [_panel setContentSize:st.fittingSize]; [_panel center];
     if (_initialFirstResponder) _panel.initialFirstResponder = _initialFirstResponder;
     __block id tok = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification object:_panel queue:nil usingBlock:^(NSNotification *n) {
-        [NSNotificationCenter.defaultCenter removeObserver:tok]; if (NSApp.modalWindow == self->_panel) [NSApp stopModalWithCode:NSModalResponseCancel + 10000]; }];
+        [NSNotificationCenter.defaultCenter removeObserver:tok]; if (!self->_answered && NSApp.modalWindow == self->_panel) [NSApp stopModalWithCode:NSModalResponseCancel + 10000]; }];
     [_panel makeKeyAndOrderFront:nil];
     NSModalResponse r = [NSApp runModalForWindow:_panel];
     // window closed with the title-bar button = last button (Cancel) / the only one

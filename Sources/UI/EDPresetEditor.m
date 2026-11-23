@@ -113,7 +113,7 @@
     NSTextField *_nameField, *_numberField, *_hint;
     NSButton *_addRef, *_removeRef, *_dupVoice, *_removeVoice;
     EDPNode *_root;
-    NSArray<EDPRow *> *_rows;
+    NSArray<EDPRow *> *_rows; NSInteger _split;   // the list view runs in two columns: rows [0,_split) on the left, the rest on the right
     NSDictionary<NSNumber *, NSString *> *_sampleNames;
     EDPreset *_preset;
     EDPNode *_sel;
@@ -188,7 +188,7 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
 
     [EDTheme styleLCDTable:_presetTable]; [EDTheme styleLCDTable:_outline]; [EDTheme styleLCDTable:_sampleList];
     _paramTable = [[NSTableView alloc] init]; _paramTable.dataSource = self; _paramTable.delegate = self; _paramTable.usesAlternatingRowBackgroundColors = YES; _paramTable.rowHeight = 24;
-    for (NSArray *c in @[@[@"label", @"Parameter", @220], @[@"value", @"Value", @80], @[@"info", @"", @220]]) {
+    for (NSArray *c in @[@[@"label", @"Parameter", @170], @[@"value", @"Value", @70], @[@"info", @"", @130], @[@"label2", @"Parameter", @170], @[@"value2", @"Value", @70], @[@"info2", @"", @130]]) {
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:c[0]]; col.title = c[1]; col.width = [c[2] doubleValue]; [_paramTable addTableColumn:col];
     }
     _keyMap = [[EDKeyMapView alloc] init]; _keyMap.translatesAutoresizingMaskIntoConstraints = NO;
@@ -206,9 +206,13 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     _lcd.navigate = ^(NSInteger v, NSInteger r) { [weak navigateToVoice:v ref:r]; };
     _viewSeg = [NSSegmentedControl segmentedControlWithLabels:@[@"LCD", @"List"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(paramViewPicked:)];
     _viewSeg.selectedSegment = 0;
-    NSStackView *right = [NSStackView stackViewWithViews:@[top, _keyMap, _viewSeg, _lcd, _paramScroll]];
+    NSView *segRow = [[NSView alloc] init]; segRow.translatesAutoresizingMaskIntoConstraints = NO; _viewSeg.translatesAutoresizingMaskIntoConstraints = NO;
+    [segRow addSubview:_viewSeg];
+    [NSLayoutConstraint activateConstraints:@[[_viewSeg.centerXAnchor constraintEqualToAnchor:segRow.centerXAnchor], [_viewSeg.topAnchor constraintEqualToAnchor:segRow.topAnchor], [_viewSeg.bottomAnchor constraintEqualToAnchor:segRow.bottomAnchor]]];
+    NSStackView *right = [NSStackView stackViewWithViews:@[top, _keyMap, segRow, _lcd, _paramScroll]];
     right.orientation = NSUserInterfaceLayoutOrientationVertical; right.alignment = NSLayoutAttributeLeading; right.spacing = 8;
     [right.arrangedSubviews[1].widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
+    [segRow.widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
     [_lcd.widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
     [_lcd setContentHuggingPriority:NSLayoutPriorityDefaultLow - 1 forOrientation:NSLayoutConstraintOrientationVertical];
     [_paramScroll.widthAnchor constraintEqualToAnchor:right.widthAnchor].active = YES;
@@ -220,13 +224,15 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     [split addArrangedSubview:lc]; [split addArrangedSubview:mc]; [split addArrangedSubview:rc];
     [lc.widthAnchor constraintEqualToConstant:290].active = YES; [mc.widthAnchor constraintEqualToConstant:380].active = YES;
     [split setHoldingPriority:NSLayoutPriorityDefaultHigh forSubviewAtIndex:0]; [split setHoldingPriority:NSLayoutPriorityDefaultHigh forSubviewAtIndex:1];
-    [self addSubview:split];
+    split.delegate = self; [self addSubview:split];
 }
+// the columns have fixed widths: no draggable divider, so no resize cursor either
+- (NSRect)splitView:(NSSplitView *)sv effectiveRect:(NSRect)drawn forDrawnRect:(NSRect)drawnRect ofDividerAtIndex:(NSInteger)i { return NSZeroRect; }
 - (NSButton *)button:(NSString *)t action:(SEL)a { return [EDTheme lcdKey:t target:self action:a]; }
 
 // MARK: data
 
-- (void)setPresetMenu:(NSMenu *)m { _presetMenu = m; m.delegate = self; _presetTable.menu = m; }
+- (void)setPresetMenu:(NSMenu *)m { _presetMenu = m; m.delegate = self; _presetTable.menu = m; [EDTheme useLCDContextMenuOn:_presetTable]; }
 - (void)menuNeedsUpdate:(NSMenu *)menu {
     NSInteger r = _presetTable.clickedRow;
     if (r >= 0 && r != _presetTable.selectedRow) [_presetTable selectRowIndexes:[NSIndexSet indexSetWithIndex:r] byExtendingSelection:NO];
@@ -310,7 +316,10 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
             EDPRow *r = [EDPRow new]; r.group = p.group; r.param = p; [rows addObject:r];
         }
     }
-    _rows = rows; [_paramTable reloadData]; [self refreshLCD];
+    _rows = rows;
+    _split = (NSInteger)rows.count;   // two columns when there is enough to fill them: split at a group heading near the middle
+    if (rows.count >= 16) { NSInteger best = -1; for (NSInteger i = 1; i < (NSInteger)rows.count; i++) if (!((EDPRow *)rows[i]).param && (best < 0 || llabs(i - (NSInteger)rows.count / 2) < llabs(best - (NSInteger)rows.count / 2))) best = i; if (best > 0) _split = best; }
+    [_paramTable reloadData]; [self refreshLCD];
     BOOL e4 = _preset.canEditStructure, onVoice = _sel.voice >= 0;
     _newVoice.enabled = e4;
     _addRef.enabled = e4 && onVoice; _removeRef.enabled = e4 && _sel.ref >= 0 && [_preset refCountInVoice:_sel.voice] > 1;
@@ -319,8 +328,8 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
 
 // MARK: tables / outline data
 
-- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { if (t == _sampleList) return (NSInteger)_bank.samples.count; return t == _presetTable ? (NSInteger)_bank.presets.count : (NSInteger)_rows.count; }
-- (BOOL)tableView:(NSTableView *)t isGroupRow:(NSInteger)r { return t == _paramTable && _rows[r].param == nil; }
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { if (t == _sampleList) return (NSInteger)_bank.samples.count; if (t == _presetTable) return (NSInteger)_bank.presets.count; return MAX(_split, (NSInteger)_rows.count - _split); }
+- (BOOL)tableView:(NSTableView *)t isGroupRow:(NSInteger)r { return NO; }   // group headings are drawn as a bold label in the first cell of their column set
 - (NSTableRowView *)tableView:(NSTableView *)t rowViewForRow:(NSInteger)r { return [EDTheme lcdRowView]; }
 - (NSTableRowView *)outlineView:(NSOutlineView *)ov rowViewForItem:(id)item { return [EDTheme lcdRowView]; }
 - (NSView *)tableView:(NSTableView *)t viewForTableColumn:(NSTableColumn *)c row:(NSInteger)r {
@@ -330,8 +339,12 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
         EDPreset *p = _bank.presets[r];
         return [EDTheme lcdLabel:[k isEqual:@"num"] ? [NSString stringWithFormat:@"%u", p.number] : p.name];
     }
+    BOOL right = [k hasSuffix:@"2"]; if (right) k = [k substringToIndex:k.length - 1];
+    NSInteger flat = right ? _split + r : r;
+    if (flat >= (right ? (NSInteger)_rows.count : _split)) return nil;            // the shorter column ends here
+    r = flat;
     EDPRow *row = _rows[r];
-    if (!row.param) { if (c && ![k isEqual:@"label"]) return nil; NSTextField *f = [EDTheme lcdLabel:row.group]; f.font = [EDTheme lcdFont:13]; return f; }
+    if (!row.param) { if (![k isEqual:@"label"]) return nil; NSTextField *f = [EDTheme lcdLabel:row.group]; f.font = [EDTheme lcdFont:13]; return f; }
     EDParam *p = row.param;
     if ([k isEqual:@"label"]) return [EDTheme lcdLabel:p.label];
     NSInteger v = [_preset valueOfParam:p voice:MAX(_sel.voice, 0) ref:MAX(_sel.ref, 0)];
@@ -391,6 +404,11 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     _hint.stringValue = [NSString stringWithFormat:@"%@  →  #%ld %@  (root %@)", [EDParam noteName:k], (long)sn, smp.name, [EDParam noteName:root]];
     if (_sel != hit) [self pickNode:hit];
 }
+- (BOOL)auditionKey:(int)key {
+    if (!_preset) return NO;
+    _keyMap.pressedKey = key; _keyMap.needsDisplay = YES; [self playKey:key]; return YES;
+}
+- (void)endAudition { _keyMap.pressedKey = -1; _keyMap.needsDisplay = YES; [self endKey]; }
 - (void)endKey { [_player stop]; _hint.stringValue = _preset.kind == EDPresetKindLegacy3X ? @"Emulator 3X preset: only the sample reference of each voice is decoded; other voice bytes are shown raw." : @""; }
 
 // MARK: choosing a sample for a zone
@@ -464,7 +482,7 @@ static NSInteger parseValue(NSString *s, EDParam *p) {
     EDParam *p = _rows[row].param;
     NSInteger nv = parseValue(f.stringValue, p);
     NSInteger old = [_preset valueOfParam:p voice:MAX(_sel.voice, 0) ref:MAX(_sel.ref, 0)];
-    if (nv == old) { [_paramTable reloadDataForRowIndexes:[NSIndexSet indexSetWithIndex:row] columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 3)]]; return; }
+    if (nv == old) { [_paramTable reloadData]; return; }
     [self applyParam:p voice:MAX(_sel.voice, 0) ref:MAX(_sel.ref, 0) value:nv];
 }
 /// One parameter change, from the list or from the LCD pages: undo, structure refresh, dirty state.

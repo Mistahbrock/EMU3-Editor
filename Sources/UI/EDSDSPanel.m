@@ -22,6 +22,10 @@
 }
 
 - (NSTextField *)label:(NSString *)s { return [EDTheme lcdLabel:s size:12]; }
+- (NSButton *)closeButton {
+    NSButton *b = [EDTheme lcdKey:@"Close" target:self.window action:@selector(performClose:)]; b.toolTip = @"Close this window.";
+    [b.widthAnchor constraintEqualToConstant:100].active = YES; return b;
+}
 - (NSButton *)button:(NSString *)t action:(SEL)a { return [EDTheme lcdKey:t target:self action:a]; }
 
 - (void)build {
@@ -39,6 +43,14 @@
     _fastCheck = [EDTheme lcdButton:@"Open loop: send without acknowledgements (single cable only)" target:nil action:nil]; [_fastCheck.widthAnchor constraintEqualToConstant:440].active = YES;
     for (NSTextField *f in @[_devField, _numField]) [EDTheme styleLCDField:f];
     NSButton *refresh = [self button:@"Refresh ports" action:@selector(refresh:)];
+    _outPop.toolTip = @"The MIDI port that goes to the sampler's MIDI In (your interface's output).";
+    _inPop.toolTip = @"The MIDI port that comes from the sampler's MIDI Out (your interface's input).";
+    _bitsPop.toolTip = @"16-bit is the standard dump. 14-bit sends fewer bytes per sample and is faster, but not every sampler accepts it.";
+    _sendBtn.toolTip = @"Send the sample that is selected in the editor to the sampler. Start Sample Manage ▸ Utils ▸ Dump on the sampler first.";
+    _listenBtn.toolTip = @"Wait for the sampler to send a sample (start the dump on the sampler), and bring it into the bank.";
+    _cancelBtn.toolTip = @"Stop the transfer that is running.";
+    _fastCheck.toolTip = @"Do not wait for the sampler's acknowledge after each packet. Faster, but only safe on a single cable and with a good connection.";
+    refresh.toolTip = @"Look for MIDI ports again, for example after plugging in an interface.";
 
     NSGridView *g = [NSGridView gridViewWithViews:@[
         @[[self label:@"MIDI out (to sampler)"], _outPop],
@@ -48,7 +60,7 @@
     g.rowSpacing = 8; g.columnSpacing = 10; [g columnAtIndex:0].xPlacement = NSGridCellPlacementTrailing;
     NSStackView *row1 = [NSStackView stackViewWithViews:@[_sendBtn, _bitsPop]];
     NSStackView *row2 = [NSStackView stackViewWithViews:@[_listenBtn, _cancelBtn, refresh]];
-    NSStackView *root = [NSStackView stackViewWithViews:@[g, row1, row2, _fastCheck, _bar, _status]];
+    NSStackView *root = [NSStackView stackViewWithViews:@[g, row1, row2, _fastCheck, _bar, _status, [self closeButton]]];
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeLeading; root.spacing = 12;
     root.edgeInsets = NSEdgeInsetsMake(18, 18, 18, 18);
     _bar.translatesAutoresizingMaskIntoConstraints = NO;

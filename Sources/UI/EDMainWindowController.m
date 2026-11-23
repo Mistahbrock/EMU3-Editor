@@ -16,6 +16,9 @@
 #import "EDHomeList.h"
 #import "EDUtils.h"
 #import "EDMemoryView.h"
+#import "EDSamplerRemote.h"
+#import "EDRemoteDisk.h"
+#import "EDSMDI.h"
 #import "EDTheme.h"
 #import "EDDiskIcons.h"
 #import "EDNewImage.h"
@@ -80,9 +83,24 @@
 @end
 
 static NSString *ServedImagePath(void); static NSString *BoardIDText(void);
+// MARK: remembered folders (per kind of file), used by the open and save panels
+static void ApplyLastFolder(NSSavePanel *p, NSString *key) {
+    NSString *fixedKey = [key stringByReplacingOccurrencesOfString:@"LastFolder" withString:@"FixedFolder"];    // set in Settings; wins over the last used folder
+    NSString *path = [NSUserDefaults.standardUserDefaults stringForKey:fixedKey]; BOOL dir = NO;
+    if (!path.length || ![NSFileManager.defaultManager fileExistsAtPath:path isDirectory:&dir] || !dir) path = [NSUserDefaults.standardUserDefaults stringForKey:key];
+    dir = NO;
+    if (path.length && [NSFileManager.defaultManager fileExistsAtPath:path isDirectory:&dir] && dir) p.directoryURL = [NSURL fileURLWithPath:path isDirectory:YES];
+}
+static void RememberFolder(NSSavePanel *p, NSString *key) {
+    NSURL *u = p.URL; if (!u) return;
+    BOOL isDir = NO; [NSFileManager.defaultManager fileExistsAtPath:u.path isDirectory:&isDir];
+    NSString *folder = (isDir && [p isKindOfClass:NSOpenPanel.class]) ? u.path : u.URLByDeletingLastPathComponent.path;
+    if (folder.length) [NSUserDefaults.standardUserDefaults setObject:folder forKey:key];
+}
+
 @implementation EDMainWindowController {
     NSView *_cmdBar, *_cmdRule; NSPopUpButton *_linkSampler, *_linkHost; NSButton *_linkServe; NSPopUpButton *_linkID, *_linkAccess; NSTextField *_linkInfo; EDDiskIcons *_mountsIcons; NSTextField *_mountsDetail;
-    NSLayoutConstraint *_statusWidth, *_statusWide, *_statusLead, *_lcdLead, *_lcdTrail; NSString *_autoStatus; NSMutableArray<NSNumber *> *_tabHistory; NSInteger _curTab; BOOL _tabBack; NSTimer *_statusTimer; NSString *_statusSig; BOOL _statusBusy;
+    NSLayoutConstraint *_statusPLead, *_statusPTrail, *_statusWidth, *_statusWide, *_statusLead, *_lcdLead, *_lcdTrail; NSString *_autoStatus; NSMutableArray<NSNumber *> *_tabHistory; BOOL _fromMounts; NSInteger _curTab; BOOL _tabBack; NSTimer *_statusTimer; NSString *_statusSig; BOOL _statusBusy;
     // model
     EMU3Filesystem *_fs;
     EDNode *_rootNode;
@@ -102,8 +120,8 @@ static NSString *ServedImagePath(void); static NSString *BoardIDText(void);
     NSButton *_loopCheck, *_releaseCheck, *_playButton;
     NSTabView *_tabs;
     NSSegmentedControl *_tabPicker;
-    EDLCDStrip *_lcd;
-    id _spaceMonitor;
+    EDLCDStrip *_lcd; NSTextField *_modelLabel;
+    id _spaceMonitor; BOOL _auditioning;
     NSMutableArray<NSButton *> *_sampleBtns, *_bankBtns;
     NSTextField *_masterSummary;
     NSUndoManager *_undo;
@@ -112,7 +130,8 @@ static NSString *ServedImagePath(void); static NSString *BoardIDText(void);
     EDPresetEditor *_presetEditor;
     EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn, *_convertBtn; BOOL _autoBackedUp, _noConvertOffer;
     EDHomeList *_home;
-    EDMemoryView *_memory;
+    EDMemoryView *_memory; NSTextField *_ramRow; BOOL _liveMem, _remoteBusy; NSDate *_remoteAt;
+    EDRemoteDisk *_remoteDisk; EDSMDIBoard *_remoteBoard; pid_t _remotePid; BOOL _remoteRestoreTarget, _openingRemote; NSString *_remotePort; NSArray<EDSMDIDevice *> *_scsiDrives; BOOL _scsiBusy;
     NSTextField *_samplerStatus; EDDiskIcons *_diskHint; NSView *_mountsBox; id _eggMonitor;
     NSScrollView *_diskScroll, *_outlineScroll; EDLCDSideTab *_diskSideTab; EDNode *_browseNode; BOOL _listView, _inBank, _bankList; NSArray<EDDiskItem *> *_diskItems; NSButton *_viewKey, *_loadKey, *_saveKey, *_infoKey;
 }
@@ -134,6 +153,8 @@ static NSString *ServedImagePath(void); static NSString *BoardIDText(void);
         _player.onStop = ^{ [weak playbackStopped]; };
         [self buildUI];
         [self refreshAll];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ [weak refreshRemote]; });   // read the sampler's memory and options once the window is up
+        [NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n) { [weak syncFromDefaults]; }];
         [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidResizeNotification object:w queue:nil usingBlock:^(NSNotification *n) { [weak refreshLCDVisibility]; }];
         // Easter egg: Shift+F7 sends a small emu walking over the MOUNTS panel (like the bird in the Emax II's hidden menu).
         _eggMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
@@ -151,9 +172,18 @@ static NSString *ServedImagePath(void); static NSString *BoardIDText(void);
             }
             return e; }];
         // Space = play / stop from anywhere in the window except while typing in a text field.
-        _spaceMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
+        _spaceMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown | NSEventMaskKeyUp handler:^NSEvent *(NSEvent *e) {
             EDMainWindowController *me = weak;
             if (!me || e.window != me.window || e.keyCode != 49) return e;
+            if (e.type == NSEventTypeKeyUp) { if (me->_auditioning) { me->_auditioning = NO; [me->_presetEditor endAudition]; return nil; } return e; }
+            if (me->_tabPicker.selectedSegment == 3 && me->_presetEditor.selectedIndex >= 0 && ![me.window.firstResponder isKindOfClass:[NSText class]] && !me.window.attachedSheet
+                && !(e.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption))) {   // Presets page: Space plays the audition key
+                if (!e.isARepeat && !me->_auditioning) {
+                    NSUserDefaults *ud = NSUserDefaults.standardUserDefaults; NSInteger k = [ud objectForKey:@"AuditionKey"] ? [ud integerForKey:@"AuditionKey"] : 60;
+                    me->_auditioning = [me->_presetEditor auditionKey:(int)MAX(0, MIN(127, k))];
+                }
+                return nil;
+            }
             if (e.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption)) return e;
             if ([me.window.firstResponder isKindOfClass:[NSText class]] || me.window.attachedSheet) return e;
             if (me->_sample && !me->_sample.locked) [me togglePlay:nil];
@@ -191,7 +221,7 @@ static NSTextField *label(NSString *s) {
     NSTextField *t = [NSTextField labelWithString:s]; t.font = [NSFont systemFontOfSize:12]; t.textColor = NSColor.secondaryLabelColor; return t;
 }
 static NSTextField *toolNote(NSString *s) {
-    NSTextField *t = [NSTextField wrappingLabelWithString:s]; t.font = [NSFont systemFontOfSize:12]; t.textColor = NSColor.secondaryLabelColor;
+    NSTextField *t = [NSTextField ed_wrappingLabelWithString:s]; t.font = [NSFont systemFontOfSize:12]; t.textColor = NSColor.secondaryLabelColor;
     t.preferredMaxLayoutWidth = 380; [t.widthAnchor constraintLessThanOrEqualToConstant:380].active = YES; return t;
 }
 - (NSTextField *)field:(CGFloat)width {
@@ -203,7 +233,49 @@ static NSTextField *toolNote(NSString *s) {
     t.drawsBackground = YES; t.backgroundColor = [EDTheme.lcdInk colorWithAlphaComponent:0.14]; return t;
 }
 - (NSButton *)button:(NSString *)title action:(SEL)sel {
-    NSButton *b = [NSButton buttonWithTitle:title target:self action:sel]; b.controlSize = NSControlSizeRegular; b.bezelStyle = NSBezelStyleRounded; return b;
+    NSButton *b = [NSButton buttonWithTitle:title target:self action:sel]; b.controlSize = NSControlSizeRegular; b.bezelStyle = NSBezelStyleRounded;
+    NSString *tip = [self toolTips][NSStringFromSelector(sel)]; if (tip && !b.toolTip) b.toolTip = tip;
+    return b;
+}
+// hints for the buttons, by action (they can be switched off in Settings)
+- (NSDictionary<NSString *, NSString *> *)toolTips {
+    static NSDictionary *d;
+    if (!d) d = @{
+        @"openDiskImage:": @"Open a disk image (.hda / .img) and browse it like the sampler's Disk screen.",
+        @"newBank:": @"Start a new, empty bank. Add presets and samples, then Save As to keep it.",
+        @"openBankFile:": @"Open a bank file (.E4B, .EBK, a 3X/ESI-32 bank…) in the editor.",
+        @"saveBank:": @"Save the open bank. If it came from the sampler's disk, it is written back there.",
+        @"saveBankAs:": @"Save the open bank as a new file.",
+        @"sendToSamplerDisk:": @"Copy this to the disk the sampler is reading, so it shows up in the sampler's Disk screen.",
+        @"togglePlay:": @"Play or stop the selected sample (Space).",
+        @"normalize:": @"Raise the whole sample so its loudest peak reaches full level.",
+        @"reverseSample:": @"Play the sample backwards.",
+        @"fadeIn:": @"Fade the selection (or the whole sample) in from silence.",
+        @"fadeOut:": @"Fade the selection (or the whole sample) out to silence.",
+        @"removeDC:": @"Remove a constant offset so the waveform is centred on zero.",
+        @"cropToLoop:": @"Cut the sample down to its loop.",
+        @"crossfadeLoop:": @"Blend the loop's end into its start to remove the click.",
+        @"exportWAV:": @"Save the selected sample as a WAV file.",
+        @"importWAV:": @"Replace the selected sample with a WAV file.",
+        @"smdiTransfer:": @"Send or fetch samples over SCSI with SMDI.",
+        @"sdsTransfer:": @"Send the sample to the sampler over MIDI (Sample Dump Standard).",
+        @"zoomOut:": @"Zoom the waveform out.", @"zoomIn:": @"Zoom the waveform in.",
+        @"zoomFit:": @"Show the whole sample.", @"zoomLoop:": @"Zoom to the loop.",
+        @"showAssignKeys:": @"Choose which keys of the sampler play this bank's presets.",
+        @"showChannelVolume:": @"Set the volume of each MIDI channel.",
+        @"showTones:": @"Play test tones through the sampler's outputs.",
+        @"showMIDITab:": @"Mode, controllers and preferences of the sampler's MIDI setup.",
+        @"showBankTab:": @"Erase, name, auto-load and flash options for the bank.",
+        @"newFloppyImage:": @"Create an empty 1.44 MB floppy image, formatted for the sampler.",
+        @"newDiskImage:": @"Create an empty disk image, formatted as an EOS disk.",
+        @"copyToSDCard:": @"Write a disk image to an SD card for the BlueSCSI.",
+        @"writeBlueSCSIIni:": @"Write the bluescsi.ini the board needs to serve this image.",
+        @"toggleServing:": @"Start or stop handing the image folder to the sampler.",
+        @"findSampler:": @"Look for the sampler on the SCSI bus and read its model and EOS version.",
+        @"mountSCSIDrives:": @"Check the SCSI chain through the board and show the drives it finds (such as the sampler's own hard drive) on the Disk page, read-only. The board's disk serving is paused until you release them; the sampler should be idle.",
+        @"showSamplerDisk:": @"Show the disk the sampler is reading, in the Disk page.",
+    };
+    return d;
 }
 - (NSScrollView *)scroll:(NSView *)v {
     NSScrollView *s = [[NSScrollView alloc] init]; s.documentView = v; s.hasVerticalScroller = YES; s.borderType = NSNoBorder; return s;
@@ -234,6 +306,8 @@ static NSTextField *toolNote(NSString *s) {
     for (NSButton *k in diskBar.arrangedSubviews) [k.widthAnchor constraintEqualToConstant:150].active = YES;
     NSScrollView *outlineScroll = [self scroll:_outline]; _outlineScroll = outlineScroll;
     NSView *left = [EDTheme framedLCD:outlineScroll footer:diskBar];
+    for (NSLayoutConstraint *c in left.constraints) if (c.firstItem == diskBar && c.firstAttribute == NSLayoutAttributeLeading && c.relation == NSLayoutRelationEqual) c.active = NO;   // the key row is centred, not pinned left
+    [diskBar.centerXAnchor constraintEqualToAnchor:left.centerXAnchor].active = YES;
 
     // sample list
     _sampleTable = [self table:@[@[@"num", @"#", @"40"], @[@"name", @"Sample", @"170"], @[@"rate", @"Rate", @"64"], @[@"len", @"Frames", @"80"], @[@"loop", @"Loop", @"44"]]];
@@ -260,6 +334,12 @@ static NSTextField *toolNote(NSString *s) {
     _releaseCheck = [EDTheme lcdButton:@"Loop in release" target:self action:@selector(inspectorChanged:)];
     for (NSButton *b in @[_loopCheck, _releaseCheck]) b.translatesAutoresizingMaskIntoConstraints = NO;
     [_loopCheck.widthAnchor constraintEqualToConstant:64].active = YES; [_releaseCheck.widthAnchor constraintEqualToConstant:140].active = YES;
+    _nameField.toolTip = @"The sample's name, up to 16 characters.";
+    _rateField.toolTip = @"Sample rate in Hz (1000–192000). Changing it changes the pitch and length of the sample on the sampler, not the audio data.";
+    _loopStartField.toolTip = @"First frame of the loop. You can also drag the left loop marker in the waveform (hold ⌥ to snap to a zero crossing).";
+    _loopEndField.toolTip = @"Last frame of the loop. You can also drag the right loop marker in the waveform.";
+    _loopCheck.toolTip = @"Turn the sustain loop on or off.";
+    _releaseCheck.toolTip = @"Keep looping after the key is released, instead of playing on to the end of the sample.";
     NSStackView *insp = [NSStackView stackViewWithViews:@[lcdLabel(@"Name"), _nameField, lcdLabel(@"Rate Hz"), _rateField,
         lcdLabel(@"Loop start"), _loopStartField, lcdLabel(@"Loop end"), _loopEndField, _loopCheck, _releaseCheck]];
     insp.spacing = 6;
@@ -278,6 +358,12 @@ static NSTextField *toolNote(NSString *s) {
     _presetEditor.presetCountChanged = ^{ [weak refreshBankStatus]; };
     NSMenu *pm = [[NSMenu alloc] initWithTitle:@"Preset"];
     NSMenuItem *mi = [pm addItemWithTitle:@"Preset" action:nil keyEquivalent:@""]; mi.tag = 901; mi.enabled = NO;     // info line, filled in when the menu opens
+    NSMenuItem *mnp = [pm addItemWithTitle:@"New Preset" action:@selector(newPresetFromMenu:) keyEquivalent:@""]; mnp.target = self;
+    NSMenuItem *mnb = [pm addItemWithTitle:@"New Bank" action:@selector(newBank:) keyEquivalent:@""]; mnb.target = self;
+    [pm addItem:NSMenuItem.separatorItem];
+    NSMenuItem *mimp = [pm addItemWithTitle:@"Import Presets from Bank…" action:@selector(importPresetsFromBank:) keyEquivalent:@""]; mimp.target = self;
+    NSMenuItem *mimd = [pm addItemWithTitle:@"Import Presets from Disk…" action:@selector(importPresetsFromDisk:) keyEquivalent:@""]; mimd.target = self;
+    [pm addItem:NSMenuItem.separatorItem];
     NSMenuItem *mc = [pm addItemWithTitle:@"Convert Preset to E4B…" action:@selector(convertSelectedPreset:) keyEquivalent:@""]; mc.tag = 902; mc.target = self;
     [pm addItem:NSMenuItem.separatorItem];
     NSMenuItem *m1 = [pm addItemWithTitle:@"Save as Bank on Sampler Disk…" action:@selector(sendPresetToSamplerDisk:) keyEquivalent:@""]; m1.target = self;
@@ -295,9 +381,10 @@ static NSTextField *toolNote(NSString *s) {
     for (NSLayoutConstraint *c in left.constraints) if (c.firstItem == outlineScroll && c.firstAttribute == NSLayoutAttributeLeading) c.constant = 60;
     _diskHint = [[EDDiskIcons alloc] initWithFrame:NSZeroRect];
     _diskScroll = [NSScrollView new]; _diskScroll.hasVerticalScroller = YES; _diskScroll.drawsBackground = NO; _diskScroll.documentView = _diskHint; [EDTheme useLCDScroller:_diskScroll];
+    _diskHint.bottomPad = 0;
     _diskHint.autoresizingMask = NSViewWidthSizable;
     _diskScroll.translatesAutoresizingMaskIntoConstraints = NO; [diskView addSubview:_diskScroll];
-    [NSLayoutConstraint activateConstraints:@[[_diskScroll.topAnchor constraintEqualToAnchor:left.topAnchor constant:6], [_diskScroll.bottomAnchor constraintEqualToAnchor:left.bottomAnchor constant:-52],
+    [NSLayoutConstraint activateConstraints:@[[_diskScroll.topAnchor constraintEqualToAnchor:left.topAnchor constant:6], [_diskScroll.bottomAnchor constraintEqualToAnchor:diskBar.topAnchor constant:-5],
         [_diskScroll.leadingAnchor constraintEqualToAnchor:left.leadingAnchor constant:60], [_diskScroll.trailingAnchor constraintEqualToAnchor:left.trailingAnchor constant:-4]]];
     __weak EDMainWindowController *weakSelf = self;
     _diskHint.onOpen = ^(EDDiskItem *it) { [weakSelf openBrowserItem:it]; };
@@ -305,14 +392,14 @@ static NSTextField *toolNote(NSString *s) {
     _diskHint.onExit = ^{ [weakSelf browserGoUp]; };
     [NSLayoutConstraint activateConstraints:@[
         [left.topAnchor constraintEqualToAnchor:diskView.topAnchor constant:10], [left.leadingAnchor constraintEqualToAnchor:diskView.leadingAnchor constant:10],
-        [diskTab.topAnchor constraintEqualToAnchor:left.topAnchor constant:8], [diskTab.bottomAnchor constraintEqualToAnchor:diskBar.topAnchor constant:-8],
+        [diskTab.topAnchor constraintEqualToAnchor:left.topAnchor constant:8], [diskTab.bottomAnchor constraintEqualToAnchor:diskBar.topAnchor constant:-11],
         [diskTab.leadingAnchor constraintEqualToAnchor:left.leadingAnchor constant:8], [diskTab.widthAnchor constraintEqualToConstant:46],
         [left.trailingAnchor constraintEqualToAnchor:diskView.trailingAnchor constant:-10], [left.bottomAnchor constraintEqualToAnchor:diskView.bottomAnchor constant:-10]]];
     [EDTheme addGlareOver:left in:diskView];   // above the DISK strip and the icons
 
     // Master tab: sampler status and shortcuts | banks to open (sampler disk + recent) | current bank
-    _samplerStatus = [NSTextField wrappingLabelWithString:@""]; _samplerStatus.font = [NSFont systemFontOfSize:14]; _samplerStatus.textColor = EDTheme.labelWhite;
-    _masterSummary = [NSTextField wrappingLabelWithString:@""]; _masterSummary.font = [NSFont systemFontOfSize:15]; _masterSummary.textColor = EDTheme.labelWhite;
+    _samplerStatus = [NSTextField ed_wrappingLabelWithString:@""]; _samplerStatus.font = [NSFont systemFontOfSize:14]; _samplerStatus.textColor = EDTheme.labelWhite;
+    _masterSummary = [NSTextField ed_wrappingLabelWithString:@""]; _masterSummary.font = [NSFont systemFontOfSize:15]; _masterSummary.textColor = EDTheme.labelWhite;
     NSStackView *gSampler = [self group:@"Sampler" views:@[_samplerStatus]];   // status only; the sampler tools live on the Tools tab
     NSStackView *gUtils = [self group:@"Utils" views:@[
         [self wideButton:@"Assign Key…" action:@selector(showAssignKeys:)], [self wideButton:@"Channel Volume…" action:@selector(showChannelVolume:)],
@@ -332,18 +419,18 @@ static NSTextField *toolNote(NSString *s) {
     [homeFrame.widthAnchor constraintEqualToAnchor:gOpen.widthAnchor].active = YES;
     [homeFrame.heightAnchor constraintGreaterThanOrEqualToConstant:240].active = YES;
     _memory = [EDMemoryView new]; _memory.residentTotalK = 768; _memory.presetTotalK = 404;
+    [EDTheme addGlareTo:_memory];
     NSInteger mb = [NSUserDefaults.standardUserDefaults integerForKey:@"SamplerSampleMB"]; if (mb <= 0) mb = 40; _memory.sampleTotalMB = mb;
-    NSTextField *ramRow = label([NSString stringWithFormat:@"Sample memory: %ld MB (installed in the sampler)", (long)mb]);
+    NSTextField *ramRow = _ramRow = label([NSString stringWithFormat:@"Sample memory: %ld MB (installed in the sampler)", (long)mb]);
     ramRow.toolTip = @"Information only: the sampler's sample RAM is physical (SIMMs) and cannot be read over SCSI. The Memory box uses this size for its percentages.";
     _autoSaveBtn = [NSButton checkboxWithTitle:@"Save to sampler automatically" target:self action:@selector(autoSaveToggled:)];
     _autoSaveBtn.state = [NSUserDefaults.standardUserDefaults boolForKey:@"AutoSaveToSampler"] ? NSControlStateValueOn : NSControlStateValueOff;
     _autoSaveBtn.toolTip = @"When the open bank is on the sampler's disk, writes it back a few seconds after you stop editing. The sampler still needs a SCSI rescan and a bank reload to see the change. The original is backed up once per opened bank.";
-    NSStackView *gBank = [self group:@"Current bank" views:@[_masterSummary, _memory, _autoSaveBtn,
+    NSStackView *gBank = [self group:@"Current bank" views:@[_masterSummary, _memory,     // the auto-save checkbox lives in Settings now; _autoSaveBtn only mirrors the setting
+       
         [self wideButton:@"Open Bank File…" action:@selector(openBankFile:)],
         [self wideButton:@"Save Bank" action:@selector(saveBank:)], [self wideButton:@"Save Bank As…" action:@selector(saveBankAs:)],
-        [self wideButton:@"Send Sample to Sampler Disk…" action:@selector(sendToSamplerDisk:)],
-        _convertBtn = [self wideButton:@"Convert 3X Bank to E4B…" action:@selector(convertLegacyBank:)]]];
-    _convertBtn.toolTip = @"Turns an Emulator 3X / ESI-32 bank (the open one, or a file you pick) into an EOS bank for the E64 / E6400. The original stays as it is.";
+        [self wideButton:@"Send Sample to Sampler Disk…" action:@selector(sendToSamplerDisk:)]]];     // converting 3X banks: right-click a bank or preset
     NSView *masterView = [NSView new];
     for (NSView *v in @[leftCol, gOpen, gBank]) { v.translatesAutoresizingMaskIntoConstraints = NO; [masterView addSubview:v]; [v.topAnchor constraintEqualToAnchor:masterView.topAnchor constant:-10].active = YES; }
     [NSLayoutConstraint activateConstraints:@[
@@ -399,13 +486,13 @@ static NSTextField *toolNote(NSString *s) {
         toolNote(@"Find the sampler on the SCSI bus, send samples by MIDI, or see the disk it uses. SMDI transfers are on the Samples page."),
         [self wideButton:@"Find Sampler (SCSI scan)…" action:@selector(findSampler:)],
         [self wideButton:@"MIDI Sample Dump…" action:@selector(sdsTransfer:)],
-        [self wideButton:@"Show Sampler Disk" action:@selector(showSamplerDisk:)],
+        [self wideButton:@"Show Sampler Disk" action:@selector(showSamplerDisk:)], [self wideButton:@"Mount SCSI Drives…" action:@selector(mountSCSIDrives:)],
         [self wideButton:@"Open Disk Image…" action:@selector(openDiskImage:)]]];
     NSView *toolsView = [NSView new];
     // MOUNTS: green panel with an icon per disk image found on a mounted volume (top level only) and a description of the selected one
     _mountsIcons = [[EDDiskIcons alloc] initWithFrame:NSZeroRect]; _mountsIcons.autoresizingMask = NSViewWidthSizable; _mountsIcons.emptyText = @"No disk images on mounted drives.";
     NSScrollView *mScroll = [NSScrollView new]; mScroll.hasVerticalScroller = YES; mScroll.drawsBackground = NO; mScroll.documentView = _mountsIcons;
-    _mountsDetail = [NSTextField wrappingLabelWithString:@" "]; _mountsDetail.font = [EDTheme lcdFont:12]; _mountsDetail.textColor = EDTheme.lcdInk; _mountsDetail.maximumNumberOfLines = 3;
+    _mountsDetail = [NSTextField ed_wrappingLabelWithString:@" "]; _mountsDetail.font = [EDTheme lcdFont:12]; _mountsDetail.textColor = EDTheme.lcdInk; _mountsDetail.maximumNumberOfLines = 3;
     NSView *mounts = [EDTheme framedLCD:mScroll]; _mountsBox = mounts; mounts.layer.backgroundColor = EDTheme.lcdBackground.CGColor;   // the scroll bar runs the full height; the description sits beside the MOUNTS tab
     _mountsIcons.bottomPad = 58;
     _mountsDetail.translatesAutoresizingMaskIntoConstraints = NO; [mounts addSubview:_mountsDetail positioned:NSWindowAbove relativeTo:mScroll];
@@ -426,7 +513,10 @@ static NSTextField *toolNote(NSString *s) {
         [mounts.topAnchor constraintGreaterThanOrEqualToAnchor:gCard.bottomAnchor constant:30], [mounts.topAnchor constraintGreaterThanOrEqualToAnchor:gSamplerTools.bottomAnchor constant:30], [mounts.topAnchor constraintGreaterThanOrEqualToAnchor:gLink.bottomAnchor constant:30], [mounts.topAnchor constraintGreaterThanOrEqualToAnchor:gImages.bottomAnchor constant:30], [mounts.leadingAnchor constraintEqualToAnchor:toolsView.leadingAnchor constant:40],
         [mounts.trailingAnchor constraintEqualToAnchor:toolsView.trailingAnchor constant:-40], [mounts.bottomAnchor constraintEqualToAnchor:toolsView.bottomAnchor constant:-30]]];
     [EDTheme addGlareOver:mounts in:toolsView];
-    NSArray *defs = @[@[@"master", @"Master", masterRoot], @[@"disk", @"Disk", diskView], @[@"samples", @"Samples", samplesSplit], @[@"presets", @"Presets", _presetEditor], @[@"tools", @"Tools", toolsView]];
+    NSView *samplesPage = [NSView new]; samplesSplit.translatesAutoresizingMaskIntoConstraints = NO; [samplesPage addSubview:samplesSplit];   // a little space either side of the green panel
+    [NSLayoutConstraint activateConstraints:@[[samplesSplit.topAnchor constraintEqualToAnchor:samplesPage.topAnchor], [samplesSplit.bottomAnchor constraintEqualToAnchor:samplesPage.bottomAnchor],
+        [samplesSplit.leadingAnchor constraintEqualToAnchor:samplesPage.leadingAnchor constant:12], [samplesSplit.trailingAnchor constraintEqualToAnchor:samplesPage.trailingAnchor constant:-12]]];
+    NSArray *defs = @[@[@"master", @"Master", masterRoot], @[@"disk", @"Disk", diskView], @[@"samples", @"Samples", samplesPage], @[@"presets", @"Presets", _presetEditor], @[@"tools", @"Tools", toolsView]];
     for (NSArray *d in defs) { NSTabViewItem *t = [[NSTabViewItem alloc] initWithIdentifier:d[0]]; t.label = d[1]; t.view = d[2]; [_tabs addTabViewItem:t]; }
     _tabPicker = [NSSegmentedControl segmentedControlWithLabels:@[@"Master", @"Disk", @"Samples", @"Presets", @"Tools"] trackingMode:NSSegmentSwitchTrackingSelectOne
         target:self action:@selector(tabPicked:)];
@@ -437,10 +527,13 @@ static NSTextField *toolNote(NSString *s) {
     _lcd = [EDLCDStrip new];
     EDLogoView *logo = [EDLogoView new];
     NSView *head = [NSView new]; head.wantsLayer = YES; head.layer.backgroundColor = EDTheme.bodyDark.CGColor;
-    for (NSView *v in @[logo, _tabPicker]) { v.translatesAutoresizingMaskIntoConstraints = NO; [head addSubview:v]; }
+    _modelLabel = [NSTextField labelWithString:@""]; _modelLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium]; _modelLabel.textColor = EDTheme.labelWhite; _modelLabel.alphaValue = 0.8;
+    for (NSView *v in @[logo, _modelLabel, _tabPicker]) { v.translatesAutoresizingMaskIntoConstraints = NO; [head addSubview:v]; }
+    NSLayoutGuide *modelSpace = [NSLayoutGuide new]; [head addLayoutGuide:modelSpace];   // the space to the right of the tab picker
     [NSLayoutConstraint activateConstraints:@[
         [head.heightAnchor constraintEqualToConstant:72],
-        [logo.leadingAnchor constraintEqualToAnchor:head.leadingAnchor constant:18], [logo.centerYAnchor constraintEqualToAnchor:head.centerYAnchor],
+        [logo.leadingAnchor constraintEqualToAnchor:head.leadingAnchor constant:34], [logo.centerYAnchor constraintEqualToAnchor:head.centerYAnchor],
+        [_modelLabel.centerXAnchor constraintEqualToAnchor:modelSpace.centerXAnchor], [modelSpace.leadingAnchor constraintEqualToAnchor:_tabPicker.trailingAnchor], [modelSpace.trailingAnchor constraintEqualToAnchor:head.trailingAnchor], [_modelLabel.centerYAnchor constraintEqualToAnchor:head.centerYAnchor constant:2],
         [_tabPicker.centerXAnchor constraintEqualToAnchor:head.centerXAnchor], [_tabPicker.centerYAnchor constraintEqualToAnchor:head.centerYAnchor]]];
     NSView *rule = [NSView new]; rule.wantsLayer = YES; rule.layer.backgroundColor = EDTheme.accent.CGColor;
     [rule.heightAnchor constraintEqualToConstant:3].active = YES;
@@ -448,7 +541,7 @@ static NSTextField *toolNote(NSString *s) {
     // command bar: every action as a themed key, grouped like the panel's labelled blocks
     _sampleBtns = [NSMutableArray array]; _bankBtns = [NSMutableArray array];
     NSStackView *bar = [NSStackView stackViewWithViews:@[
-        [self barGroup:@"File" keys:@[@[@"Open Disk", @"openDiskImage:", @0], @[@"Open Bank", @"openBankFile:", @0], @[@"Save", @"saveBank:", @2], @[@"Save As", @"saveBankAs:", @2]]],
+        [self barGroup:@"File" keys:@[@[@"New Bank", @"newBank:", @0], @[@"Open Disk", @"openDiskImage:", @0], @[@"Open Bank", @"openBankFile:", @0], @[@"Save", @"saveBank:", @2], @[@"Save As", @"saveBankAs:", @2]]],
         [self barGroup:@"Audition" keys:@[@[@"▶ Play", @"togglePlay:", @1]]],
         [self barGroup:@"Sample edit" keys:@[@[@"Normalize", @"normalize:", @1], @[@"Reverse", @"reverseSample:", @1], @[@"Fade In", @"fadeIn:", @1], @[@"Fade Out", @"fadeOut:", @1],
             @[@"Remove DC", @"removeDC:", @1], @[@"Crop Loop", @"cropToLoop:", @1], @[@"X-Fade Loop", @"crossfadeLoop:", @1]]],
@@ -474,9 +567,9 @@ static NSTextField *toolNote(NSString *s) {
     for (NSView *v in @[_status, _lcd]) { v.translatesAutoresizingMaskIntoConstraints = NO; [foot addSubview:v]; }
     [NSLayoutConstraint activateConstraints:@[
         [foot.heightAnchor constraintEqualToConstant:36],
-        (_statusLead = [_status.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:14]), [_status.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor constant:4],
+        (_statusLead = [_status.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:14]), [_status.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor constant:-4],
         (_lcdLead = [_lcd.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:350]), (_lcdTrail = [_lcd.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-501]),
-        [_lcd.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor constant:4], [_lcd.heightAnchor constraintEqualToConstant:36]]];
+        [_lcd.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor constant:-4], [_lcd.heightAnchor constraintEqualToConstant:36]]];
     _statusWidth = [_status.widthAnchor constraintEqualToConstant:322]; _statusWide = [_status.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-14]; _statusWide.active = YES;
     _status.alignment = NSTextAlignmentCenter;   // centred under the page (beside the readout on Master ▸ Utilities)
     NSStackView *root = [NSStackView stackViewWithViews:@[head, rule, bar, rule2, _tabs, foot]];
@@ -608,6 +701,10 @@ static NSTextField *toolNote(NSString *s) {
     BOOL split = overview || samples || tools;
     _lcd.hidden = !split; _cmdBar.hidden = _cmdRule.hidden = _tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2;
     _statusWidth.active = split; _statusWide.active = !split;
+    BOOL presets = _tabPicker.selectedSegment == 3;   // Presets: the status sits centred under the Parameters panel
+    if (!_statusPLead) { _statusPLead = [_status.leadingAnchor constraintEqualToAnchor:_presetEditor.lcdView.leadingAnchor]; _statusPTrail = [_status.trailingAnchor constraintEqualToAnchor:_presetEditor.lcdView.trailingAnchor]; }
+    if (presets) { _statusLead.active = NO; _statusWide.active = NO; _statusWidth.active = NO; _statusPLead.active = _statusPTrail.active = YES; }
+    else { _statusPLead.active = _statusPTrail.active = NO; _statusLead.active = YES; }
     _statusLead.constant = overview ? 40 : (samples ? 2 : 14); _statusWidth.constant = overview ? 270 : 414;
     _lcdLead.constant = (samples || tools) ? 424 : 350; _lcdTrail.constant = (samples || tools) ? -2 : -501;
     if (tools) { CGFloat half = floor(NSWidth(_lcd.superview.bounds) / 2); _statusLead.constant = 0; _statusWidth.constant = half; _lcdLead.constant = half; _lcdTrail.constant = 0; }   // each text centred under its half of the page
@@ -615,9 +712,11 @@ static NSTextField *toolNote(NSString *s) {
     if (samples) { _lcd.line1 = [self pageHelp]; _lcd.line2 = nil; }
     if (tools) {
         NSUserDefaults *d = NSUserDefaults.standardUserDefaults; NSString *model = [d stringForKey:@"SamplerModel"]; NSInteger mb = [d integerForKey:@"SamplerSampleMB"];
-        _lcd.line1 = model.length ? [NSString stringWithFormat:@"%@ · %ld MB", model, (long)(mb > 0 ? mb : 40)] : @"Sampler not scanned yet";
-        NSString *served = [ServedImagePath() lastPathComponent]; _lcd.line2 = served.length ? [NSString stringWithFormat:@"Serving %@ · ID %@", served, BoardIDText()] : @"Not serving a disk image";
+        (void)model; (void)mb;
+        NSString *served = [ServedImagePath() lastPathComponent]; _lcd.line1 = served.length ? [NSString stringWithFormat:@"Serving %@ · ID %@", served, BoardIDText()] : @"Not serving a disk image"; _lcd.line2 = nil;
     }
+    { NSUserDefaults *d = NSUserDefaults.standardUserDefaults; NSString *model = [d stringForKey:@"SamplerModel"]; NSInteger mb = [d integerForKey:@"SamplerSampleMB"];   // the sampler sits next to the wordmark on every page
+      _modelLabel.stringValue = model.length ? [NSString stringWithFormat:@"%@ · %ld MB", [model stringByReplacingOccurrencesOfString:@"E-mu" withString:@"E-MU"], (long)(mb > 0 ? mb : 40)] : @""; }
     NSString *help = samples ? [self bankSummaryLine] : [self pageHelp], *cur = _status.stringValue;
     if (![cur isEqualToString:help] && (cur.length == 0 || [self isHelpText:cur] || [cur isEqualToString:_autoStatus])) _status.stringValue = help;
     _autoStatus = help;   // real messages stay until replaced
@@ -748,7 +847,11 @@ static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults o
         dispatch_async(dispatch_get_main_queue(), ^{ EDMainWindowController *me = weak; if (!me) return; me->_mountsIcons.items = found; me->_mountsIcons.selectedIndex = found.count ? 0 : -1; [me mountsSelectionChanged]; });
     });
 }
-- (void)showImageOnDisk:(NSURL *)u { [self openImageAtURL:u]; [self selectTabNamed:@"disk"]; _tabPicker.selectedSegment = 1; }
+- (void)showImageOnDisk:(NSURL *)u {
+    if ([u.lastPathComponent isEqual:@"Default Folder"]) u = u.URLByDeletingLastPathComponent;   // the disk itself, not a folder inside it
+    if (![self openImageAtURL:u]) return;
+    _inBank = NO; _browseNode = nil; [self refreshBrowser];   // the DISK page: the list of disks, with the disk icons
+    _fromMounts = YES; [self selectTabNamed:@"disk"]; _tabPicker.selectedSegment = 1; [self focusBrowser]; }
 - (void)mountsSelectionChanged { EDDiskItem *it = _mountsIcons.selectedItem; _mountsDetail.stringValue = it ? (NSString *)it.node : @" "; }
 - (IBAction)showToolsTab:(id)s { [self selectTabNamed:@"tools"]; }
 - (IBAction)writeBlueSCSIIni:(id)s { __weak EDMainWindowController *weak = self; [EDBlueSCSIIni runWithImage:_fs.imageURL status:^(NSString *t) { EDMainWindowController *me = weak; if (me) me->_status.stringValue = t; }]; }
@@ -774,6 +877,108 @@ static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults o
         });
     }];
 }
+// MARK: the sampler's internal drive (SCSI ID 0), read through the board
+
+- (IBAction)mountSCSIDrives:(id)sender {
+    if (_scsiBusy) return;
+    if (_remoteBoard) { [self releaseSCSIDrivesAndWait:NO]; return; }     // already mounted: the menu item reads "Release SCSI Drives"
+    _scsiBusy = YES; _status.stringValue = @"Checking the SCSI chain through the board…"; __weak EDMainWindowController *weak = self;
+    int host = BoardIDText().intValue;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError *e = nil; BOOL switched = NO; pid_t pid = [EDSMDIBoard suspendLinkHelper];
+        NSString *port = EDSMDIBoard.defaultPort; EDSMDIBoard *b = nil;
+        void (^fail)(NSString *) = ^(NSString *msg) {
+            if (switched && port) [EDSMDIBoard switchMode:'t' passthroughPort:port];
+            [EDSMDIBoard resumeLinkHelper:pid];
+            dispatch_async(dispatch_get_main_queue(), ^{ EDMainWindowController *me = weak; if (!me) return; me->_scsiBusy = NO; me->_status.stringValue = msg; if (![msg hasPrefix:@"No SCSI"]) [me alertError:[NSError errorWithDomain:@"EDRemoteDisk" code:1 userInfo:@{NSLocalizedDescriptionKey: msg}] title:@"Could not mount the SCSI drives"]; });
+        };
+        if (!port) { fail(@"The BlueSCSI board is not on USB."); return; }
+        b = [EDSMDIBoard new];
+        if (![b openPath:port error:&e]) {     // no answer: the board is serving a disk (target mode); reboot it into initiator mode
+            dispatch_async(dispatch_get_main_queue(), ^{ EDMainWindowController *me = weak; if (me) me->_status.stringValue = @"The board is serving a disk: switching it to initiator mode, a few seconds…"; });
+            NSString *np = [EDSMDIBoard switchMode:'i' passthroughPort:port]; b = [EDSMDIBoard new]; e = nil; switched = YES;
+            if (!np || ![b openPath:np error:&e]) { fail(e.localizedDescription ?: @"The board did not come back after switching modes."); return; }
+            port = np;
+        }
+        NSMutableArray *drives = [NSMutableArray array];
+        for (EDSMDIDevice *d in [EDSMDIClient scanBus:b.executor skipping:(uint8_t)host cancelled:nil]) if (d.deviceType == 0 && !d.looksLikeSampler) [drives addObject:d];
+        if (!drives.count) { [b close]; fail(@"No SCSI drives answered on the chain (the sampler and the board are not listed)."); return; }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            EDMainWindowController *me = weak; if (!me) return;
+            me->_scsiBusy = NO; me->_remoteBoard = b; me->_remotePid = pid; me->_remoteRestoreTarget = switched; me->_remotePort = port; me->_scsiDrives = drives;
+            [me refreshDiskIcons]; [me selectTabNamed:@"disk"]; me->_tabPicker.selectedSegment = 1;
+            me->_status.stringValue = [NSString stringWithFormat:@"%lu SCSI drive%@ mounted, read-only. The board's disk serving is paused until you choose Utils ▸ Release SCSI Drives.", (unsigned long)drives.count, drives.count == 1 ? @"" : @"s"];
+        });
+    });
+}
+/// Opens one mounted SCSI drive: its metadata is read now, bank data when you open a bank.
+- (void)openSCSIDrive:(EDSMDIDevice *)dev {
+    if (!_remoteBoard || _scsiBusy) return;
+    if (_remoteDisk && _remoteDisk.target == dev.scsiID) { [self showImageOnDisk:_remoteDisk.cacheURL]; return; }
+    [self closeRemoteDisk];
+    _scsiBusy = YES; _status.stringValue = [NSString stringWithFormat:@"Reading SCSI ID %d…", dev.scsiID]; __weak EDMainWindowController *weak = self;
+    EDSMDIBoard *b = _remoteBoard; uint8_t tid = dev.scsiID;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError *e = nil;
+        NSURL *cache = [[NSFileManager.defaultManager URLForDirectory:NSCachesDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:nil] URLByAppendingPathComponent:[NSString stringWithFormat:@"EMU3 Editor/SCSI Drive (ID %d).hda", tid]];
+        EDRemoteDisk *disk = [[EDRemoteDisk alloc] initWithExec:b.executor target:tid cacheURL:cache];
+        disk.onStatus = ^(NSString *t) { dispatch_async(dispatch_get_main_queue(), ^{ EDMainWindowController *me = weak; if (me) me->_status.stringValue = t; }); };
+        BOOL ok = [disk prepareWithError:&e];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            EDMainWindowController *me = weak; if (!me) return;
+            me->_scsiBusy = NO;
+            if (!ok) { me->_status.stringValue = e.localizedDescription ?: @"The drive could not be read."; [me alertError:e title:@"Could not read the SCSI drive"]; return; }
+            me->_remoteDisk = disk;
+            [EMU3Filesystem setRemoteFetcher:^BOOL(NSUInteger first, NSUInteger count) { return [disk ensureBlocks:first count:count]; } forImageURL:cache];
+            me->_openingRemote = YES; BOOL shown = [me showImageOnDiskReturning:cache]; me->_openingRemote = NO;
+            if (!shown) { [me closeRemoteDisk]; return; }
+            me->_status.stringValue = [NSString stringWithFormat:@"SCSI ID %d: %@, read-only. Banks are read from the drive when you open them.", tid, disk.product];
+        });
+    });
+}
+- (BOOL)showImageOnDiskReturning:(NSURL *)u { BOOL ok = [self openImageAtURL:u]; if (ok) { _fromMounts = YES; [self selectTabNamed:@"disk"]; _tabPicker.selectedSegment = 1; [self focusBrowser]; } return ok; }
+/// Drops the open drive and its cache; the mounted drives (and the board in initiator mode) stay until released.
+- (void)closeRemoteDisk {
+    if (!_remoteDisk) return;
+    EDRemoteDisk *disk = _remoteDisk; _remoteDisk = nil;
+    [disk cancel]; [EMU3Filesystem setRemoteFetcher:nil forImageURL:disk.cacheURL];
+    [NSFileManager.defaultManager removeItemAtURL:disk.cacheURL error:nil];
+}
+/// Lets go of the chain: the board goes back to serving its disk and the helper is thawed.
+- (void)releaseSCSIDrivesAndWait:(BOOL)wait {
+    if (!_remoteBoard) return;
+    [self closeRemoteDisk];
+    EDSMDIBoard *b = _remoteBoard; pid_t pid = _remotePid; BOOL restore = _remoteRestoreTarget; NSString *port = _remotePort;
+    _remoteBoard = nil; _remotePid = 0; _remoteRestoreTarget = NO; _remotePort = nil; _scsiDrives = nil;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        [b close];
+        if (restore && port) [EDSMDIBoard switchMode:'t' passthroughPort:port];   // blocking; it was the board's mode before
+        [EDSMDIBoard resumeLinkHelper:pid];
+        dispatch_semaphore_signal(sem);
+    });
+    if (wait) dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_SEC));
+    else { __weak EDMainWindowController *weak = self; dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER); dispatch_async(dispatch_get_main_queue(), ^{ EDMainWindowController *me = weak; if (!me) return; me->_status.stringValue = @"SCSI drives released: the board serves its disk again."; }); }); }
+    [self refreshDiskIcons];
+}
+- (void)closeRemoteDiskAndWait:(BOOL)wait { [self releaseSCSIDrivesAndWait:wait]; }     // app quit
+/// Asks the sampler (read-only SysEx, see EDSamplerRemote) for its memory and options; the Memory box then shows the real numbers.
+- (void)refreshRemote {
+    if (_remoteBusy || (_remoteAt && -[_remoteAt timeIntervalSinceNow] < 10)) return;
+    _remoteBusy = YES; __weak EDMainWindowController *weak = self;
+    [EDSamplerRemote queryWithCompletion:^(EDSamplerStatus *st) {
+        EDMainWindowController *me = weak; if (!me) return;
+        me->_remoteBusy = NO; me->_remoteAt = [NSDate date];
+        if (!st || st.sampleTotalMB <= 0) { me->_liveMem = NO; return; }
+        me->_liveMem = YES;
+        me->_memory.sampleTotalMB = st.sampleTotalMB; me->_memory.sampleUsedMB = MAX(0, st.sampleTotalMB - st.sampleFreeK / 1024.0);
+        if (st.presetTotalK > 0) { me->_memory.presetTotalK = st.presetTotalK; me->_memory.presetUsedK = MAX(0, st.presetTotalK - st.presetFreeK); }
+        [NSUserDefaults.standardUserDefaults setInteger:st.sampleTotalMB forKey:@"SamplerSampleMB"];
+        me->_ramRow.stringValue = [NSString stringWithFormat:@"Sample memory: %ld MB (read from the sampler)", (long)st.sampleTotalMB];
+        me->_ramRow.toolTip = [NSString stringWithFormat:@"Read from the sampler over MIDI SysEx (%@ %@, %@). %@ voices, %@ FX board, %@ MIDI expansion.", st.model, st.version, st.outPort, st.has128Voices ? @"128" : @"64", st.hasFXCard ? @"with" : @"no", st.hasMIDICard ? @"with" : @"no"];
+        [me->_memory setNeedsDisplay:YES];
+    }];
+}
 - (void)refreshSamplerStatus {
     [self startStatusWatch];
     NSURL *d = [self samplerDiskFolder]; NSURL *root = [d.lastPathComponent isEqual:@"Default Folder"] ? d.URLByDeletingLastPathComponent : d;
@@ -790,10 +995,19 @@ static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults o
     line(root != nil, root ? [NSString stringWithFormat:@"Disk served: %@", root.lastPathComponent] : @"No sampler disk mounted");
     line(boards > 0, boards ? @"SCSI board connected" : @"SCSI board not found");
     NSString *model = [NSUserDefaults.standardUserDefaults stringForKey:@"SamplerModel"];   // found by Tools ▸ Find Sampler
-    if (model.length) line(YES, model);
+    if (model.length) line(YES, [model stringByReplacingOccurrencesOfString:@"E-mu" withString:@"E-MU"]);
     _samplerStatus.attributedStringValue = as;
     [_home reloadWithSamplerDisk:d];
     [self refreshDiskIcons];
+}
+/// Settings window changes: keep the Master page's auto-save box and the memory sizes in step.
+- (void)syncFromDefaults {
+    NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
+    NSControlStateValue on = [d boolForKey:@"AutoSaveToSampler"] ? NSControlStateValueOn : NSControlStateValueOff;
+    if (_autoSaveBtn.state != on) { _autoSaveBtn.state = on; [self scheduleAutoSave]; }
+    NSInteger mb = [d integerForKey:@"SamplerSampleMB"]; if (mb <= 0) mb = 40;
+    if ((NSInteger)_memory.sampleTotalMB != mb) { _memory.sampleTotalMB = mb; _ramRow.stringValue = [NSString stringWithFormat:@"Sample memory: %ld MB (installed in the sampler)", (long)mb]; [self modelChanged]; }
+    [self refreshLCDVisibility];
 }
 - (IBAction)autoSaveToggled:(NSButton *)b {
     [NSUserDefaults.standardUserDefaults setBool:b.state == NSControlStateValueOn forKey:@"AutoSaveToSampler"]; [self scheduleAutoSave];
@@ -898,13 +1112,16 @@ static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter s
     NSMutableArray *items = [NSMutableArray array];
     NSURL *d = [self samplerDiskFolder]; NSURL *root = [d.lastPathComponent isEqual:@"Default Folder"] ? d.URLByDeletingLastPathComponent : d;
     if (root) { EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = root.lastPathComponent; it.subtitle = [NSString stringWithFormat:@"served · ID %@", BoardIDText()]; it.sampler = YES; it.url = root; [items addObject:it]; }
+    NSString *servedPath = ServedImagePath();
     for (NSString *path in [NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"]) {
         if (![NSFileManager.defaultManager fileExistsAtPath:path]) continue;
+        if (root && servedPath && [path.stringByStandardizingPath isEqualToString:servedPath.stringByStandardizingPath]) continue;   // the served image already shows as the mount
         EDDiskItem *it = [EDDiskItem new]; NSString *ext = path.pathExtension.lowercaseString;
         unsigned long long sz = [[NSFileManager.defaultManager attributesOfItemAtPath:path error:nil] fileSize];
         BOOL floppy = sz > 0 && sz <= 4u * 1024 * 1024;
         it.kind = [ext isEqual:@"iso"] ? EDDiskCD : (floppy ? EDDiskFloppy : EDDiskHard); it.title = [@[@"img", @"hda"] containsObject:ext] ? path.lastPathComponent.stringByDeletingPathExtension : path.lastPathComponent; { NSString *sid = ScsiIDFromName(path.lastPathComponent); it.subtitle = [NSString stringWithFormat:@"%@%@", sid ? [NSString stringWithFormat:@"ID %@ · ", sid] : @"", SizeText(sz)]; } it.url = [NSURL fileURLWithPath:path]; [items addObject:it];
     }
+    for (EDSMDIDevice *d in _scsiDrives) { EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = [[NSString stringWithFormat:@"%@ %@", d.vendor, d.product] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet]; it.subtitle = [NSString stringWithFormat:@"SCSI · ID %d", d.scsiID]; it.node = d; [items addObject:it]; }
     _diskItems = items; [self refreshBrowser];
 }
 - (IBAction)showSamplerDisk:(id)s {
@@ -934,7 +1151,7 @@ static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter s
     double pBytes = 0, sBytes = 0;
     for (EDPreset *p in _bank.presets) pBytes += p.raw.length;
     for (EDSample *sm in _bank.samples) sBytes += sm.left.length + sm.right.length;
-    _memory.presetUsedK = pBytes / 1024; _memory.sampleUsedMB = sBytes / 1048576;
+    if (!_liveMem) { _memory.presetUsedK = pBytes / 1024; _memory.sampleUsedMB = sBytes / 1048576; }   // with a live sampler the box shows the sampler's own numbers
     [self refreshSamplerStatus];
 }
 
@@ -955,10 +1172,87 @@ static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter s
 
 - (IBAction)openDiskImage:(id)sender {
     if (![self confirmDiscard]) return;
-    NSOpenPanel *p = [NSOpenPanel openPanel]; p.message = @"Choose an E-mu EOS disk image (.hda / .iso / .img)";
-    if ([p runModal] == NSModalResponseOK) [self openImageAtURL:p.URL];
+    NSOpenPanel *p = [NSOpenPanel openPanel]; p.message = @"Choose an E-mu EOS disk image (.hda / .iso / .img)"; ApplyLastFolder(p, @"LastFolderDisk");
+    if ([p runModal] == NSModalResponseOK) { RememberFolder(p, @"LastFolderDisk"); [self openImageAtURL:p.URL]; }
 }
 /// A blank 1.44 MB floppy volume in the EOS file system: saved where the user chooses, then opened as a disk.
+- (IBAction)importPresetsFromBank:(id)sender {
+    EDBank *dest = _bank; if (!dest || ![dest.formType hasPrefix:@"E4B"]) { [EDTheme notice:@"Open an EOS (E4B) bank first. Presets are imported into the open bank."]; return; }
+    NSOpenPanel *op = [NSOpenPanel openPanel]; op.message = @"Choose the E4B bank to import presets from"; ApplyLastFolder(op, @"LastFolderBank");
+    if ([op runModal] != NSModalResponseOK) return;
+    RememberFolder(op, @"LastFolderBank");
+    NSError *e = nil; NSData *data = [NSData dataWithContentsOfURL:op.URL options:0 error:&e];
+    EDBank *src = data ? [EDBank bankWithData:data error:&e] : nil;
+    if (!src) { [self alertError:e title:@"Could not read the bank"]; return; }
+    [self importPresetsFrom:src named:op.URL.lastPathComponent into:dest];
+}
+/// Imports from a bank stored on a disk image: the open disk or another image, then the bank, then the presets.
+- (IBAction)importPresetsFromDisk:(id)sender {
+    EDBank *dest = _bank; if (!dest || ![dest.formType hasPrefix:@"E4B"]) { [EDTheme notice:@"Open an EOS (E4B) bank first. Presets are imported into the open bank."]; return; }
+    NSURL *img = nil;
+    if (_fs) {
+        EDAlert *q = [EDAlert new]; q.messageText = @"Import from Disk"; q.informativeText = [NSString stringWithFormat:@"Take the presets from a bank on %@, or from another disk image?", _fs.imageURL.lastPathComponent];
+        [q addButtonWithTitle:@"This Disk"]; [q addButtonWithTitle:@"Other Disk…"]; [q addButtonWithTitle:@"Cancel"];
+        NSModalResponse r = [q runModal]; if (r == NSAlertFirstButtonReturn + 2) return; if (r == NSAlertFirstButtonReturn) img = _fs.imageURL;
+    }
+    if (!img) {
+        NSOpenPanel *op = [NSOpenPanel openPanel]; op.message = @"Choose the disk image to import presets from"; ApplyLastFolder(op, @"LastFolderDisk");
+        if ([op runModal] != NSModalResponseOK) return; RememberFolder(op, @"LastFolderDisk"); img = op.URL;
+    }
+    { NSFileHandle *fh = [NSFileHandle fileHandleForReadingFromURL:img error:nil]; NSData *head = [fh readDataOfLength:12]; [fh closeFile];   // a bank file chosen here (such as one this editor converted): import from it directly
+      if (head.length == 12 && memcmp(head.bytes, "FORM", 4) == 0 && memcmp((const char *)head.bytes + 8, "E4B", 3) == 0) {
+          NSError *be = nil; NSData *bd = [NSData dataWithContentsOfURL:img options:0 error:&be]; EDBank *bs = bd ? [EDBank bankWithData:bd error:&be] : nil;
+          if (!bs) { [self alertError:be title:@"Could not read the bank"]; return; }
+          [self importPresetsFrom:bs named:img.lastPathComponent into:dest]; return; } }
+    NSError *e = nil; EMU3Filesystem *fs = [[EMU3Filesystem alloc] initWithURL:img error:&e];
+    if (!fs) { [self alertError:e title:[NSString stringWithFormat:@"Could not open %@", img.lastPathComponent]]; return; }
+    NSMutableArray<NSString *> *names = [NSMutableArray array]; NSMutableArray<EMU3File *> *files = [NSMutableArray array];
+    __block void (^walk)(EMU3Directory *, NSString *) = nil;
+    walk = ^(EMU3Directory *d, NSString *prefix) {
+        for (EMU3Directory *sub in d.subdirectories) walk(sub, [prefix stringByAppendingFormat:@"%@ / ", sub.name]);
+        for (EMU3File *f in d.files) if (!f.isDeleted && f.fileType == EMU3FileTypeBank) { [names addObject:[prefix stringByAppendingString:f.name]]; [files addObject:f]; }
+    };
+    walk(fs.rootDirectory, @""); walk = nil;
+    if (!files.count) { [fs closeImage]; [self alertError:[NSError errorWithDomain:EDErrorDomain code:1 userInfo:@{NSLocalizedDescriptionKey: @"There are no EOS banks on that disk."}] title:@"Nothing to import"]; return; }
+    NSPopUpButton *pop = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 360, 26) pullsDown:NO]; [pop addItemsWithTitles:names];
+    EDAlert *a = [EDAlert new]; a.messageText = @"Choose a Bank"; a.informativeText = [NSString stringWithFormat:@"%lu banks on %@. Pick the one that holds the presets.", (unsigned long)files.count, img.lastPathComponent];
+    a.accessoryView = pop; [a addButtonWithTitle:@"Next"]; [a addButtonWithTitle:@"Cancel"];
+    if ([a runModal] != NSAlertFirstButtonReturn) { [fs closeImage]; return; }
+    EMU3File *file = files[(NSUInteger)MAX(0, pop.indexOfSelectedItem)]; NSString *title = names[(NSUInteger)MAX(0, pop.indexOfSelectedItem)];
+    NSData *data = [fs dataForFile:file error:&e]; [fs closeImage];
+    EDBank *src = data ? [EDBank bankWithData:data error:&e] : nil;
+    if (!src) { [self alertError:e title:@"Could not read the bank"]; return; }
+    [self importPresetsFrom:src named:title into:dest];
+}
+- (void)importPresetsFrom:(EDBank *)src named:(NSString *)srcName into:(EDBank *)dest {
+    NSError *e = nil;
+    NSMutableArray<EDPreset *> *list = [NSMutableArray array];
+    for (EDPreset *p in src.presets) if (p.kind == EDPresetKindE4) [list addObject:p];
+    if (![src.formType hasPrefix:@"E4B"] || !list.count) {
+        [self alertError:[NSError errorWithDomain:EDErrorDomain code:1 userInfo:@{NSLocalizedDescriptionKey: @"That file has no EOS presets to import."}] title:@"Nothing to import"]; return; }
+    // a list of check boxes, all ticked
+    NSStackView *rows = [NSStackView stackViewWithViews:@[]]; rows.orientation = NSUserInterfaceLayoutOrientationVertical; rows.alignment = NSLayoutAttributeLeading; rows.spacing = 4;
+    rows.edgeInsets = NSEdgeInsetsMake(6, 8, 6, 8);
+    for (EDPreset *p in list) {
+        NSButton *b = [NSButton checkboxWithTitle:[NSString stringWithFormat:@"%03u  %@", p.number, p.name] target:nil action:nil]; b.state = NSControlStateValueOn; [rows addArrangedSubview:b]; }
+    NSScrollView *sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 360, MIN(260, 24 + list.count * 22))];
+    sv.hasVerticalScroller = YES; sv.borderType = NSBezelBorder; sv.documentView = rows; rows.translatesAutoresizingMaskIntoConstraints = NO;
+    [rows.topAnchor constraintEqualToAnchor:sv.contentView.topAnchor].active = YES; [rows.leadingAnchor constraintEqualToAnchor:sv.contentView.leadingAnchor].active = YES;
+    EDAlert *a = [EDAlert new]; a.messageText = @"Import Presets";
+    a.informativeText = [NSString stringWithFormat:@"Tick the presets to copy from %@ into this bank. Their samples come along and take the next free sample numbers; nothing already in this bank changes.", srcName];
+    a.accessoryView = sv; [a addButtonWithTitle:@"Import"]; [a addButtonWithTitle:@"Cancel"];
+    if ([a runModal] != NSAlertFirstButtonReturn) return;
+    NSMutableArray<EDPreset *> *pick = [NSMutableArray array];
+    for (NSUInteger i = 0; i < list.count; i++) if (((NSButton *)rows.arrangedSubviews[i]).state == NSControlStateValueOn) [pick addObject:list[i]];
+    if (!pick.count) return;
+    NSUInteger copied = 0; NSArray<NSNumber *> *missing = nil;
+    NSArray<EDPreset *> *added = [dest importPresets:pick fromBank:src samplesCopied:&copied missingSamples:&missing];
+    if (!added) { [self alertError:[NSError errorWithDomain:EDErrorDomain code:2 userInfo:@{NSLocalizedDescriptionKey: @"The presets could not be imported (no free sample number, or the bank is not an EOS bank)."}] title:@"Could not import"]; return; }
+    [_sampleTable reloadData]; [_presetEditor reload]; [self refreshBankStatus]; [self updateTitle]; [self modelChanged];
+    NSMutableString *t = [NSMutableString stringWithFormat:@"Imported %lu preset%@ and %lu sample%@. Save the bank to keep them.", (unsigned long)added.count, added.count == 1 ? @"" : @"s", (unsigned long)copied, copied == 1 ? @"" : @"s"];
+    if (missing.count) [t appendString:@" Some voices use ROM samples or samples the source bank did not contain; they still point at those numbers."];
+    _status.stringValue = t;
+}
 - (IBAction)convertSelectedPreset:(id)sender {
     NSInteger i = _presetEditor.selectedIndex; EDBank *b = _bank;
     if (![b.formType isEqualToString:@"3X"] || i < 0 || i >= (NSInteger)b.presets.count) return;
@@ -968,7 +1262,9 @@ static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter s
     NSSavePanel *p = [NSSavePanel savePanel]; p.title = @"Save EOS Bank"; p.message = @"A bank holding this preset and the samples it uses (the 3X bank is not changed)";
     p.nameFieldStringValue = [pr.name.length ? pr.name : @"Preset" stringByAppendingString:@".E4B"]; p.allowsOtherFileTypes = YES; p.extensionHidden = NO;
     if (_standaloneURL) p.directoryURL = [_standaloneURL URLByDeletingLastPathComponent];
+    ApplyLastFolder(p, @"LastFolderConvert");
     if ([p runModal] != NSModalResponseOK) return;
+    RememberFolder(p, @"LastFolderConvert");
     if (![out writeToURL:p.URL options:NSDataWritingAtomic error:&e]) { [self alertError:e title:@"Could not save the bank"]; return; }
     EDBank *r = [EDBank bankWithData:out error:nil];
     NSMutableString *t = [NSMutableString stringWithFormat:@"%@ saved with %lu voices and %lu samples. Voices keep their sample, key and velocity range; other voice settings start from the default E4 voice.", p.URL.lastPathComponent, (unsigned long)[r.presets.firstObject voiceCount], (unsigned long)r.samples.count];
@@ -980,8 +1276,9 @@ static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter s
     NSError *e = nil;
     if (![b.formType isEqualToString:@"3X"]) {          // no 3X bank open: pick one to convert, without opening it
         NSOpenPanel *o = [NSOpenPanel openPanel]; o.title = @"Convert 3X Bank"; o.message = @"Choose an Emulator 3X / ESI-32 bank file";
-        o.allowsOtherFileTypes = YES; o.canChooseDirectories = NO;
+        o.allowsOtherFileTypes = YES; o.canChooseDirectories = NO; ApplyLastFolder(o, @"LastFolderBank");
         if ([o runModal] != NSModalResponseOK) return;
+        RememberFolder(o, @"LastFolderBank");
         NSData *src = [NSData dataWithContentsOfURL:o.URL options:0 error:&e];
         b = src ? [EDBank bankWithData:src error:&e] : nil;
         if (!b) { [self alertError:e title:@"Could not read the bank"]; return; }
@@ -1000,7 +1297,9 @@ static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter s
     NSSavePanel *p = [NSSavePanel savePanel]; p.title = @"Save EOS Bank"; p.message = @"Name the converted bank (the original is not changed)";
     p.nameFieldStringValue = [[title stringByDeletingPathExtension] stringByAppendingString:@" E4.E4B"]; p.allowsOtherFileTypes = YES; p.extensionHidden = NO;
     if (dir) p.directoryURL = [dir URLByDeletingLastPathComponent];
+    ApplyLastFolder(p, @"LastFolderConvert");
     if ([p runModal] != NSModalResponseOK) return;
+    RememberFolder(p, @"LastFolderConvert");
     if (![out writeToURL:p.URL options:NSDataWritingAtomic error:&e]) { [self alertError:e title:@"Could not save the bank"]; return; }
     NSUInteger left = [warn filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF BEGINSWITH 'Sample '"]].count;
     NSMutableString *t = [NSMutableString stringWithFormat:@"%lu presets and %lu samples written to %@. Samples are converted exactly; presets keep their samples, key and velocity ranges, and start from the default E4 voice settings (tuning, envelopes and filter are not carried over yet). Test on the sampler before relying on it.", (unsigned long)b.presets.count, (unsigned long)(b.samples.count - left), p.URL.lastPathComponent];
@@ -1136,14 +1435,27 @@ static NSString *const kMinimalBlueSCSIIni =
         });
     });
 }
+- (IBAction)newPresetFromMenu:(id)sender { [_presetEditor newPreset:sender]; }
+/// A new, empty EOS bank in memory: it has no file yet, so Save asks where to put it.
+- (IBAction)newBank:(id)sender {
+    if (![self confirmDiscard]) return;
+    NSData *d = [EDBank emptyBankData];
+    _noConvertOffer = YES; BOOL ok = [self loadBankData:d title:@"Untitled"]; _noConvertOffer = NO;
+    if (!ok) return;
+    _standaloneURL = nil; _currentNode = nil; _inBank = YES; [self refreshBrowser];
+    _originalData = nil;   // nothing to back up
+    [self selectTabNamed:@"presets"]; _tabPicker.selectedSegment = 3;
+    _status.stringValue = @"New empty bank. Use New preset or import presets and samples, then Save As.";
+}
 - (IBAction)openBankFile:(id)sender {
     if (![self confirmDiscard]) return;
-    NSOpenPanel *p = [NSOpenPanel openPanel]; p.message = @"Choose an E4B bank file";
-    if ([p runModal] == NSModalResponseOK) [self openBankFileAtURL:p.URL];
+    NSOpenPanel *p = [NSOpenPanel openPanel]; p.message = @"Choose an E4B bank file"; ApplyLastFolder(p, @"LastFolderBank");
+    if ([p runModal] == NSModalResponseOK) { RememberFolder(p, @"LastFolderBank"); [self openBankFileAtURL:p.URL]; }
 }
 
 - (BOOL)openImageAtURL:(NSURL *)url {
     if (![self confirmDiscard]) return NO;
+    if (!_openingRemote) [self closeRemoteDisk];
     NSError *e = nil;
     EMU3Filesystem *fs = [[EMU3Filesystem alloc] initWithURL:url error:&e];
     if (!fs) { [self alertError:e title:@"Could not open the disk image"]; return NO; }
@@ -1161,6 +1473,7 @@ static NSString *const kMinimalBlueSCSIIni =
 }
 
 - (BOOL)openBankFileAtURL:(NSURL *)url {
+    [self closeRemoteDisk];
     NSError *e = nil;
     NSData *d = [NSData dataWithContentsOfURL:url options:0 error:&e];
     if (!d) { [self alertError:e title:@"Could not read the file"]; return NO; }
@@ -1206,7 +1519,7 @@ static NSString *const kMinimalBlueSCSIIni =
     _status.stringValue = [NSString stringWithFormat:@"%@ [%@]: %lu samples, %lu presets", title,
         [bank.formType isEqualToString:@"3X"] ? @"Emulator 3X / ESI-32" : @"EOS E4B", (unsigned long)bank.samples.count, (unsigned long)bank.presets.count];
     [self modelChanged];
-    if ([bank.formType isEqualToString:@"3X"] && !_noConvertOffer) {
+    if ([bank.formType isEqualToString:@"3X"] && !_noConvertOffer && ![NSUserDefaults.standardUserDefaults boolForKey:@"SkipConvertOffer"]) {
         __weak EDMainWindowController *weak = self;
         dispatch_async(dispatch_get_main_queue(), ^{
             EDMainWindowController *me = weak; if (!me || me->_bank != bank) return;
@@ -1242,7 +1555,7 @@ static NSString *const kMinimalBlueSCSIIni =
     _curTab = now;
     _tabPicker.selectedSegment = now; [self resetStatus]; [self updateLCD];
     if ([item.identifier isEqual:@"presets"]) [_presetEditor reload];
-    if ([item.identifier isEqual:@"master"]) [self refreshSamplerStatus];
+    if ([item.identifier isEqual:@"master"]) { [self refreshSamplerStatus]; [self refreshRemote]; }
     if ([item.identifier isEqual:@"disk"]) [self focusBrowser];
 }
 
@@ -1334,13 +1647,16 @@ static NSString *const kMinimalBlueSCSIIni =
 - (IBAction)browserAudition:(id)s { EDDiskItem *it = _diskHint.selectedItem; if (it.kind == EDDiskSample) { if (it.node != _sample) [self selectSample:it.node]; [self togglePlay:nil]; } }
 /// Double-click / Return: open a disk, go into a folder, load a bank and show its samples.
 - (void)openBrowserItem:(EDDiskItem *)it {
+    _fromMounts = NO;
     if (it.kind == EDDiskFolder) { _browseNode = it.node; [self refreshBrowser]; return; }
     if (it.kind == EDDiskBank) { if ([self loadBankNode:it.node]) { _inBank = YES; [self refreshBrowser]; } return; }
     if (it.kind == EDDiskSample) { [self selectSample:it.node]; [self selectTabNamed:@"samples"]; _tabPicker.selectedSegment = 2; return; }
+    if ([it.node isKindOfClass:EDSMDIDevice.class]) { [self openSCSIDrive:it.node]; return; }
     [self openDiskItem:it];
 }
 - (IBAction)browserLoad:(id)s { EDDiskItem *it = _diskHint.selectedItem; if (!it) return; if (it.kind == EDDiskBank) { if ([self loadBankNode:it.node]) { _inBank = YES; [self refreshBrowser]; } } else [self openBrowserItem:it]; }
 - (void)browserGoUp {
+    if (_fromMounts) { _fromMounts = NO; [self cancelOperation:nil]; return; }   // opened from the Tools mounts: Esc goes straight back
     if (_inBank) { _inBank = NO; [self refreshBrowser]; return; }
     if (!_browseNode) { [self cancelOperation:nil]; return; }   // top of the disk list: back to the previous page
     EDNode *parent = nil;
@@ -1394,8 +1710,10 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
             for (NSString *k in [NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"]) if ([k.lastPathComponent.stringByDeletingPathExtension isEqualToString:it.title] && [NSFileManager.defaultManager fileExistsAtPath:k]) img = k;
             if (!img && [_fs.imageURL.lastPathComponent.stringByDeletingPathExtension isEqualToString:it.title]) img = _fs.imageURL.path;
         }
-        NSString *sid = it.sampler ? nil : ScsiIDFromName(img.lastPathComponent ?: it.title);
-        if (it.sampler) [rows addObject:@[@"SCSI ID", [NSString stringWithFormat:@"%@ (set on Tools ▸ Server setup)", BoardIDText()]]];
+        EDSMDIDevice *scsiDev = [it.node isKindOfClass:EDSMDIDevice.class] ? it.node : nil;
+        NSString *sid = (it.sampler || scsiDev) ? nil : ScsiIDFromName(img.lastPathComponent ?: it.title);
+        if (scsiDev) { [rows addObject:@[@"SCSI ID", [NSString stringWithFormat:@"%d (a drive on the SCSI chain, read-only)", scsiDev.scsiID]]]; [rows addObject:@[@"Product", [NSString stringWithFormat:@"%@ %@ %@", scsiDev.vendor, scsiDev.product, scsiDev.revision]]]; }
+        else if (it.sampler) [rows addObject:@[@"SCSI ID", [NSString stringWithFormat:@"%@ (set on Tools ▸ Server setup)", BoardIDText()]]];
         else [rows addObject:@[@"SCSI ID", sid ? [NSString stringWithFormat:@"%@ (from the name %@, for a BlueSCSI SD card)", sid, img.lastPathComponent ?: it.title] : @"not in the name (a BlueSCSI SD card wants HD<id>0_name.hda)"]];
         if (img) {
             unsigned long long sz = [[NSFileManager.defaultManager attributesOfItemAtPath:img error:nil] fileSize];
@@ -1410,10 +1728,10 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     if (_fs && isOpen) { [rows addObject:@[@"Free space", EMU3FormatBytes((unsigned long long)_fs.freeBlocks * 512)]]; [rows addObject:@[@"Disk size", EMU3FormatBytes((unsigned long long)_fs.totalBlocks * 512)]]; }
     [self showInfo:kind rows:rows];
 }
-- (void)popMenu:(NSMenu *)m from:(NSButton *)b { [EDTheme styleLCDMenu:m]; [m popUpMenuPositioningItem:nil atLocation:NSMakePoint(0, NSHeight(b.bounds)) inView:b]; }
+- (void)popMenu:(NSMenu *)m from:(NSButton *)b { [EDTheme popUpLCDMenu:m fromButton:b]; }
 - (IBAction)browserUtilsMenu:(NSButton *)b {
     NSMenu *m = [[NSMenu alloc] initWithTitle:@"Utils"];
-    for (NSArray *a in @[@[@"Open Disk Image…", @"openDiskImage:"], @[@"Open Bank File…", @"openBankFile:"], @[@"Show Sampler Disk", @"showSamplerDisk:"]]) { NSMenuItem *i = [m addItemWithTitle:a[0] action:NSSelectorFromString(a[1]) keyEquivalent:@""]; i.target = self; }
+    for (NSArray *a in @[@[_remoteBoard ? @"Release SCSI Drives" : @"Mount SCSI Drives", @"mountSCSIDrives:"], @[@"New Bank", @"newBank:"], @[@"Open Disk Image…", @"openDiskImage:"], @[@"Open Bank File…", @"openBankFile:"], @[@"Show Sampler Disk", @"showSamplerDisk:"]]) { NSMenuItem *i = [m addItemWithTitle:a[0] action:NSSelectorFromString(a[1]) keyEquivalent:@""]; i.target = self; }
     [self popMenu:m from:b];
 }
 - (IBAction)browserBrowseMenu:(NSButton *)b {
@@ -1582,14 +1900,17 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     if (!_sample) return;
     NSSavePanel *p = [NSSavePanel savePanel]; p.allowedContentTypes = @[[UTType typeWithFilenameExtension:@"wav"]];
     p.nameFieldStringValue = [[_sample.name stringByReplacingOccurrencesOfString:@"/" withString:@"-"] stringByAppendingString:@".wav"];
+    ApplyLastFolder(p, @"LastFolderAudio");
     if ([p runModal] != NSModalResponseOK) return;
+    RememberFolder(p, @"LastFolderAudio");
     NSError *e = nil;
     if (![_sample writeWAVToURL:p.URL error:&e]) [self alertError:e title:@"Export failed"];
 }
 - (IBAction)importWAV:(id)sender {
     if (!_sample) return;
-    NSOpenPanel *p = [NSOpenPanel openPanel]; p.message = @"Replace this sample's audio with an audio file";
+    NSOpenPanel *p = [NSOpenPanel openPanel]; p.message = @"Replace this sample's audio with an audio file"; ApplyLastFolder(p, @"LastFolderAudio");
     if ([p runModal] != NSModalResponseOK) return;
+    RememberFolder(p, @"LastFolderAudio");
     NSDictionary *snap = [self snapshot:_sample];
     NSError *e = nil;
     if (![_sample replaceAudioFromURL:p.URL error:&e]) { [self restoreSnapshot:snap sample:_sample]; [self.window.undoManager removeAllActions]; [self alertError:e title:@"Import failed"]; return; }
@@ -1716,7 +2037,7 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     } else if (_currentNode.file) {
         if (![_fs replaceContentsOfFile:_currentNode.file withData:out error:&e]) { [self alertError:e title:@"Writing to the disk image failed"]; return; }
         [_fs synchronizeToDisk:nil];
-    } else return;
+    } else { [self saveBankAs:sender]; return; }
     NSInteger keep = _sampleTable.selectedRow;
     _noConvertOffer = YES; [self loadBankData:out title:_bankTitle]; _noConvertOffer = NO;
     if (keep >= 0 && keep < (NSInteger)_bank.samples.count) [_sampleTable selectRowIndexes:[NSIndexSet indexSetWithIndex:keep] byExtendingSelection:NO];
@@ -1734,8 +2055,14 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     NSError *e = nil; NSData *out = [_bank serializeWithError:&e];
     if (!out) { [self alertError:e title:@"Cannot save"]; return; }
     NSSavePanel *p = [NSSavePanel savePanel]; p.nameFieldStringValue = [_bankTitle stringByAppendingString:@".e4b"];
+    ApplyLastFolder(p, @"LastFolderBank");
     if ([p runModal] != NSModalResponseOK) return;
-    if (![out ed_writeToURL:p.URL error:&e]) [self alertError:e title:@"Save failed"];
+    RememberFolder(p, @"LastFolderBank");
+    if (![out ed_writeToURL:p.URL error:&e]) { [self alertError:e title:@"Save failed"]; return; }
+    if (!_standaloneURL && !_currentNode.file) {   // a new bank now has a file: Save writes to it from here on
+        _standaloneURL = p.URL; _bankTitle = p.URL.lastPathComponent.stringByDeletingPathExtension; _midiEditor.bankTitle = _bankTitle;
+        [_bank markClean]; _originalData = out; self.window.documentEdited = NO; [self updateTitle]; [self updateLCD];
+    }
 }
 
 /// Every save keeps a copy of the bank as it was loaded: ~/Library/Application Support/EMU3 Editor/Backups
@@ -1767,6 +2094,9 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     if (a == @selector(toggleFXBoard:)) { m.state = self.fxBoardInstalled ? NSControlStateValueOn : NSControlStateValueOff; return YES; }
     if (a == @selector(showFXTab:)) return self.fxBoardInstalled;
     if (a == @selector(saveBank:) || a == @selector(saveBankAs:)) return _bank != nil;
+    if (a == @selector(newBank:)) return YES;
+    if (a == @selector(newPresetFromMenu:)) return [_bank.formType hasPrefix:@"E4B"];
+    if (a == @selector(importPresetsFromBank:) || a == @selector(importPresetsFromDisk:)) return [_bank.formType hasPrefix:@"E4B"];
     if (a == @selector(sendPresetToSamplerDisk:) || a == @selector(exportPresetBank:)) return [self selectedPreset].kind == EDPresetKindE4 && [_bank.formType hasPrefix:@"E4B"];
     if (a == @selector(exportWAV:) || a == @selector(importWAV:) || a == @selector(sdsTransfer:) || a == @selector(smdiTransfer:) || a == @selector(sendToSamplerDisk:) || a == @selector(togglePlay:) || a == @selector(normalize:) ||
         a == @selector(reverseSample:) || a == @selector(fadeIn:) || a == @selector(fadeOut:) || a == @selector(removeDC:) ||

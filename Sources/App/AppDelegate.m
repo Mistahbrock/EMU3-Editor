@@ -1,4 +1,6 @@
 #import "AppDelegate.h"
+#import "EDSettings.h"
+#import "EDHelp.h"
 #import "EDMainWindowController.h"
 
 @implementation AppDelegate { EDMainWindowController *_main; }
@@ -58,10 +60,15 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     }];
 }
 
+- (void)showSettings:(id)s { [EDSettings show]; }
+- (void)showHelp:(id)s { [EDHelp show]; }
+
 - (void)buildMenus {
     NSMenu *bar = [NSMenu new]; NSApp.mainMenu = bar;
     #define SUB(title) ({ NSMenuItem *mi = [bar addItemWithTitle:title action:nil keyEquivalent:@""]; NSMenu *sm = [[NSMenu alloc] initWithTitle:title]; mi.submenu = sm; sm; })
     NSMenu *app = SUB(@"EMU3 Editor");
+    item(app, @"Settings…", @selector(showSettings:), @",", self);
+    [app addItem:NSMenuItem.separatorItem];
     item(app, @"Hide EMU3 Editor", @selector(hide:), @"h", NSApp);
     [app addItem:NSMenuItem.separatorItem];
     item(app, @"Quit EMU3 Editor", @selector(terminate:), @"q", NSApp);
@@ -135,6 +142,7 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     NSMenu *win = SUB(@"Window");
     item(win, @"Minimize", @selector(performMiniaturize:), @"m", nil);
     NSApp.windowsMenu = win;
+    NSMenu *help = SUB(@"Help"); item(help, @"EMU3 Editor Help", @selector(showHelp:), @"?", self); NSApp.helpMenu = help;
     #undef SUB
 }
 
@@ -144,6 +152,7 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     return ok;
 }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)a { return [_main confirmQuit] ? NSTerminateNow : NSTerminateCancel; }
+- (void)applicationWillTerminate:(NSNotification *)n { [_main closeRemoteDiskAndWait:YES]; }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)a { return YES; }
 // MARK: About
 

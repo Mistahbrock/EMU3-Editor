@@ -3,7 +3,7 @@
 #import "EDBank.h"
 
 NS_ASSUME_NONNULL_BEGIN
-@interface EDPresetEditor : NSView <NSTableViewDataSource, NSTableViewDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTextFieldDelegate, NSMenuDelegate>
+@interface EDPresetEditor : NSView <NSTableViewDataSource, NSTableViewDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTextFieldDelegate, NSMenuDelegate, NSSplitViewDelegate>
 @property (nonatomic, strong, nullable) EDBank *bank;
 @property (nonatomic, readonly) NSView *lcdView;   // the LCD page view (for aligning outside notes)
 @property (nonatomic, copy, nullable) void (^edited)(void);     // called after every change
@@ -14,5 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)selectIndex:(NSInteger)i;
 - (void)reload;
 - (void)deletePresetFromMenu:(id)s;
+- (void)newPreset:(nullable id)sender;   // adds an empty preset to the open bank (Preset Manage > New)
+/// Plays `key` on the selected preset until -endAudition (the Space-bar audition on the Presets page). NO when there is no preset to play.
+- (BOOL)auditionKey:(int)key;
+- (void)endAudition;
 @end
 NS_ASSUME_NONNULL_END

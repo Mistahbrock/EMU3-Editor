@@ -102,10 +102,19 @@ static void EMU3EditEnd(EMU3EditToken *t) { if (t->active) [t->fs _endEdit]; }
     [self _unmapImage];
 }
 
+static NSMutableDictionary<NSString *, EMU3BlockFetcher> *sRemoteFetchers;
++ (void)setRemoteFetcher:(EMU3BlockFetcher)fetcher forImageURL:(NSURL *)url {
+    @synchronized (self) {
+        if (!sRemoteFetchers) sRemoteFetchers = [NSMutableDictionary dictionary];
+        if (fetcher) sRemoteFetchers[url.path] = [fetcher copy]; else [sRemoteFetchers removeObjectForKey:url.path];
+    }
+}
 - (instancetype)initWithURL:(NSURL *)url error:(NSError **)error {
     self = [super init];
     if (!self) return nil;
     self.imageURL = url;
+    @synchronized ([EMU3Filesystem class]) { self.blockFetcher = sRemoteFetchers[url.path]; }
+    if (self.blockFetcher) self.locked = YES;      // a drive read over SCSI is browsed read-only
     self.ioQueue  = dispatch_queue_create("com.emu3diskmanager.io", DISPATCH_QUEUE_SERIAL);
     if (![self _mapImageWithError:error]) return nil;
     if (![self _parseFilesystemWithError:error]) {
@@ -503,7 +512,7 @@ static void EMU3EditEnd(EMU3EditToken *t) { if (t->active) [t->fs _endEdit]; }
                 }
 
                 switch (fa->type) {
-                    case EMU3_FILE_TYPE_SYSTEM:  file.fileType = EMU3FileTypeSystem; break;
+                    case EMU3_FILE_TYPE_SYSTEM:  file.fileType = hasE4B0 ? EMU3FileTypeBank : EMU3FileTypeSystem; break;
                     case EMU3_FILE_TYPE_STANDARD:
                     case EMU3_FILE_TYPE_UPDATED: file.fileType = EMU3FileTypeBank;   break;
                     default:                     file.fileType = EMU3FileTypeUnknown; break;
@@ -513,7 +522,7 @@ static void EMU3EditEnd(EMU3EditToken *t) { if (t->active) [t->fs _endEdit]; }
 
                 // Eagerly populate bank metadata so sample counts appear in table immediately
                 // (without requiring user to expand the bank to see samples first)
-                if (file.fileType == EMU3FileTypeBank) {
+                if (file.fileType == EMU3FileTypeBank && !self.blockFetcher) {      // not for remote disks: that would read every bank over SCSI
                     // Populate asynchronously to avoid blocking directory load
                     __weak typeof(self) weakSelf = self;
                     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -567,6 +576,11 @@ static void EMU3EditEnd(EMU3EditToken *t) { if (t->active) [t->fs _endEdit]; }
     for (NSUInteger i = 0; i < chain.count; i++) {
         NSUInteger n = (i + 1 == chain.count) ? lastBlocks : self.clusterBlocks;
         NSUInteger sb = [self _firstBlockOfCluster:chain[i].unsignedIntegerValue];
+        EMU3BlockFetcher fetch = self.blockFetcher;
+        if (fetch && !fetch(sb, n)) {
+            if (error) *error = [self _errorCode:EMU3ErrorReadFailed message:@"The drive could not be read (SCSI)"];
+            return nil;
+        }
         const uint8_t *first = [self _blockPtr:sb];
         const uint8_t *lastp = [self _blockPtr:sb + n - 1];
         if (first && lastp && lastp == first + (n - 1) * EMU3_BLOCK_SIZE) {

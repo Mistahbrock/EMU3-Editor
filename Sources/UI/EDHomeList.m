@@ -18,7 +18,7 @@
     NSMenuItem *i3 = [menu addItemWithTitle:@"Open" action:@selector(openFromMenu:) keyEquivalent:@""]; i3.tag = 3; i3.target = self;
     NSMenuItem *i2 = [menu addItemWithTitle:@"Convert to E4B…" action:@selector(convertFromMenu:) keyEquivalent:@""]; i2.tag = 2; i2.target = self;
     NSMenuItem *i4 = [menu addItemWithTitle:@"Show in Finder" action:@selector(revealFromMenu:) keyEquivalent:@""]; i4.tag = 4; i4.target = self;
-    [EDTheme styleLCDMenu:menu]; _table.menu = menu;
+    [EDTheme styleLCDMenu:menu]; _table.menu = menu; [EDTheme useLCDContextMenuOn:_table];
     return self;
 }
 /// A bank is an EOS IFF file ("FORM", a length, "E4B0") or an Emulator 3X / ESI-32 bank ("EMULATOR 3X" header).
@@ -56,6 +56,7 @@
     }
     [_table reloadData];
 }
+static NSString *bankKind(NSURL *u);
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)t { return (NSInteger)_rows.count; }
 - (NSTableRowView *)tableView:(NSTableView *)t rowViewForRow:(NSInteger)r { return [EDTheme lcdRowView]; }
 - (NSView *)tableView:(NSTableView *)t viewForTableColumn:(NSTableColumn *)c row:(NSInteger)r {
@@ -70,6 +71,7 @@
         [NSLayoutConstraint activateConstraints:@[[s.leadingAnchor constraintEqualToAnchor:v.leadingAnchor constant:8], [s.trailingAnchor constraintEqualToAnchor:v.trailingAnchor constant:-8], [s.centerYAnchor constraintEqualToAnchor:v.centerYAnchor]]];
     }
     NSDictionary *row = _rows[r]; v.textField.stringValue = row[@"title"]; [(NSTextField *)v.objectValue setStringValue:row[@"detail"]];
+    v.toolTip = nil;   // no tool tip over the rows: it would cover the right-click menu
     return v;
 }
 /// "EMU3" = Emulator 3X / ESI-32, "E4B" = EOS bank, nil = something else

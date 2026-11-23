@@ -65,12 +65,47 @@
 - (void)mouseUp:(NSEvent *)e {
     if (!_item.enabled) return;
     NSMenuItem *i = _item; NSPopUpButton *p = _popup; [i.menu cancelTracking];
-    dispatch_async(dispatch_get_main_queue(), ^{
+    // Run the action only once the menu's event-tracking loop has ended. A GCD block can fire while the menu is still tracking, and a
+    // dialog opened from there (an open/save panel) would start inside that loop and receive no keyboard input.
+    [NSRunLoop.mainRunLoop performInModes:@[NSDefaultRunLoopMode] block:^{
         if (p) { [p selectItem:i]; if (p.action) [NSApp sendAction:p.action to:p.target from:p]; }
         else if (i.action) [NSApp sendAction:i.action to:i.target from:i];
-    });
+    }];
 }
 @end
+
+// ---- A green LCD pop-up for the key menus. The system menu always adds its own pale padding above and below the items, so the key menus
+// (Utils, Browse) open this borderless panel instead: items edge to edge inside a black frame.
+@interface EDLCDPopRow : NSView
+@property (nonatomic, copy) void (^pick)(NSMenuItem *);
+- (instancetype)initWithItem:(NSMenuItem *)i width:(CGFloat)w;
+@end
+@implementation EDLCDPopRow { BOOL _hover; NSMenuItem *_item; }
+- (instancetype)initWithItem:(NSMenuItem *)i width:(CGFloat)w { if ((self = [super initWithFrame:NSMakeRect(0, 0, w, i.isSeparatorItem ? 7 : 24)])) { _item = i; } return self; }
+- (void)updateTrackingAreas {
+    [super updateTrackingAreas]; for (NSTrackingArea *t in self.trackingAreas.copy) [self removeTrackingArea:t];
+    [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect owner:self userInfo:nil]];
+}
+- (void)mouseEntered:(NSEvent *)e { _hover = YES; [self setNeedsDisplay:YES]; }
+- (void)mouseExited:(NSEvent *)e { _hover = NO; [self setNeedsDisplay:YES]; }
+- (BOOL)acceptsFirstMouse:(NSEvent *)e { return YES; }
+- (void)drawRect:(NSRect)r {
+    if (_item.isSeparatorItem) { [EDTheme.lcdBackground setFill]; NSRectFill(self.bounds); [[EDTheme.lcdInk colorWithAlphaComponent:0.6] setFill]; NSRectFill(NSMakeRect(6, floor(NSMidY(self.bounds)), NSWidth(self.bounds) - 12, 1)); return; }
+    BOOL on = _item.enabled;
+    [(on && _hover ? [[EDTheme lcdBackground] shadowWithLevel:0.25] : [EDTheme lcdBackground]) setFill]; NSRectFill(self.bounds);
+    NSDictionary *a = @{NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: on ? [EDTheme lcdInk] : [[EDTheme lcdInk] colorWithAlphaComponent:0.4]};
+    NSSize sz = [_item.title sizeWithAttributes:a];
+    [_item.title drawAtPoint:NSMakePoint(16, NSMidY(self.bounds) - sz.height / 2) withAttributes:a];
+}
+- (void)mouseUp:(NSEvent *)e { if (!_item.isSeparatorItem && _item.enabled && _pick) _pick(_item); }
+@end
+
+static NSPanel *gPopPanel; static id gPopMouseMonitor; static id gPopResign;
+static void EDClosePop(void) {
+    if (gPopMouseMonitor) { [NSEvent removeMonitor:gPopMouseMonitor]; gPopMouseMonitor = nil; }
+    if (gPopResign) { [NSNotificationCenter.defaultCenter removeObserver:gPopResign]; gPopResign = nil; }
+    [gPopPanel orderOut:nil]; gPopPanel = nil;
+}
 
 // A faint reflection on the glass: a soft diagonal sheen over the upper part of the screen, plus a hairline highlight along the top edge.
 static void DrawGlare(NSRect b, CGFloat radius) {
@@ -132,8 +167,14 @@ static const CGFloat kArrowH = 14;
 - (NSRect)upBox { return NSMakeRect(0, self.isFlipped ? 0 : NSHeight(self.bounds) - kArrowH, NSWidth(self.bounds), kArrowH); }
 - (NSRect)downBox { return NSMakeRect(0, self.isFlipped ? NSHeight(self.bounds) - kArrowH : 0, NSWidth(self.bounds), kArrowH); }
 - (NSRect)trackRect { NSRect b = self.bounds; return NSMakeRect(0, kArrowH, NSWidth(b), MAX(NSHeight(b) - 2 * kArrowH, 0)); }   // symmetrical, so flipping does not matter
+/// Nothing to scroll (the content fits, an empty list): the thumb fills the whole track.
+- (BOOL)contentFits {
+    NSScrollView *sv = [self.superview isKindOfClass:NSScrollView.class] ? (NSScrollView *)self.superview : nil; NSView *d = sv.documentView;
+    if (!d) return self.knobProportion >= 1;
+    NSEdgeInsets in = sv.contentInsets; return NSHeight(d.frame) <= NSHeight(sv.contentView.bounds) + in.top + in.bottom + 1;
+}
 - (NSRect)thumbRect {
-    NSRect t = [self trackRect]; CGFloat th = MAX(14, floor(NSHeight(t) * (self.knobProportion > 0 ? self.knobProportion : 1)));
+    NSRect t = [self trackRect]; if ([self contentFits]) return t; CGFloat th = MAX(14, floor(NSHeight(t) * (self.knobProportion > 0 ? self.knobProportion : 1)));
     th = MIN(th, NSHeight(t)); CGFloat v = MAX(0, MIN(1, self.doubleValue));
     CGFloat off = (NSHeight(t) - th) * v;
     return NSMakeRect(0, self.isFlipped ? NSMinY(t) + off : NSMaxY(t) - th - off, NSWidth(t), th);
@@ -141,7 +182,7 @@ static const CGFloat kArrowH = 14;
 - (NSRect)rectForPart:(NSScrollerPart)part {
     switch (part) {
         case NSScrollerKnobSlot: return [self trackRect];
-        case NSScrollerKnob: return self.knobProportion >= 1 ? NSZeroRect : [self thumbRect];
+        case NSScrollerKnob: return [self thumbRect];
         case NSScrollerDecrementLine: case NSScrollerDecrementPage: return self.isFlipped ? [self upBox] : [self upBox];
         case NSScrollerIncrementLine: case NSScrollerIncrementPage: return [self downBox];
         default: return [super rectForPart:part];
@@ -212,13 +253,24 @@ static NSInteger LoadContrast(void) {
     }
     return sContrast;
 }
-static NSColor *ContrastBackground(NSInteger c) {
-    CGFloat t = c / 8.0, k = 1 + 0.12 * t;
-    return [NSColor colorWithCalibratedRed:MIN(1, 0.28 * k) green:MIN(1, 0.50 * k) blue:MIN(1, 0.19 * k) alpha:1];
+// Screen colour: the stock green turned around the colour wheel in 1/48 steps (Shift + the Contrast control).
+static NSInteger sHue; static BOOL sHueLoaded;
+static NSInteger LoadHue(void) {
+    if (!sHueLoaded) { sHueLoaded = YES; sHue = [NSUserDefaults.standardUserDefaults integerForKey:@"LcdHue"]; }
+    return sHue;
 }
-static NSColor *ContrastInk(NSInteger c) {
+static NSColor *ContrastBackgroundH(NSInteger c, NSInteger hs) {
+    CGFloat t = c / 8.0, k = 1 + 0.12 * t;
+    NSColor *g = [NSColor colorWithCalibratedRed:MIN(1, 0.28 * k) green:MIN(1, 0.50 * k) blue:MIN(1, 0.19 * k) alpha:1];
+    if (hs == 0) return g;
+    CGFloat h, sa, br, al; [g getHue:&h saturation:&sa brightness:&br alpha:&al];
+    h = fmod(h + hs / 48.0 + 4, 1.0);
+    return [NSColor colorWithCalibratedHue:h saturation:sa brightness:br alpha:1];
+}
+static NSColor *ContrastBackground(NSInteger c) { return ContrastBackgroundH(c, LoadHue()); }
+static NSColor *ContrastInkH(NSInteger c, NSInteger hs) {
     CGFloat t = c / 8.0, f = t < 0 ? -t * 0.65 : 0;
-    NSColor *bg = ContrastBackground(c);
+    NSColor *bg = ContrastBackgroundH(c, hs);
     return [NSColor colorWithCalibratedRed:0.0 * (1 - f) + bg.redComponent * f green:0.05 * (1 - f) + bg.greenComponent * f blue:0.06 * (1 - f) + bg.blueComponent * f alpha:1];
 }
 static BOOL SameColor(NSColor *a, NSColor *b) {
@@ -243,15 +295,24 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
         [tv reloadData];
     }
     for (NSView *s in v.subviews) Recolor(s, oldBg, newBg, oldInk, newInk);
+    if ([v isKindOfClass:NSTabView.class]) for (NSTabViewItem *it in ((NSTabView *)v).tabViewItems) if (it.view) Recolor(it.view, oldBg, newBg, oldInk, newInk);   // pages that are not showing are not subviews, but must change too
     v.needsDisplay = YES;
 }
+static NSColor *ContrastInk(NSInteger c) { return ContrastInkH(c, LoadHue()); }
 + (NSColor *)lcdBackground { return ContrastBackground(LoadContrast()); }
 + (NSColor *)lcdInk { return ContrastInk(LoadContrast()); }
 + (NSInteger)lcdContrast { return LoadContrast(); }
-+ (void)setLcdContrast:(NSInteger)c {
-    c = MAX(-8, MIN(7, c)); NSInteger old = LoadContrast(); if (c == old) return;
-    NSColor *ob = ContrastBackground(old), *oi = ContrastInk(old), *nb = ContrastBackground(c), *ni = ContrastInk(c);
-    sContrast = c;
++ (void)setLcdContrast:(NSInteger)c { [self applyContrast:MAX(-8, MIN(7, c)) hue:LoadHue()]; }
++ (NSInteger)lcdHue { return LoadHue(); }
++ (void)setLcdHue:(NSInteger)h {
+    h = ((h % 48) + 48) % 48; if (h > 24) h -= 48;   // wraps around the wheel
+    [NSUserDefaults.standardUserDefaults setInteger:h forKey:@"LcdHue"];
+    [self applyContrast:LoadContrast() hue:h];
+}
++ (void)applyContrast:(NSInteger)c hue:(NSInteger)h {
+    NSInteger oc = LoadContrast(), oh = LoadHue(); if (c == oc && h == oh) return;
+    NSColor *ob = ContrastBackgroundH(oc, oh), *oi = ContrastInkH(oc, oh), *nb = ContrastBackgroundH(c, h), *ni = ContrastInkH(c, h);
+    sContrast = c; sHue = h;
     for (NSWindow *w in NSApp.windows) if (w.contentView) Recolor(w.contentView, ob, nb, oi, ni);
 }
 + (NSColor *)labelWhite { return [NSColor colorWithCalibratedWhite:0.93 alpha:1]; }
@@ -299,12 +360,72 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
     EDLCDFrameView *f = [EDLCDFrameView new];
     for (NSView *v in @[s, footer, f]) { v.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:v]; }
     NSLayoutConstraint *fl = [footer.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:8];
+    NSView *rule = [NSView new]; rule.wantsLayer = YES; rule.layer.backgroundColor = NSColor.blackColor.CGColor; rule.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:rule];   // thin black line above the keys; the scroller ends on it
     [NSLayoutConstraint activateConstraints:@[
         [s.topAnchor constraintEqualToAnchor:box.topAnchor], [s.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [s.trailingAnchor constraintEqualToAnchor:box.trailingAnchor],
-        [s.bottomAnchor constraintEqualToAnchor:footer.topAnchor constant:-6],
+        [rule.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [rule.trailingAnchor constraintEqualToAnchor:box.trailingAnchor], [rule.heightAnchor constraintEqualToConstant:1], [rule.bottomAnchor constraintEqualToAnchor:footer.topAnchor constant:-4],
+        [s.bottomAnchor constraintEqualToAnchor:rule.topAnchor],
         fl, [footer.trailingAnchor constraintLessThanOrEqualToAnchor:box.trailingAnchor constant:-8], [footer.bottomAnchor constraintEqualToAnchor:box.bottomAnchor constant:-8],
         [f.topAnchor constraintEqualToAnchor:box.topAnchor], [f.bottomAnchor constraintEqualToAnchor:box.bottomAnchor], [f.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [f.trailingAnchor constraintEqualToAnchor:box.trailingAnchor]]];
     return box;
+}
+/// Shows `m` as the LCD pop-up. `anchor` is in screen coordinates: a button's frame (opens below it, or above when there is no room) or the
+/// zero-size rect of a right-click (the corner opens at the pointer).
+static void EDShowPop(NSMenu *m, NSRect anchor, NSScreen *screen) {
+    EDClosePop(); [m update];   // run the menu's validation so items that cannot work now show greyed out
+    NSMutableArray<NSMenuItem *> *items = [NSMutableArray array]; for (NSMenuItem *i in m.itemArray) if (!i.hidden) [items addObject:i];
+    for (NSInteger i = (NSInteger)items.count - 1; i > 0; i--) if (items[i].isSeparatorItem && items[i - 1].isSeparatorItem) [items removeObjectAtIndex:i];   // hidden items can leave two rules side by side
+    while (items.firstObject.isSeparatorItem) [items removeObjectAtIndex:0]; while (items.lastObject.isSeparatorItem) [items removeLastObject];
+    if (!items.count) return;
+    NSDictionary *fa = @{NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold]};
+    CGFloat w = 0, h = 0; for (NSMenuItem *i in items) { if (!i.isSeparatorItem) w = MAX(w, ceil([i.title sizeWithAttributes:fa].width) + 36); h += i.isSeparatorItem ? 7 : 24; }
+    NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, w, h)]; content.wantsLayer = YES;
+    content.layer.backgroundColor = EDTheme.lcdBackground.CGColor; content.layer.borderColor = NSColor.blackColor.CGColor; content.layer.borderWidth = 1.5; content.layer.cornerRadius = 4; content.layer.masksToBounds = YES;
+    CGFloat yy = h;
+    for (NSMenuItem *it in items) {
+        EDLCDPopRow *row = [[EDLCDPopRow alloc] initWithItem:it width:w]; yy -= NSHeight(row.frame); row.frame = NSMakeRect(0, yy, w, NSHeight(row.frame));
+        row.pick = ^(NSMenuItem *i) { EDClosePop(); [NSRunLoop.mainRunLoop performInModes:@[NSDefaultRunLoopMode] block:^{ if (i.action) [NSApp sendAction:i.action to:i.target from:i]; }]; };
+        [content addSubview:row];
+    }
+    NSRect vis = (screen ?: NSScreen.mainScreen).visibleFrame; BOOL point = NSIsEmptyRect(anchor);
+    CGFloat x = MIN(MAX(NSMinX(anchor), NSMinX(vis)), NSMaxX(vis) - w);
+    CGFloat below = point ? NSMinY(anchor) - h : NSMinY(anchor) - h - 2, above = point ? NSMinY(anchor) : NSMaxY(anchor) + 2;
+    CGFloat y = below >= NSMinY(vis) ? below : above;
+    NSPanel *pn = [[NSPanel alloc] initWithContentRect:NSMakeRect(x, y, w, h) styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel backing:NSBackingStoreBuffered defer:NO];
+    pn.opaque = NO; pn.backgroundColor = NSColor.clearColor; pn.hasShadow = YES; pn.level = NSPopUpMenuWindowLevel; pn.contentView = content; pn.releasedWhenClosed = NO;
+    gPopPanel = pn; [pn orderFront:nil];
+    gPopMouseMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown | NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
+        if (e.type == NSEventTypeKeyDown) { if (e.keyCode == 53) { EDClosePop(); return nil; } return e; }
+        if (e.window == gPopPanel) return e;
+        EDClosePop(); return nil;   // a click outside only closes the menu
+    }];
+    gPopResign = [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidResignActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *n) { EDClosePop(); }];
+}
++ (void)popUpLCDMenu:(NSMenu *)m fromButton:(NSButton *)b {
+    if (!b.window) return;
+    EDShowPop(m, [b.window convertRectToScreen:[b convertRect:b.bounds toView:nil]], b.window.screen);
+}
+/// Right-click (or Control-click) on `v` opens its `menu` as the LCD pop-up instead of the system menu. The view's own -menuForEvent: still runs, so a table
+/// selects / remembers the clicked row, and the menu delegate is asked to update the items first.
++ (void)useLCDContextMenuOn:(NSView *)v {
+    static NSHashTable<NSView *> *views; static id monitor;
+    if (!views) views = [NSHashTable weakObjectsHashTable];
+    [views addObject:v];
+    if (monitor) return;
+    monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskRightMouseDown | NSEventMaskLeftMouseDown handler:^NSEvent *(NSEvent *e) {
+        if (e.type == NSEventTypeLeftMouseDown && !(e.modifierFlags & NSEventModifierFlagControl)) return e;
+        NSView *top = e.window.contentView; if (!top) return e;
+        NSView *hit = [top hitTest:[top.superview convertPoint:e.locationInWindow fromView:nil]];
+        for (NSView *view in views.allObjects) {
+            NSView *scope = view.enclosingScrollView ?: view; if (!hit || ![hit isDescendantOf:scope]) continue;
+            NSMenu *menu = [view menuForEvent:e]; if (!menu) return e;
+            if ([menu.delegate respondsToSelector:@selector(menuNeedsUpdate:)]) [menu.delegate menuNeedsUpdate:menu];
+            NSPoint scr = [e.window convertPointToScreen:e.locationInWindow];
+            EDShowPop(menu, NSMakeRect(scr.x, scr.y, 0, 0), e.window.screen);
+            return nil;
+        }
+        return e;
+    }];
 }
 + (void)styleLCDMenu:(NSMenu *)m {
     m.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
@@ -410,8 +531,10 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
     w.contentView = box;
     EDLCDDialogHandler *h = [EDLCDDialogHandler new];
     NSTextField *g = [NSTextField labelWithString:glyph]; g.font = [EDTheme lcdFont:44]; g.textColor = EDTheme.lcdInk; g.frame = NSMakeRect(24, H - 110, 50, 60); [box addSubview:g];
-    NSTextField *t = [NSTextField wrappingLabelWithString:msg]; t.font = [EDTheme lcdFont:15]; t.textColor = EDTheme.lcdInk;
-    t.frame = NSMakeRect(86, 66, W - 86 - 24, H - 66 - 24); t.preferredMaxLayoutWidth = W - 110; [box addSubview:t];
+    NSTextField *t = [NSTextField ed_wrappingLabelWithString:msg]; t.font = [EDTheme lcdFont:15]; t.textColor = EDTheme.lcdInk;
+    t.frame = NSMakeRect(86, 66, W - 86 - 56, H - 66 - 24); t.preferredMaxLayoutWidth = W - 142;   // stops short of the close box in the corner [box addSubview:t];
+    EDLCDButton *x = [[EDLCDButton alloc] initWithFrame:NSMakeRect(W - 14 - 30, H - 14 - 30, 30, 30)]; x.title = @"×"; x.target = h; x.action = @selector(pick:); x.tag = -1; x.bordered = NO;   // close box: same as Esc
+    x.toolTip = @"Close"; [box addSubview:x];
     NSInteger n = (NSInteger)titles.count; const CGFloat bw = 130, margin = 24;
     for (NSInteger i = 0; i < n; i++) {
         CGFloat x = n == 1 ? W - margin - bw : margin + i * ((W - 2 * margin - bw) / MAX(n - 1, 1));
@@ -472,7 +595,30 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
 @implementation EDWheelPopUp {
     CGFloat _acc;
 }
+- (BOOL)isContrast { return [self.identifier isEqual:@"contrast"]; }
+- (void)resetContrast {
+    [EDTheme setLcdHue:0];
+    NSInteger i = [self indexOfItemWithTitle:@"+0"]; if (i >= 0) { [self selectItemAtIndex:i]; [self sendAction:self.action to:self.target]; }
+}
+// Contrast: a double click sets it (and the screen colour) back to the default; the menu opens after the double-click time
+- (void)mouseDown:(NSEvent *)e {
+    if (![self isContrast] || !self.isEnabled) { [super mouseDown:e]; return; }
+    if (e.clickCount >= 2) { [self resetContrast]; return; }
+    NSEvent *up = [self.window nextEventMatchingMask:NSEventMaskLeftMouseUp untilDate:[NSDate dateWithTimeIntervalSinceNow:0.25] inMode:NSEventTrackingRunLoopMode dequeue:YES];
+    if (!up) { [super mouseDown:e]; return; }    // held down: the menu as usual
+    NSEvent *dn = [self.window nextEventMatchingMask:NSEventMaskLeftMouseDown untilDate:[NSDate dateWithTimeIntervalSinceNow:NSEvent.doubleClickInterval] inMode:NSEventTrackingRunLoopMode dequeue:YES];
+    if (dn) { [self.window nextEventMatchingMask:NSEventMaskLeftMouseUp untilDate:[NSDate dateWithTimeIntervalSinceNow:0.3] inMode:NSEventTrackingRunLoopMode dequeue:YES]; [self resetContrast]; return; }
+    [self performClick:nil];
+}
 - (void)scrollWheel:(NSEvent *)e {
+    if ([self isContrast] && (e.modifierFlags & NSEventModifierFlagShift) && self.isEnabled) {   // Shift + wheel: the colour of the green screens
+        CGFloat d = e.scrollingDeltaY ?: e.scrollingDeltaX; if (d == 0) return;
+        if (e.phase == NSEventPhaseBegan || e.phase == NSEventPhaseMayBegin) _acc = 0;
+        _acc += e.hasPreciseScrollingDeltas ? d : (d > 0 ? 1 : -1);
+        CGFloat step = e.hasPreciseScrollingDeltas ? 10 : 1;
+        while (fabs(_acc) >= step) { NSInteger dir = _acc > 0 ? 1 : -1; _acc -= dir * step; [EDTheme setLcdHue:EDTheme.lcdHue + dir]; }
+        return;
+    }
     if (!self.isEnabled || self.numberOfItems < 2) { [super scrollWheel:e]; return; }
     CGFloat dy = e.scrollingDeltaY;
     if (dy == 0) { [super scrollWheel:e]; return; }
@@ -489,4 +635,8 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
         [self sendAction:self.action to:self.target];
     }
 }
+@end
+
+@implementation NSTextField (EDLabels)
++ (instancetype)ed_wrappingLabelWithString:(NSString *)s { NSTextField *f = [NSTextField wrappingLabelWithString:s]; f.selectable = NO; return f; }
 @end

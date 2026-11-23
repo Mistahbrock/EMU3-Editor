@@ -458,6 +458,60 @@ static void putBE32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v >> 24, v >
     [_presets addObject:p]; return p;
 }
 
++ (NSData *)emptyBankData {
+    static const uint8_t d[20] = {'F','O','R','M', 0,0,0,8, 'E','4','B','0', 'T','O','C','1', 0,0,0,0};   // a form holding only an empty table of contents
+    return [NSData dataWithBytes:d length:sizeof d];
+}
+
+/// Inserts `c` at chunk index `at` and lists it in the table of contents right after the record of the chunk before it.
+- (void)insertChunk:(EDChunk *)c at:(NSUInteger)at number:(uint16_t)number name:(NSString *)name {
+    NSInteger recordAt = -1;
+    if (_tocChunk >= 0) { for (NSUInteger r = 0; r < _tocMap.count; r++) if (_tocMap[r].integerValue == (NSInteger)at - 1) recordAt = (NSInteger)r + 1; if (recordAt < 0) recordAt = (NSInteger)_tocMap.count; }
+    [self shiftChunkIndicesFrom:at by:1];
+    [_chunks insertObject:c atIndex:at];
+    if (_tocChunk >= 0) {
+        uint8_t rec[32] = {0}; memcpy(rec, c.ident.UTF8String, 4); wrBE16(rec + 12, number); writeName(rec + 14, 16, name);
+        [_chunks[_tocChunk].data replaceBytesInRange:NSMakeRange((NSUInteger)recordAt * 32, 0) withBytes:rec length:32];
+        [_tocMap insertObject:@(at) atIndex:(NSUInteger)recordAt];
+    }
+}
+
+- (NSArray<EDPreset *> *)importPresets:(NSArray<EDPreset *> *)presets fromBank:(EDBank *)src samplesCopied:(NSUInteger *)copied missingSamples:(NSArray<NSNumber *> **)missing {
+    if (copied) *copied = 0;
+    if (![_formType hasPrefix:@"E4B"] || ![src.formType hasPrefix:@"E4B"]) return nil;
+    NSMutableDictionary<NSNumber *, NSNumber *> *map = [NSMutableDictionary dictionary];     // source sample number -> number in this bank
+    NSMutableArray<NSNumber *> *gone = [NSMutableArray array];
+    NSMutableArray<EDPreset *> *added = [NSMutableArray array];
+    for (EDPreset *sp in presets) {
+        if (sp.kind != EDPresetKindE4 || ![src.presets containsObject:sp]) continue;
+        // the sample numbers this preset uses
+        EDParam *sampleParam = nil; for (EDParam *q in [sp paramsForScope:EDScopeRef]) if (q.isSample) sampleParam = q;
+        for (NSInteger v = 0; v < [sp voiceCount]; v++) for (NSInteger r = 0; r < [sp refCountInVoice:v]; r++) {
+            NSNumber *n = @([sp valueOfParam:sampleParam voice:v ref:r]); if (map[n] || [gone containsObject:n]) continue;
+            EDSample *found = nil; for (EDSample *sm in src.samples) if (sm.number == n.integerValue) { found = sm; break; }
+            if (!found) { [gone addObject:n]; continue; }
+            uint16_t num = 1; { BOOL used; do { used = NO; for (EDSample *e in _samples) if (e.number == num) { used = YES; num++; break; } } while (used && num < 1000); }
+            if (num >= 1000) return nil;                                                          // no free sample number left
+            NSMutableData *d = [[found chunkData] mutableCopy]; wrBE16(d.mutableBytes, num);
+            NSUInteger at = _chunks.count; if (_samples.count) { at = 0; for (EDSample *e in _samples) at = MAX(at, e.chunkIndex + 1); }
+            EDChunk *c = [EDChunk new]; c.ident = src.chunks[found.chunkIndex].ident; c.data = d;
+            NSError *err = nil; EDSample *ns = [EDSample sampleFromChunkData:d index:at error:&err]; if (!ns) return nil;
+            [self insertChunk:c at:at number:num name:found.name];
+            [_samples addObject:ns]; map[n] = @(num); if (copied) (*copied)++;
+        }
+        uint16_t number = 0; { BOOL used; do { used = NO; for (EDPreset *e in _presets) if (e.number == number) { used = YES; number++; break; } } while (used && number < 999); }
+        NSUInteger at = _chunks.count; if (_presets.count) { at = 0; for (EDPreset *e in _presets) at = MAX(at, e.chunkIndex + 1); }
+        EDChunk *c = [EDChunk new]; c.ident = @"E4P1"; c.data = [[sp chunkData] mutableCopy];
+        [self insertChunk:c at:at number:number name:sp.name];
+        EDPreset *np = [EDPreset new]; [np loadFromChunkData:c.data index:at]; np.number = number; np.dirty = YES;
+        for (NSInteger v = 0; v < [np voiceCount]; v++) for (NSInteger r = 0; r < [np refCountInVoice:v]; r++) {
+            NSNumber *m = map[@([np valueOfParam:sampleParam voice:v ref:r])]; if (m) [np setValue:m.integerValue ofParam:sampleParam voice:v ref:r]; }
+        [_presets addObject:np]; [added addObject:np];
+    }
+    if (missing) *missing = gone;
+    return added;
+}
+
 - (NSData *)bankDataForPreset:(EDPreset *)preset missingSamples:(NSArray<NSNumber *> **)missing {
     if (![_formType hasPrefix:@"E4B"] || preset.kind != EDPresetKindE4 || ![_presets containsObject:preset]) return nil;
     // sample numbers used by the preset's zones, in first-use order

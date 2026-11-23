@@ -12,22 +12,26 @@
 		08F35643C231B300AAA9C36E /* EDPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 9EFCE0EC7C3A74FD460C454B /* EDPlayer.m */; };
 		0A50FED468DCF7BCC5B27B76 /* EDDiskIcons.m in Sources */ = {isa = PBXBuildFile; fileRef = 0BD6DC64A92F8D097982F5F9 /* EDDiskIcons.m */; };
 		0D8D69F539B599EF09A49517 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 231B24616C3B499838F3C77E /* AppIcon.icns */; };
+		12E9CB419E94FDAA68BFFD8A /* EDSettings.m in Sources */ = {isa = PBXBuildFile; fileRef = 0CE93BEF948470FFED61429E /* EDSettings.m */; };
 		141033AAC590EAEB702CF88F /* EDWaveformView.m in Sources */ = {isa = PBXBuildFile; fileRef = F4988E85FDF2B2724BDD0767 /* EDWaveformView.m */; };
 		15B3A61A1137B26E26255C9B /* EDHomeList.m in Sources */ = {isa = PBXBuildFile; fileRef = 84DD7876BC48F72C7BBFD08A /* EDHomeList.m */; };
 		20D4A6645D0D1E51B84F00CB /* CoreMIDI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 359CC8504CC82A7D6BA5F2C9 /* CoreMIDI.framework */; };
 		34D76A148E8D9511E7EAEE46 /* emu-logo.png in Resources */ = {isa = PBXBuildFile; fileRef = 26D09E8038B97782E3E9D2AB /* emu-logo.png */; };
 		37C639447D2F2C525C0F20E3 /* EDBlueSCSIIni.m in Sources */ = {isa = PBXBuildFile; fileRef = 310C9F6278ACEE1A7C6CEA06 /* EDBlueSCSIIni.m */; };
+		38C32BFF7AD37796CB9E7C50 /* Help in Resources */ = {isa = PBXBuildFile; fileRef = 216C934311123FE2646B87D1 /* Help */; };
 		3905D1D7CC7DAF9C769B0D87 /* EDPresetEditor.m in Sources */ = {isa = PBXBuildFile; fileRef = 62EBEF7779DF24CB2C61D80A /* EDPresetEditor.m */; };
 		3A46A1C15919B2699331F046 /* EDMemoryView.m in Sources */ = {isa = PBXBuildFile; fileRef = CCFFF094349C7F4792DFC564 /* EDMemoryView.m */; };
 		4E67E5FDBA1CDA18F68A2F87 /* EDNewImage.m in Sources */ = {isa = PBXBuildFile; fileRef = C12792A4EA81594A84AE4088 /* EDNewImage.m */; };
 		4E9456491E7E774A2FA06DA7 /* EDTheme.m in Sources */ = {isa = PBXBuildFile; fileRef = 08AC03D2B6EB7F472CD9C935 /* EDTheme.m */; };
 		59E1ADC00564F6699A11DE96 /* EMU3Filesystem.m in Sources */ = {isa = PBXBuildFile; fileRef = 67EEADACC5BFF0C89BC924B4 /* EMU3Filesystem.m */; };
 		6FE6325A296C1CD7A0B2F90D /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 01E7FDB941E71D06C5A92086 /* main.m */; };
+		809198BDFE95E375FDED2CF6 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4301A813C5E9C149AE409F23 /* WebKit.framework */; };
 		865C404ACD01BB6F8468DD11 /* EDMIDIPort.m in Sources */ = {isa = PBXBuildFile; fileRef = 4702EB4CDBEE22A37830AA5B /* EDMIDIPort.m */; };
 		88ADF1D05448E513D3924C6B /* EDBank.m in Sources */ = {isa = PBXBuildFile; fileRef = CF51C182835E2EAEA8F8465A /* EDBank.m */; };
 		960F3B1B7C5D2F42829A0C1C /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = DDF25289DEACAAD9A728C4A1 /* AppDelegate.m */; };
 		9C1D2ADCA8E82ADA89929C98 /* EDMIDIEditor.m in Sources */ = {isa = PBXBuildFile; fileRef = F8546B5B43B8AB1C11E3073E /* EDMIDIEditor.m */; };
 		9EB8208B02FF3205B61F5976 /* EDEmuEgg.m in Sources */ = {isa = PBXBuildFile; fileRef = C47C203F32B4B95B751DB20A /* EDEmuEgg.m */; };
+		A507936B71B93D8E7AF4BF54 /* EDHelp.m in Sources */ = {isa = PBXBuildFile; fileRef = C232E68A6835C5A980361A14 /* EDHelp.m */; };
 		B51BD270A42BD9E0E62ABACD /* EDSMDI.m in Sources */ = {isa = PBXBuildFile; fileRef = C6C4E055C65AAEFB3F24748A /* EDSMDI.m */; };
 		B74764B5CE89A70A94B103B8 /* EDSMDIPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 796703E0E226082B0D4DAAB3 /* EDSMDIPanel.m */; };
 		B8C798363655B4210CC7E6C8 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 89C1DE170CE76C55E6C1C4CE /* AVFoundation.framework */; };
@@ -37,9 +41,11 @@
 		C10F1AD1B43441CE12AAC3F8 /* EMU3Directory.m in Sources */ = {isa = PBXBuildFile; fileRef = BC9B9B29623B7E1A1A9D8CF3 /* EMU3Directory.m */; };
 		CB17EF8C02477FCA5AE4B578 /* NSData+EDWrite.m in Sources */ = {isa = PBXBuildFile; fileRef = A4A10A9CCD3B8D6486172DC1 /* NSData+EDWrite.m */; };
 		D1D188E1A11076E900D4BE80 /* EDSDSPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 9B7323018C68460DE03AC920 /* EDSDSPanel.m */; };
+		D5BC926D6A47688B6913D4A8 /* EDSamplerRemote.m in Sources */ = {isa = PBXBuildFile; fileRef = 7E2CC471C6DA5DC9F9ED9ACF /* EDSamplerRemote.m */; };
 		D76864DC93AA8A3A5710C73D /* EDAlert.m in Sources */ = {isa = PBXBuildFile; fileRef = F1D177BF2D4459915B9ADE31 /* EDAlert.m */; };
 		DBABA829B47AEA4A9F5132DD /* EDSample+Ops.m in Sources */ = {isa = PBXBuildFile; fileRef = FDB83EEC7537BB9A96DA457B /* EDSample+Ops.m */; };
 		DBDD8D36AD4E0E9E50F0FF9B /* EDSDS.m in Sources */ = {isa = PBXBuildFile; fileRef = 0ADE04AA74FB7123A801404C /* EDSDS.m */; };
+		E06DE2B671B4FD04DAC7CDD4 /* EDRemoteDisk.m in Sources */ = {isa = PBXBuildFile; fileRef = BF96D096E63D7EB86D160D89 /* EDRemoteDisk.m */; };
 		E4BEDCD2CB33CCCFB98C252C /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 13A520F2107C8443E5D25248 /* AudioToolbox.framework */; };
 		EE8B8D48E7DDAB1CB84D9190 /* EDLegacyBank.m in Sources */ = {isa = PBXBuildFile; fileRef = B13449E07912359328239D63 /* EDLegacyBank.m */; };
 		F484D772D92927546094E490 /* EMU3File.m in Sources */ = {isa = PBXBuildFile; fileRef = 6C58FC502DE57AAE3B9E7409 /* EMU3File.m */; };
@@ -51,12 +57,15 @@
 		08AC03D2B6EB7F472CD9C935 /* EDTheme.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDTheme.m; sourceTree = "<group>"; };
 		0ADE04AA74FB7123A801404C /* EDSDS.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSDS.m; sourceTree = "<group>"; };
 		0BD6DC64A92F8D097982F5F9 /* EDDiskIcons.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDDiskIcons.m; sourceTree = "<group>"; };
+		0CE93BEF948470FFED61429E /* EDSettings.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSettings.m; sourceTree = "<group>"; };
 		13A520F2107C8443E5D25248 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		13A9405BA478E949F44C38A2 /* EDBlueSCSIIni.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDBlueSCSIIni.h; sourceTree = "<group>"; };
 		1A03A19154F5070E0233C155 /* EDBankInternal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDBankInternal.h; sourceTree = "<group>"; };
 		1BEFFF3296DEA7D713AEBE88 /* EDUtils.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDUtils.m; sourceTree = "<group>"; };
 		1D0A9D8531AD80B766795658 /* EDUtils.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDUtils.h; sourceTree = "<group>"; };
+		1E557BC91013AC0D52E01074 /* EDSamplerRemote.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSamplerRemote.h; sourceTree = "<group>"; };
 		2033D929DB700788CB572397 /* EMU3Directory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EMU3Directory.h; sourceTree = "<group>"; };
+		216C934311123FE2646B87D1 /* Help */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Help; path = Resources/Help; sourceTree = SOURCE_ROOT; };
 		217556318DC977B2FA67F919 /* EDSDSPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSDSPanel.h; sourceTree = "<group>"; };
 		231B24616C3B499838F3C77E /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		26D09E8038B97782E3E9D2AB /* emu-logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "emu-logo.png"; sourceTree = "<group>"; };
@@ -68,6 +77,7 @@
 		359CC8504CC82A7D6BA5F2C9 /* CoreMIDI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMIDI.framework; path = System/Library/Frameworks/CoreMIDI.framework; sourceTree = SDKROOT; };
 		40C05C9C4389F72821C3BA41 /* EDPresetEditor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDPresetEditor.h; sourceTree = "<group>"; };
 		4270B6C2EF226B180DF3E0DD /* EMU3Types.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EMU3Types.h; sourceTree = "<group>"; };
+		4301A813C5E9C149AE409F23 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		435C82BF19E62527A14ABAF9 /* EDSample+Ops.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "EDSample+Ops.h"; sourceTree = "<group>"; };
 		4702EB4CDBEE22A37830AA5B /* EDMIDIPort.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDMIDIPort.m; sourceTree = "<group>"; };
 		488B2EA03956BF25532F5FF8 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
@@ -80,6 +90,7 @@
 		7843E431F70C0C02AC53E619 /* EDMainWindowController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDMainWindowController.h; sourceTree = "<group>"; };
 		796703E0E226082B0D4DAAB3 /* EDSMDIPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSMDIPanel.m; sourceTree = "<group>"; };
 		7C3DD9F7D382A0383759FE26 /* EMU3Filesystem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EMU3Filesystem.h; sourceTree = "<group>"; };
+		7E2CC471C6DA5DC9F9ED9ACF /* EDSamplerRemote.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSamplerRemote.m; sourceTree = "<group>"; };
 		8487FD792BDDBE2C3672C6B5 /* EDMIDIPort.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDMIDIPort.h; sourceTree = "<group>"; };
 		84DD7876BC48F72C7BBFD08A /* EDHomeList.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDHomeList.m; sourceTree = "<group>"; };
 		89C1DE170CE76C55E6C1C4CE /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
@@ -89,6 +100,7 @@
 		95409AB0191B83550CFF5D7D /* EDPreset+Params.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "EDPreset+Params.h"; sourceTree = "<group>"; };
 		966993BE05BB7D56704D14DB /* EDPresetLCD.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDPresetLCD.h; sourceTree = "<group>"; };
 		985465B681A9864B69A13D3A /* EDPresetLCD.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDPresetLCD.m; sourceTree = "<group>"; };
+		98B2ED6EEA3CFD499DF04D49 /* EDSettings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSettings.h; sourceTree = "<group>"; };
 		99A190C17BEED57349E83F37 /* EDHomeList.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDHomeList.h; sourceTree = "<group>"; };
 		9B7323018C68460DE03AC920 /* EDSDSPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSDSPanel.m; sourceTree = "<group>"; };
 		9C36094669FEF944346A3CFD /* EMU3Editor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EMU3Editor.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -98,7 +110,9 @@
 		B13449E07912359328239D63 /* EDLegacyBank.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDLegacyBank.m; sourceTree = "<group>"; };
 		B785C6D42D66DD5DA8D175AF /* EDWaveformView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDWaveformView.h; sourceTree = "<group>"; };
 		BC9B9B29623B7E1A1A9D8CF3 /* EMU3Directory.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EMU3Directory.m; sourceTree = "<group>"; };
+		BF96D096E63D7EB86D160D89 /* EDRemoteDisk.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDRemoteDisk.m; sourceTree = "<group>"; };
 		C12792A4EA81594A84AE4088 /* EDNewImage.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDNewImage.m; sourceTree = "<group>"; };
+		C232E68A6835C5A980361A14 /* EDHelp.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDHelp.m; sourceTree = "<group>"; };
 		C3E1DF395177AB2CCAAF4172 /* EDBankConverter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDBankConverter.h; sourceTree = "<group>"; };
 		C47C203F32B4B95B751DB20A /* EDEmuEgg.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDEmuEgg.m; sourceTree = "<group>"; };
 		C6C4E055C65AAEFB3F24748A /* EDSMDI.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSMDI.m; sourceTree = "<group>"; };
@@ -107,11 +121,13 @@
 		CF51C182835E2EAEA8F8465A /* EDBank.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDBank.m; sourceTree = "<group>"; };
 		D1C2B47E8D8ED040C9D25288 /* EDSMDIPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSMDIPanel.h; sourceTree = "<group>"; };
 		D3E290799052FB9884DF67AE /* EDDefaultPreset.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDDefaultPreset.h; sourceTree = "<group>"; };
+		D94B0347149BAF56B43DB5AA /* EDHelp.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDHelp.h; sourceTree = "<group>"; };
 		DDF25289DEACAAD9A728C4A1 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
 		E714E4D2A3A5A7743933833D /* EDSDS.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSDS.h; sourceTree = "<group>"; };
 		E9B2E8763796D4C17FB060BA /* EDMemoryView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDMemoryView.h; sourceTree = "<group>"; };
 		EAD5A8D0212D94547674EB6D /* EDEmuEgg.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDEmuEgg.h; sourceTree = "<group>"; };
 		EEDACCC676DFA9154A12C218 /* EDPreset+Params.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "EDPreset+Params.m"; sourceTree = "<group>"; };
+		EF2595852BB2060CE555105F /* EDRemoteDisk.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDRemoteDisk.h; sourceTree = "<group>"; };
 		F00B33DF6ACB49DA0BF1CFC8 /* EDLegacyBank.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDLegacyBank.h; sourceTree = "<group>"; };
 		F1D177BF2D4459915B9ADE31 /* EDAlert.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDAlert.m; sourceTree = "<group>"; };
 		F33EBDE1A4B246BD48E163B3 /* EMU3File.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EMU3File.h; sourceTree = "<group>"; };
@@ -129,6 +145,7 @@
 				B8C798363655B4210CC7E6C8 /* AVFoundation.framework in Frameworks */,
 				20D4A6645D0D1E51B84F00CB /* CoreMIDI.framework in Frameworks */,
 				BA95491ABC32E190A50E1668 /* UniformTypeIdentifiers.framework in Frameworks */,
+				809198BDFE95E375FDED2CF6 /* WebKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -169,6 +186,10 @@
 			children = (
 				8487FD792BDDBE2C3672C6B5 /* EDMIDIPort.h */,
 				4702EB4CDBEE22A37830AA5B /* EDMIDIPort.m */,
+				EF2595852BB2060CE555105F /* EDRemoteDisk.h */,
+				BF96D096E63D7EB86D160D89 /* EDRemoteDisk.m */,
+				1E557BC91013AC0D52E01074 /* EDSamplerRemote.h */,
+				7E2CC471C6DA5DC9F9ED9ACF /* EDSamplerRemote.m */,
 				E714E4D2A3A5A7743933833D /* EDSDS.h */,
 				0ADE04AA74FB7123A801404C /* EDSDS.m */,
 				5193AFF9AA18746931282579 /* EDSMDI.h */,
@@ -222,6 +243,8 @@
 				0BD6DC64A92F8D097982F5F9 /* EDDiskIcons.m */,
 				EAD5A8D0212D94547674EB6D /* EDEmuEgg.h */,
 				C47C203F32B4B95B751DB20A /* EDEmuEgg.m */,
+				D94B0347149BAF56B43DB5AA /* EDHelp.h */,
+				C232E68A6835C5A980361A14 /* EDHelp.m */,
 				99A190C17BEED57349E83F37 /* EDHomeList.h */,
 				84DD7876BC48F72C7BBFD08A /* EDHomeList.m */,
 				7843E431F70C0C02AC53E619 /* EDMainWindowController.h */,
@@ -240,6 +263,8 @@
 				985465B681A9864B69A13D3A /* EDPresetLCD.m */,
 				217556318DC977B2FA67F919 /* EDSDSPanel.h */,
 				9B7323018C68460DE03AC920 /* EDSDSPanel.m */,
+				98B2ED6EEA3CFD499DF04D49 /* EDSettings.h */,
+				0CE93BEF948470FFED61429E /* EDSettings.m */,
 				D1C2B47E8D8ED040C9D25288 /* EDSMDIPanel.h */,
 				796703E0E226082B0D4DAAB3 /* EDSMDIPanel.m */,
 				2BFF640DE98690241ED7C5DC /* EDTheme.h */,
@@ -259,6 +284,7 @@
 				89C1DE170CE76C55E6C1C4CE /* AVFoundation.framework */,
 				359CC8504CC82A7D6BA5F2C9 /* CoreMIDI.framework */,
 				9231905B8D63C6BF41FF1E05 /* UniformTypeIdentifiers.framework */,
+				4301A813C5E9C149AE409F23 /* WebKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -274,6 +300,7 @@
 		D213519D4E13CE5C1E668331 = {
 			isa = PBXGroup;
 			children = (
+				216C934311123FE2646B87D1 /* Help */,
 				B1B57E1572B1E518E962AE81 /* Graphics */,
 				16271C6E1ED3A2C38D3C731A /* Resources */,
 				59009DCAA28FF59D5448321A /* Sources */,
@@ -323,6 +350,8 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					45B50AC42D21DFCA2B0B9A6B = {
+					};
 				};
 			};
 			buildConfigurationList = C9A419036BA9D57F105553DC /* Build configuration list for PBXProject "EMU3Editor" */;
@@ -350,6 +379,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0D8D69F539B599EF09A49517 /* AppIcon.icns in Resources */,
+				38C32BFF7AD37796CB9E7C50 /* Help in Resources */,
 				34D76A148E8D9511E7EAEE46 /* emu-logo.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -368,6 +398,7 @@
 				37C639447D2F2C525C0F20E3 /* EDBlueSCSIIni.m in Sources */,
 				0A50FED468DCF7BCC5B27B76 /* EDDiskIcons.m in Sources */,
 				9EB8208B02FF3205B61F5976 /* EDEmuEgg.m in Sources */,
+				A507936B71B93D8E7AF4BF54 /* EDHelp.m in Sources */,
 				15B3A61A1137B26E26255C9B /* EDHomeList.m in Sources */,
 				EE8B8D48E7DDAB1CB84D9190 /* EDLegacyBank.m in Sources */,
 				9C1D2ADCA8E82ADA89929C98 /* EDMIDIEditor.m in Sources */,
@@ -379,11 +410,14 @@
 				B9027B80BECE92CCF5F5B43F /* EDPreset+Params.m in Sources */,
 				3905D1D7CC7DAF9C769B0D87 /* EDPresetEditor.m in Sources */,
 				BD17F57AE720013B8EB3BA72 /* EDPresetLCD.m in Sources */,
+				E06DE2B671B4FD04DAC7CDD4 /* EDRemoteDisk.m in Sources */,
 				DBDD8D36AD4E0E9E50F0FF9B /* EDSDS.m in Sources */,
 				D1D188E1A11076E900D4BE80 /* EDSDSPanel.m in Sources */,
 				B51BD270A42BD9E0E62ABACD /* EDSMDI.m in Sources */,
 				B74764B5CE89A70A94B103B8 /* EDSMDIPanel.m in Sources */,
 				DBABA829B47AEA4A9F5132DD /* EDSample+Ops.m in Sources */,
+				D5BC926D6A47688B6913D4A8 /* EDSamplerRemote.m in Sources */,
+				12E9CB419E94FDAA68BFFD8A /* EDSettings.m in Sources */,
 				4E9456491E7E774A2FA06DA7 /* EDTheme.m in Sources */,
 				F7ACE59ABBE59D54FB2F9115 /* EDUtils.m in Sources */,
 				141033AAC590EAEB702CF88F /* EDWaveformView.m in Sources */,

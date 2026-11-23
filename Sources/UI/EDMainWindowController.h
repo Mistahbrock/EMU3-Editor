@@ -19,6 +19,7 @@
 - (void)selectPresetAtIndex:(NSInteger)i;
 - (void)showEditorTab:(nullable NSString *)ident;                         // @"samples" or @"presets"; brings the editor window to the front
 - (BOOL)openURL:(NSURL *)url;                  // .hda/.iso/.img disk image or .e4b bank file
+- (void)closeRemoteDiskAndWait:(BOOL)wait;      // lets go of the sampler's internal drive (board back to serving, helper thawed)
 - (BOOL)confirmQuit;                           // YES when nothing is unsaved or the user chose to discard
 // menu actions
 - (IBAction)openDiskImage:(id)sender;
