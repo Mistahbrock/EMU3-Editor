@@ -6,8 +6,9 @@
     NSTextField *_idField, *_numField, *_status;
     NSTableView *_list; NSMutableArray<EDSMDIInfo *> *_rows;
     NSProgressIndicator *_bar;
-    NSButton *_sendBtn, *_recvBtn, *_scanBtn, *_cancelBtn, *_delBtn;
+    NSButton *_sendBtn, *_recvBtn, *_scanBtn, *_cancelBtn, *_delBtn, *_findBtn;
     EDSMDIBoard *_board; EDSMDIClient *_client;
+    NSTableView *_devList; NSScrollView *_svSamples, *_svDevs; NSMutableArray<EDSMDIDevice *> *_devs; NSTextField *_head; NSGridView *_grid; NSStackView *_rowRead, *_rowXfer, *_rowDel; BOOL _findMode;
     BOOL _busy, _restoreTarget; pid_t _frozenLink;
 }
 
@@ -15,10 +16,11 @@
     NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 560, 480)
         styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
     w.title = @"SMDI Transfer (SCSI)"; w.releasedWhenClosed = NO;
-    if ((self = [super initWithWindow:w])) { _rows = [NSMutableArray array]; [self build]; }
+    if ((self = [super initWithWindow:w])) { _rows = [NSMutableArray array]; _devs = [NSMutableArray array]; [self build]; }
     return self;
 }
-- (NSButton *)button:(NSString *)t action:(SEL)a { return [EDTheme lcdKey:t target:self action:a]; }
+- (NSButton *)button:(NSString *)t action:(SEL)a { return [NSButton buttonWithTitle:t target:self action:a]; }
+static NSTextField *Lbl(NSString *t) { NSTextField *l = [NSTextField labelWithString:t]; l.font = [NSFont systemFontOfSize:13]; return l; }
 
 - (void)build {
     _portPop = [NSPopUpButton new];
@@ -27,40 +29,55 @@
     _idField.toolTip = @"The sampler's SCSI ID (Master ▸ Setup ▸ SCSI/Disk). The BlueSCSI board uses ID 7 — set \"Avoid Host on ID\" to 7 on the sampler.";
     _numField.toolTip = @"Sample number on the sampler, 1–999 (the number the sampler's display shows). Sample 0 is the sampler's clipboard and cannot be used over SMDI.";
     _status = [NSTextField wrappingLabelWithString:@"Needs the BlueSCSI board with the SMDI firmware, connected to the sampler's SCSI port. If the board is serving a disk it is switched to SMDI mode automatically (it reboots, a few seconds) and switched back when you close this window."];
-    _status.font = [EDTheme lcdFont:11]; _status.textColor = EDTheme.lcdInk; _status.preferredMaxLayoutWidth = 520; _status.maximumNumberOfLines = 6;
+    _status.font = [NSFont systemFontOfSize:11]; _status.textColor = NSColor.secondaryLabelColor; _status.preferredMaxLayoutWidth = 520; _status.alignment = NSTextAlignmentCenter; _status.maximumNumberOfLines = 12;
     _bar = [NSProgressIndicator new]; _bar.style = NSProgressIndicatorStyleBar; _bar.indeterminate = NO; _bar.maxValue = 1;
     _scanBtn = [self button:@"Read sample list" action:@selector(scan:)];
+    _findBtn = [self button:@"Find sampler (scan IDs)" action:@selector(findSampler:)];
     _sendBtn = [self button:@"Send selected sample →" action:@selector(send:)];
     _recvBtn = [self button:@"← Receive into selected sample" action:@selector(receive:)];
     _delBtn = [self button:@"Delete on sampler" action:@selector(deleteRemote:)];
     _cancelBtn = [self button:@"Cancel" action:@selector(cancel:)]; _cancelBtn.enabled = NO;
     NSButton *refresh = [self button:@"Refresh ports" action:@selector(refresh:)];
-    for (NSTextField *f in @[_idField, _numField]) [EDTheme styleLCDField:f];
+    for (NSTextField *f in @[_idField, _numField]) [f.widthAnchor constraintEqualToConstant:80].active = YES;
 
     _list = [NSTableView new];
     for (NSArray *c in @[@[@"num", @"#", @50], @[@"name", @"Name", @170], @[@"rate", @"Rate", @70], @[@"len", @"Frames", @80], @[@"loop", @"Loop", @60], @[@"bits", @"Bits", @40]]) {
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:c[0]]; col.title = c[1]; col.width = [c[2] doubleValue]; [_list addTableColumn:col];
     }
-    _list.dataSource = (id)self; _list.delegate = (id)self; [EDTheme styleLCDTable:_list];
-    NSScrollView *sv = [NSScrollView new]; sv.documentView = _list; sv.hasVerticalScroller = YES; sv.borderType = NSNoBorder;
+    _list.dataSource = (id)self; _list.delegate = (id)self;
+    NSScrollView *sv = [NSScrollView new]; sv.documentView = _list; sv.hasVerticalScroller = YES; sv.borderType = NSBezelBorder;
     sv.translatesAutoresizingMaskIntoConstraints = NO;
     [sv.widthAnchor constraintEqualToConstant:520].active = YES; [sv.heightAnchor constraintEqualToConstant:170].active = YES;
 
+    _devList = [NSTableView new];
+    for (NSArray *c in @[@[@"id", @"ID", @40], @[@"type", @"Type", @90], @[@"dev", @"Device", @270], @[@"rev", @"Rev", @70]]) {
+        NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:c[0]]; col.title = c[1]; col.width = [c[2] doubleValue]; col.editable = NO; [_devList addTableColumn:col];
+    }
+    _devList.dataSource = (id)self; _devList.delegate = (id)self;
+    NSScrollView *dv = [NSScrollView new]; dv.documentView = _devList; dv.hasVerticalScroller = YES; dv.borderType = NSBezelBorder; dv.translatesAutoresizingMaskIntoConstraints = NO;
+    [dv.widthAnchor constraintEqualToConstant:520].active = YES; [dv.heightAnchor constraintEqualToConstant:120].active = YES;
+    _svSamples = sv; _svDevs = dv;
     NSTextField *note = [NSTextField wrappingLabelWithString:@"1–999, as on the sampler's display (S001…). Sample 0 (S000) is the sampler's clipboard; SMDI refuses it."];
-    note.font = [EDTheme lcdFont:10]; note.textColor = EDTheme.lcdInk; note.preferredMaxLayoutWidth = 391;
+    note.font = [NSFont systemFontOfSize:11]; note.textColor = NSColor.secondaryLabelColor; note.preferredMaxLayoutWidth = 391;
     NSGridView *g = [NSGridView gridViewWithViews:@[
-        @[[EDTheme lcdLabel:@"BlueSCSI serial port" size:12], _portPop],
-        @[[EDTheme lcdLabel:@"Sampler SCSI ID" size:12], _idField],
-        @[[EDTheme lcdLabel:@"Sample #" size:12], _numField],
+        @[Lbl(@"BlueSCSI serial port"), _portPop],
+        @[Lbl(@"Sampler SCSI ID"), _idField],
+        @[Lbl(@"Sample #"), _numField],
         @[[NSGridCell emptyContentView], note]]];
     g.rowSpacing = 8; g.columnSpacing = 10; [g columnAtIndex:0].xPlacement = NSGridCellPlacementTrailing;
-    NSStackView *r1 = [NSStackView stackViewWithViews:@[_scanBtn, _sendBtn, _recvBtn]];
+    NSStackView *r0 = [NSStackView stackViewWithViews:@[_findBtn, _scanBtn]];
+    NSStackView *r1 = [NSStackView stackViewWithViews:@[_sendBtn, _recvBtn]];
     NSStackView *r2 = [NSStackView stackViewWithViews:@[_delBtn, _cancelBtn, refresh]];
-    NSStackView *root = [NSStackView stackViewWithViews:@[g, sv, r1, r2, _bar, _status]];
-    root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeLeading; root.spacing = 12;
-    root.edgeInsets = NSEdgeInsetsMake(18, 18, 18, 18);
+    NSImageView *icon = [NSImageView imageViewWithImage:[NSImage imageNamed:NSImageNameApplicationIcon]];
+    [icon.widthAnchor constraintEqualToConstant:64].active = YES; [icon.heightAnchor constraintEqualToConstant:64].active = YES;
+    NSTextField *head = [NSTextField labelWithString:@"SMDI Transfer (SCSI)"]; head.font = [NSFont boldSystemFontOfSize:15];
+    NSStackView *root = [NSStackView stackViewWithViews:@[icon, head, g, sv, dv, r0, r1, r2, _bar, _status]];
+    _head = head; _grid = g; _rowRead = r0; _rowXfer = r1; _rowDel = r2;
+    root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeCenterX; root.spacing = 12;
+    [icon.centerXAnchor constraintEqualToAnchor:root.centerXAnchor].active = YES; [head.centerXAnchor constraintEqualToAnchor:root.centerXAnchor].active = YES;
+    root.edgeInsets = NSEdgeInsetsMake(20, 24, 20, 24);
     _bar.translatesAutoresizingMaskIntoConstraints = NO; [_bar.widthAnchor constraintEqualToConstant:520].active = YES;
-    self.window.delegate = (id)self; [EDTheme styleWindow:self.window]; self.window.contentView = [EDTheme lcdScreenAround:root]; { NSSize fs = root.fittingSize; [self.window setContentSize:NSMakeSize(MAX(fs.width, 700), fs.height)]; }
+    self.window.delegate = (id)self; [EDTheme styleWindow:self.window]; self.window.contentView = root; { NSSize fs = root.fittingSize; [self.window setContentSize:NSMakeSize(fs.width, fs.height)]; }
     [self refresh:nil];
 }
 
@@ -72,15 +89,24 @@
     NSString *def = keep && [ports containsObject:keep] ? keep : [EDSMDIBoard defaultPort];
     if (def) [_portPop selectItemWithTitle:def];
     if (!ports.count) [_portPop addItemWithTitle:@"(no BlueSCSI serial port found)"];
-    [EDTheme styleLCDPopup:_portPop];
+    
+}
+- (void)setFindMode:(BOOL)f {
+    _findMode = f;
+    self.window.title = f ? @"Find Sampler" : @"SMDI Transfer (SCSI)"; _head.stringValue = self.window.title;
+    _svSamples.hidden = f; _svDevs.hidden = !f; _rowXfer.hidden = _rowDel.hidden = f;
+    _scanBtn.hidden = f; _findBtn.hidden = !f;
+    [_grid rowAtIndex:2].hidden = f; [_grid rowAtIndex:3].hidden = f;   // sample #, its note
+    NSSize fs = self.window.contentView.fittingSize; [self.window setContentSize:NSMakeSize(fs.width, fs.height)];
 }
 - (void)present {
+    [self setFindMode:NO];
     [self refresh:nil];
     if (_numField.intValue < 1) _numField.intValue = 1;      // always start at S001; the bank's own sample number is not the sampler's slot
     [self.window center]; [self showWindow:nil]; [self.window makeKeyAndOrderFront:nil];
 }
 - (void)setBusy:(BOOL)b {
-    _busy = b; _scanBtn.enabled = _sendBtn.enabled = _recvBtn.enabled = _delBtn.enabled = !b; _cancelBtn.enabled = b;
+    _busy = b; _findBtn.enabled = _scanBtn.enabled = _sendBtn.enabled = _recvBtn.enabled = _delBtn.enabled = !b; _cancelBtn.enabled = b;
     _portPop.enabled = _idField.enabled = !b;
 }
 
@@ -127,6 +153,31 @@
     });
 }
 
+static NSString *Hex(NSData *d, NSUInteger from) {
+    NSMutableString *h = [NSMutableString string]; const uint8_t *p = d.bytes;
+    for (NSUInteger i = from; i < d.length; i++) [h appendFormat:@"%02X ", p[i]];
+    return h;
+}
+- (void)findSampler:(id)s {
+    [self runJob:^NSString *(EDSMDIClient *c) {
+        [self progress:0.1 text:@"Scanning SCSI IDs 0–6…"];
+        NSArray<EDSMDIDevice *> *devs = [EDSMDIClient scanBus:c.exec skipping:7 cancelled:nil];
+        if (!devs.count) return @"No device answered on SCSI IDs 0–6. Check the cable, termination and that the sampler is on.";
+        NSMutableString *out = [NSMutableString string]; EDSMDIDevice *found = nil;
+        for (EDSMDIDevice *d in devs) if (!found && d.looksLikeSampler) found = d;
+        dispatch_async(dispatch_get_main_queue(), ^{ [self->_devs setArray:devs]; [self->_devList reloadData]; });
+        if (found) {
+            c.target = found.scsiID;
+            NSError *e = nil;
+            if ([c masterIdentify:&e]) [out appendFormat:@"%@ %@ (software %@) answered SMDI at ID %u.\n", found.vendor, found.product, found.revision, found.scsiID];
+            else [out appendFormat:@"ID %u did not answer SMDI: %@\n", found.scsiID, e.localizedDescription];
+            dispatch_async(dispatch_get_main_queue(), ^{ self->_idField.intValue = found.scsiID; [NSUserDefaults.standardUserDefaults setObject:@(found.scsiID).stringValue forKey:@"SMDITarget"]; });
+            [out appendFormat:@"Sampler set to SCSI ID %u.", found.scsiID];
+        } else [out appendString:@"None of them looks like a sampler. Pick the ID by hand."];
+        return out;
+    }];
+}
+- (void)presentAndFind { [self present]; [self setFindMode:YES]; [self findSampler:nil]; }
 - (void)scan:(id)s {
     [_rows removeAllObjects]; [_list reloadData];
     [self runJob:^NSString *(EDSMDIClient *c) {
@@ -186,8 +237,15 @@
 }
 
 // MARK: list
-- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { return (NSInteger)_rows.count; }
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { return (NSInteger)(t == _devList ? _devs.count : _rows.count); }
 - (id)tableView:(NSTableView *)t objectValueForTableColumn:(NSTableColumn *)c row:(NSInteger)r {
+    if (t == _devList) {
+        EDSMDIDevice *d = _devs[r]; NSString *k = c.identifier;
+        if ([k isEqual:@"id"]) return @(d.scsiID);
+        if ([k isEqual:@"type"]) return d.typeName;
+        if ([k isEqual:@"dev"]) return [NSString stringWithFormat:@"%@ %@", d.vendor, d.product];
+        return d.revision;
+    }
     EDSMDIInfo *i = _rows[r]; NSString *k = c.identifier;
     if ([k isEqual:@"num"]) return @(i.number);
     if ([k isEqual:@"name"]) return i.name;
@@ -197,6 +255,7 @@
     return @(i.bits);
 }
 - (void)tableViewSelectionDidChange:(NSNotification *)n {
+    if (n.object == _devList) { NSInteger q = _devList.selectedRow; if (q >= 0 && q < (NSInteger)_devs.count) { _idField.intValue = _devs[q].scsiID; [NSUserDefaults.standardUserDefaults setObject:@(_devs[q].scsiID).stringValue forKey:@"SMDITarget"]; } return; }
     NSInteger r = _list.selectedRow; if (r >= 0 && r < (NSInteger)_rows.count) _numField.intValue = _rows[r].number;
 }
 @end

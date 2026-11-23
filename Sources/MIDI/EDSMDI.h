@@ -53,7 +53,19 @@ typedef EDSMDIResult * _Nullable (^EDSMDIExec)(uint8_t target, NSData *cdb, NSDa
 @property (nonatomic, readonly) uint32_t sampleRate;
 @end
 
+/// One device that answered INQUIRY during a bus scan.
+@interface EDSMDIDevice : NSObject
+@property (nonatomic) uint8_t scsiID, deviceType;     // type 0 disk, 3 processor (samplers answer SMDI as a processor), 5 CD-ROM …
+@property (nonatomic, copy) NSString *vendor, *product, *revision;
+@property (nonatomic, readonly) NSString *typeName;
+@property (nonatomic, readonly) BOOL looksLikeSampler;
+@end
+
 @interface EDSMDIClient : NSObject
+/// INQUIRY every ID 0…7 except `host`; returns the ones that answered, in ID order.
++ (NSArray<EDSMDIDevice *> *)scanBus:(EDSMDIExec)exec skipping:(uint8_t)host cancelled:(BOOL (^ _Nullable)(void))cancelled;
+/// The SMDI slave-identify reply of the last successful -masterIdentify: (raw, including the 11-byte message header).
+@property (nonatomic, readonly, copy, nullable) NSData *identifyReply;
 @property (nonatomic, copy) EDSMDIExec exec;
 @property (nonatomic) uint8_t target;                  // sampler's SCSI ID (default 6)
 @property (nonatomic, readonly, copy) NSString *timingSummary;

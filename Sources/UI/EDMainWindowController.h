@@ -44,6 +44,7 @@
 - (IBAction)sendToSamplerDisk:(id)sender;
 - (IBAction)sdsTransfer:(id)sender;
 - (IBAction)smdiTransfer:(id)sender;
+- (IBAction)findSampler:(id)sender;
 - (IBAction)zoomIn:(id)sender;
 - (IBAction)zoomOut:(id)sender;
 - (IBAction)zoomFit:(id)sender;

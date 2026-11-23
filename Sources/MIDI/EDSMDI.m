@@ -191,6 +191,16 @@ static uint32_t be24(const uint8_t *p) { return (p[0] << 16) | (p[1] << 8) | p[2
 static void putBE24(NSMutableData *d, uint32_t v) { uint8_t b[3] = {v >> 16, v >> 8, v}; [d appendBytes:b length:3]; }
 static void putBE32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v >> 24, v >> 16, v >> 8, v}; [d appendBytes:b length:4]; }
 
+@implementation EDSMDIDevice
+- (NSString *)typeName {
+    switch (self.deviceType) { case 0: return @"Disk"; case 1: return @"Tape"; case 3: return @"Processor"; case 4: return @"WORM"; case 5: return @"CD-ROM"; case 7: return @"Optical"; default: return [NSString stringWithFormat:@"Type %u", self.deviceType]; }
+}
+- (BOOL)looksLikeSampler {
+    NSString *v = self.vendor.uppercaseString;
+    return [v containsString:@"E-MU"] || [v containsString:@"EMU"] || [v containsString:@"E-MAX"] || self.deviceType == 3;
+}
+@end
+
 @implementation EDSMDIClient {
     volatile BOOL _cancel; NSString *_timing; NSTimeInterval _msgTime; NSUInteger _msgCount;
 }
@@ -245,9 +255,32 @@ static NSString *rejectText(NSData *d) {
     }
 }
 
++ (NSArray<EDSMDIDevice *> *)scanBus:(EDSMDIExec)exec skipping:(uint8_t)host cancelled:(BOOL (^)(void))cancelled {
+    NSMutableArray *out = [NSMutableArray array];
+    for (uint8_t id_ = 0; id_ < 8; id_++) {
+        if (id_ == host) continue;
+        if (cancelled && cancelled()) break;
+        uint8_t cdb[6] = {0x12, 0, 0, 0, 36, 0};
+        NSError *e = nil;
+        EDSMDIResult *r = exec(id_, [NSData dataWithBytes:cdb length:6], nil, 36, &e);
+        if (!r || r.result != 0 || r.status != 0 || r.data.length < 8) continue;
+        const uint8_t *p = r.data.bytes; NSUInteger n = r.data.length;
+        NSString *(^str)(NSUInteger, NSUInteger) = ^NSString *(NSUInteger a, NSUInteger l) {
+            if (a >= n) return @"";
+            NSString *t = [[NSString alloc] initWithBytes:p + a length:MIN(l, n - a) encoding:NSISOLatin1StringEncoding] ?: @"";
+            return [t stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        };
+        EDSMDIDevice *d = [EDSMDIDevice new]; d.scsiID = id_; d.deviceType = p[0] & 0x1F;
+        d.vendor = str(8, 8); d.product = str(16, 16); d.revision = str(32, 4);
+        [out addObject:d];
+    }
+    return out;
+}
+
 - (BOOL)masterIdentify:(NSError **)error {
     NSData *d = [self exchange:kMasterIdentify body:nil replyMax:64 error:error];
     if (!d) return NO;
+    _identifyReply = [d copy];
     if (msgID(d) != kSlaveIdentify) { if (error) *error = MErr(EDSMDIErrorProtocol, @"The device answered, but not with an SMDI slave identification."); return NO; }
     return YES;
 }

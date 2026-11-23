@@ -67,8 +67,8 @@
 - (void)setLine2:(NSString *)l { _line2 = [l copy]; self.needsDisplay = YES; }
 - (void)drawRect:(NSRect)r {
     // plain right-aligned text in the same grey as the status line on the left (no green panel)
-    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByTruncatingMiddle; ps.alignment = NSTextAlignmentLeft;
-    NSDictionary *a1 = @{NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: NSColor.secondaryLabelColor, NSParagraphStyleAttributeName: ps};
+    NSMutableParagraphStyle *ps = [NSMutableParagraphStyle new]; ps.lineBreakMode = NSLineBreakByTruncatingMiddle; ps.alignment = NSTextAlignmentCenter;
+    NSDictionary *a1 = @{NSFontAttributeName: [NSFont systemFontOfSize:13], NSForegroundColorAttributeName: [NSColor colorWithWhite:0.88 alpha:1], NSParagraphStyleAttributeName: ps};
     CGFloat w = NSWidth(self.bounds);
     NSString *one = _line2.length ? [NSString stringWithFormat:@"%@ — %@", _line1 ?: @"", _line2] : (_line1 ?: @"");
     [one drawInRect:NSMakeRect(0, 10, w, 16) withAttributes:a1];
@@ -77,8 +77,8 @@
 @end
 
 @implementation EDMainWindowController {
-    NSView *_cmdBar, *_cmdRule; EDDiskIcons *_mountsIcons; NSTextField *_mountsDetail;
-    NSLayoutConstraint *_statusWidth, *_statusWide; NSMutableArray<NSNumber *> *_tabHistory; NSInteger _curTab; BOOL _tabBack; NSTimer *_statusTimer; NSString *_statusSig; BOOL _statusBusy;
+    NSView *_cmdBar, *_cmdRule; NSPopUpButton *_linkSampler, *_linkHost; NSButton *_linkServe; NSPopUpButton *_linkID, *_linkAccess; NSTextField *_linkInfo; EDDiskIcons *_mountsIcons; NSTextField *_mountsDetail;
+    NSLayoutConstraint *_statusWidth, *_statusWide, *_statusLead, *_lcdLead, *_lcdTrail; NSString *_autoStatus; NSMutableArray<NSNumber *> *_tabHistory; NSInteger _curTab; BOOL _tabBack; NSTimer *_statusTimer; NSString *_statusSig; BOOL _statusBusy;
     // model
     EMU3Filesystem *_fs;
     EDNode *_rootNode;
@@ -172,7 +172,7 @@ static NSTextField *label(NSString *s) {
 }
 static NSTextField *toolNote(NSString *s) {
     NSTextField *t = [NSTextField wrappingLabelWithString:s]; t.font = [NSFont systemFontOfSize:12]; t.textColor = NSColor.secondaryLabelColor;
-    t.preferredMaxLayoutWidth = 380; [t.widthAnchor constraintEqualToConstant:380].active = YES; return t;
+    t.preferredMaxLayoutWidth = 380; [t.widthAnchor constraintLessThanOrEqualToConstant:380].active = YES; return t;
 }
 - (NSTextField *)field:(CGFloat)width {
     NSTextField *t = [NSTextField textFieldWithString:@""]; t.delegate = self; t.controlSize = NSControlSizeRegular;
@@ -290,11 +290,7 @@ static NSTextField *toolNote(NSString *s) {
     // Master tab: sampler status and shortcuts | banks to open (sampler disk + recent) | current bank
     _samplerStatus = [NSTextField wrappingLabelWithString:@""]; _samplerStatus.font = [NSFont systemFontOfSize:14]; _samplerStatus.textColor = EDTheme.labelWhite;
     _masterSummary = [NSTextField wrappingLabelWithString:@""]; _masterSummary.font = [NSFont systemFontOfSize:15]; _masterSummary.textColor = EDTheme.labelWhite;
-    NSStackView *gSampler = [self group:@"Sampler" views:@[_samplerStatus,
-        [self wideButton:@"Show Sampler Disk" action:@selector(showSamplerDisk:)],
-        [self wideButton:@"SMDI Transfer (SCSI)…" action:@selector(smdiTransfer:)],
-        [self wideButton:@"MIDI Sample Dump…" action:@selector(sdsTransfer:)],
-        [self wideButton:@"Open Disk Image…" action:@selector(openDiskImage:)]]];
+    NSStackView *gSampler = [self group:@"Sampler" views:@[_samplerStatus]];   // status only; the sampler tools live on the Tools tab
     NSStackView *gUtils = [self group:@"Utils" views:@[
         [self wideButton:@"Assign Key…" action:@selector(showAssignKeys:)], [self wideButton:@"Channel Volume…" action:@selector(showChannelVolume:)],
         [self wideButton:@"Tones…" action:@selector(showTones:)]]];
@@ -314,7 +310,7 @@ static NSTextField *toolNote(NSString *s) {
     _memory = [EDMemoryView new]; _memory.residentTotalK = 768; _memory.presetTotalK = 404;
     NSInteger mb = [NSUserDefaults.standardUserDefaults integerForKey:@"SamplerSampleMB"]; if (mb <= 0) mb = 40; _memory.sampleTotalMB = mb;
     NSTextField *ramRow = label([NSString stringWithFormat:@"Sample memory: %ld MB (installed in the sampler)", (long)mb]);
-    ramRow.toolTip = @"Information only: the sampler's sample RAM is physical (SIMMs) and cannot be changed by software. The Memory box uses this size for its percentages.";
+    ramRow.toolTip = @"Information only: the sampler's sample RAM is physical (SIMMs) and cannot be read over SCSI. The Memory box uses this size for its percentages.";
     _autoSaveBtn = [NSButton checkboxWithTitle:@"Save to sampler automatically" target:self action:@selector(autoSaveToggled:)];
     _autoSaveBtn.state = [NSUserDefaults.standardUserDefaults boolForKey:@"AutoSaveToSampler"] ? NSControlStateValueOn : NSControlStateValueOff;
     _autoSaveBtn.toolTip = @"When the open bank is on the sampler's disk, writes it back a few seconds after you stop editing. The sampler still needs a SCSI rescan and a bank reload to see the change. The original is backed up once per opened bank.";
@@ -323,7 +319,7 @@ static NSTextField *toolNote(NSString *s) {
         [self wideButton:@"Open Bank File…" action:@selector(openBankFile:)],
         [self wideButton:@"Send Sample to Sampler Disk…" action:@selector(sendToSamplerDisk:)]]];
     NSView *masterView = [NSView new];
-    for (NSView *v in @[leftCol, gOpen, gBank]) { v.translatesAutoresizingMaskIntoConstraints = NO; [masterView addSubview:v]; [v.topAnchor constraintEqualToAnchor:masterView.topAnchor constant:30].active = YES; }
+    for (NSView *v in @[leftCol, gOpen, gBank]) { v.translatesAutoresizingMaskIntoConstraints = NO; [masterView addSubview:v]; [v.topAnchor constraintEqualToAnchor:masterView.topAnchor constant:-10].active = YES; }
     [NSLayoutConstraint activateConstraints:@[
         [leftCol.leadingAnchor constraintEqualToAnchor:masterView.leadingAnchor constant:40], [leftCol.widthAnchor constraintEqualToConstant:270],
         [gOpen.leadingAnchor constraintEqualToAnchor:leftCol.trailingAnchor constant:40], [gOpen.bottomAnchor constraintEqualToAnchor:masterView.bottomAnchor constant:-8],
@@ -360,6 +356,25 @@ static NSTextField *toolNote(NSString *s) {
         toolNote(@"For a card that goes into a BlueSCSI in the sampler (or into a card reader)."),
         [self wideButton:@"Copy Disk Image to SD Card…" action:@selector(copyToSDCard:)],
         [self wideButton:@"Write bluescsi.ini…" action:@selector(writeBlueSCSIIni:)]]];
+    // Sampler link: the helper's settings files in ~/Library/Application Support/EMU3 (same files as the Disk Manager)
+    _linkID = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO]; 
+    _linkID.target = self; _linkID.action = @selector(linkSettingChanged:);
+    _linkSampler = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO]; _linkHost = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+    for (NSPopUpButton *p in @[_linkSampler, _linkHost]) { for (int i = 0; i < 8; i++) [p addItemWithTitle:[NSString stringWithFormat:@"%d", i]]; p.target = self; p.action = @selector(linkBusChanged:); }
+    _linkAccess = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO]; [_linkAccess addItemsWithTitles:@[@"Read-write", @"Read-only"]]; _linkAccess.target = self; _linkAccess.action = @selector(linkSettingChanged:);
+    _linkInfo = toolNote(@" ");
+    NSStackView *busRow = [NSStackView stackViewWithViews:@[label(@"Sampler ID:"), _linkSampler, label(@"Host (initiator) ID:"), _linkHost]]; busRow.spacing = 8;
+    NSStackView *idRow = [NSStackView stackViewWithViews:@[label(@"SCSI ID of the served disk:"), _linkID]]; idRow.spacing = 8;
+    NSStackView *accRow = [NSStackView stackViewWithViews:@[label(@"Access:"), _linkAccess]]; accRow.spacing = 8;
+    NSStackView *gLink = [self group:@"Server setup" views:@[
+        toolNote(@"Bus IDs: the sampler is normally ID 6 and the board is the host (initiator) at ID 7, so the served disk takes one of the others (0–5). Change them here if your setup differs; rescan on the sampler afterwards."),
+        busRow, idRow, accRow, _linkInfo, _linkServe = [self wideButton:@"Stop Serving" action:@selector(toggleServing:)], [self wideButton:@"Image Folder…" action:@selector(chooseImageFolder:)]]];
+    NSStackView *gSamplerTools = [self group:@"Sampler" views:@[
+        toolNote(@"Find the sampler on the SCSI bus, send samples by MIDI, or see the disk it uses. SMDI transfers are on the Samples page."),
+        [self wideButton:@"Find Sampler (SCSI scan)…" action:@selector(findSampler:)],
+        [self wideButton:@"MIDI Sample Dump…" action:@selector(sdsTransfer:)],
+        [self wideButton:@"Show Sampler Disk" action:@selector(showSamplerDisk:)],
+        [self wideButton:@"Open Disk Image…" action:@selector(openDiskImage:)]]];
     NSView *toolsView = [NSView new];
     // MOUNTS: green panel with an icon per disk image found on a mounted volume (top level only) and a description of the selected one
     _mountsIcons = [[EDDiskIcons alloc] initWithFrame:NSZeroRect]; _mountsIcons.autoresizingMask = NSViewWidthSizable; _mountsIcons.emptyText = @"No disk images on mounted drives.";
@@ -373,12 +388,13 @@ static NSTextField *toolNote(NSString *s) {
         [_mountsDetail.heightAnchor constraintEqualToConstant:54], [_mountsDetail.trailingAnchor constraintEqualToAnchor:mounts.trailingAnchor constant:-12]]];
     _mountsIcons.onSelect = ^(EDDiskItem *it) { [weakSelf mountsSelectionChanged]; };
     _mountsIcons.onOpen = ^(EDDiskItem *it) { if (it.url) [weakSelf showImageOnDisk:it.url]; };
-    for (NSView *v in @[gImages, gCard, mounts]) { v.translatesAutoresizingMaskIntoConstraints = NO; [toolsView addSubview:v]; }
+    for (NSView *v in @[gImages, gCard, gLink, gSamplerTools, mounts]) { v.translatesAutoresizingMaskIntoConstraints = NO; [toolsView addSubview:v]; }
     [NSLayoutConstraint activateConstraints:@[
         [gImages.topAnchor constraintEqualToAnchor:toolsView.topAnchor constant:30], [gCard.topAnchor constraintEqualToAnchor:toolsView.topAnchor constant:30],
-        [gImages.leadingAnchor constraintEqualToAnchor:toolsView.leadingAnchor constant:40], [gImages.widthAnchor constraintEqualToConstant:380],
-        [gCard.leadingAnchor constraintEqualToAnchor:gImages.trailingAnchor constant:40], [gCard.widthAnchor constraintEqualToConstant:380],
-        [mounts.topAnchor constraintEqualToAnchor:gCard.bottomAnchor constant:30], [mounts.leadingAnchor constraintEqualToAnchor:toolsView.leadingAnchor constant:40],
+        [gImages.leadingAnchor constraintEqualToAnchor:toolsView.leadingAnchor constant:40],
+        [gCard.leadingAnchor constraintEqualToAnchor:gImages.trailingAnchor constant:40], [gCard.widthAnchor constraintEqualToAnchor:gImages.widthAnchor],
+        [gLink.topAnchor constraintEqualToAnchor:toolsView.topAnchor constant:30], [gLink.leadingAnchor constraintEqualToAnchor:gCard.trailingAnchor constant:40], [gLink.widthAnchor constraintEqualToAnchor:gImages.widthAnchor], [gSamplerTools.topAnchor constraintEqualToAnchor:toolsView.topAnchor constant:30], [gSamplerTools.leadingAnchor constraintEqualToAnchor:gLink.trailingAnchor constant:40], [gSamplerTools.widthAnchor constraintEqualToAnchor:gImages.widthAnchor], [gSamplerTools.trailingAnchor constraintEqualToAnchor:toolsView.trailingAnchor constant:-40],
+        [mounts.topAnchor constraintGreaterThanOrEqualToAnchor:gCard.bottomAnchor constant:30], [mounts.topAnchor constraintGreaterThanOrEqualToAnchor:gSamplerTools.bottomAnchor constant:30], [mounts.topAnchor constraintGreaterThanOrEqualToAnchor:gLink.bottomAnchor constant:30], [mounts.topAnchor constraintGreaterThanOrEqualToAnchor:gImages.bottomAnchor constant:30], [mounts.leadingAnchor constraintEqualToAnchor:toolsView.leadingAnchor constant:40],
         [mounts.trailingAnchor constraintEqualToAnchor:toolsView.trailingAnchor constant:-40], [mounts.bottomAnchor constraintEqualToAnchor:toolsView.bottomAnchor constant:-30]]];
     [EDTheme addGlareOver:mounts in:toolsView];
     NSArray *defs = @[@[@"master", @"Master", masterRoot], @[@"disk", @"Disk", diskView], @[@"samples", @"Samples", samplesSplit], @[@"presets", @"Presets", _presetEditor], @[@"tools", @"Tools", toolsView]];
@@ -411,14 +427,14 @@ static NSTextField *toolNote(NSString *s) {
         [self barGroup:@"Transfer" keys:@[@[@"SMDI", @"smdiTransfer:", @0], @[@"MIDI Dump", @"sdsTransfer:", @1], @[@"To Disk", @"sendToSamplerDisk:", @1]]],
         [self barGroup:@"Zoom" keys:@[@[@"−", @"zoomOut:", @0], @[@"+", @"zoomIn:", @0], @[@"Fit", @"zoomFit:", @0], @[@"Loop", @"zoomLoop:", @0]]]]];
     _cmdBar = bar;
-    bar.spacing = 22; bar.alignment = NSLayoutAttributeTop;
-    { NSArray *gs = bar.arrangedSubviews; for (NSView *v in gs) [bar removeArrangedSubview:v]; [bar setViews:gs inGravity:NSStackViewGravityCenter]; } bar.edgeInsets = NSEdgeInsetsMake(12, 18, 0, 18);
-    bar.wantsLayer = YES; bar.layer.backgroundColor = EDTheme.bodyDark.CGColor;
-    [bar.heightAnchor constraintEqualToConstant:74].active = YES;
-    NSView *rule2 = [NSView new]; rule2.wantsLayer = YES; rule2.layer.backgroundColor = [EDTheme.accent colorWithAlphaComponent:0.55].CGColor;
+    bar.spacing = 24; bar.alignment = NSLayoutAttributeTop;
+    { NSArray *gs = bar.arrangedSubviews; for (NSView *v in gs) [bar removeArrangedSubview:v]; [bar setViews:gs inGravity:NSStackViewGravityCenter]; } bar.edgeInsets = NSEdgeInsetsMake(12, 36, 0, 36);
+    bar.wantsLayer = YES; bar.layer.backgroundColor = NSColor.clearColor.CGColor;
+    [bar.heightAnchor constraintEqualToConstant:96].active = YES;
+    NSView *rule2 = [NSView new]; rule2.wantsLayer = YES; rule2.layer.backgroundColor = NSColor.clearColor.CGColor;
     [rule2.heightAnchor constraintEqualToConstant:1].active = YES; _cmdRule = rule2;
 
-    _status = label(@"Open a disk image or a bank file."); _status.lineBreakMode = NSLineBreakByTruncatingTail;
+    _status = label(@"Open a disk image or a bank file."); _status.lineBreakMode = NSLineBreakByTruncatingTail; _status.font = [NSFont systemFontOfSize:13]; _status.textColor = [NSColor colorWithWhite:0.88 alpha:1];
     _presetNote = label(@"Pages follow the sampler's Preset Edit menus. Changes go straight into the preset (Edit ▸ Undo works).");
     // footer: status text on the left, the green LCD readout on the right
     NSView *foot = [NSView new]; _presetNote.hidden = YES;
@@ -429,8 +445,8 @@ static NSTextField *toolNote(NSString *s) {
     for (NSView *v in @[_status, _lcd]) { v.translatesAutoresizingMaskIntoConstraints = NO; [foot addSubview:v]; }
     [NSLayoutConstraint activateConstraints:@[
         [foot.heightAnchor constraintEqualToConstant:36],
-        [_status.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:14], [_status.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor],
-        [_lcd.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:350], [_lcd.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-18],
+        (_statusLead = [_status.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:14]), [_status.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor],
+        (_lcdLead = [_lcd.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:350]), (_lcdTrail = [_lcd.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-501]),
         [_lcd.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor], [_lcd.heightAnchor constraintEqualToConstant:36]]];
     _statusWidth = [_status.widthAnchor constraintEqualToConstant:322]; _statusWide = [_status.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-14]; _statusWide.active = YES;
     _status.alignment = NSTextAlignmentCenter;   // centred under the page (beside the readout on Master ▸ Utilities)
@@ -465,24 +481,18 @@ static NSTextField *toolNote(NSString *s) {
 - (NSStackView *)barGroup:(NSString *)title keys:(NSArray<NSArray *> *)keys {
     NSMutableArray *btns = [NSMutableArray array];
     for (NSArray *k in keys) {
-        NSButton *b = [NSButton buttonWithTitle:k[0] target:self action:NSSelectorFromString(k[1])];
-        b.bordered = NO; b.wantsLayer = YES; b.layer.cornerRadius = 5; b.layer.backgroundColor = EDTheme.body.CGColor;
-        b.layer.borderWidth = 1; b.layer.borderColor = [NSColor colorWithCalibratedWhite:0.34 alpha:1].CGColor;
-        b.attributedTitle = [[NSAttributedString alloc] initWithString:k[0] attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: EDTheme.labelWhite}];
-        b.attributedAlternateTitle = [[NSAttributedString alloc] initWithString:k[0] attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: EDTheme.logoBlue}];
-        [b.heightAnchor constraintEqualToConstant:28].active = YES;
-        [b.widthAnchor constraintGreaterThanOrEqualToConstant:[k[0] length] < 3 ? 32 : 58].active = YES;
+        NSButton *b = [self button:k[0] action:NSSelectorFromString(k[1])];   // same buttons as the Tools page
         if (k.count > 3) b.toolTip = k[3];
         if ([k[2] intValue] == 1) [_sampleBtns addObject:b]; else if ([k[2] intValue] == 2) [_bankBtns addObject:b];
         [btns addObject:b];
     }
-    NSStackView *row = [NSStackView stackViewWithViews:btns]; row.spacing = 4;
+    NSStackView *row = [NSStackView stackViewWithViews:btns]; row.spacing = 8;
     NSTextField *cap = [NSTextField labelWithString:title.uppercaseString];
-    cap.font = [NSFont systemFontOfSize:9 weight:NSFontWeightBold]; cap.textColor = EDTheme.labelWhite;
+    cap.font = [NSFont systemFontOfSize:12 weight:NSFontWeightBold]; cap.textColor = EDTheme.labelWhite;
     NSView *line = [NSView new]; line.wantsLayer = YES; line.layer.backgroundColor = EDTheme.accent.CGColor;
     [line.heightAnchor constraintEqualToConstant:2].active = YES;
     NSStackView *g = [NSStackView stackViewWithViews:@[cap, line, row]];
-    g.orientation = NSUserInterfaceLayoutOrientationVertical; g.alignment = NSLayoutAttributeLeading; g.spacing = 4;
+    g.orientation = NSUserInterfaceLayoutOrientationVertical; g.alignment = NSLayoutAttributeLeading; g.spacing = 8; [g setCustomSpacing:14 afterView:line];
     [line.widthAnchor constraintEqualToAnchor:g.widthAnchor].active = YES;
     return g;
 }
@@ -496,8 +506,8 @@ static NSTextField *toolNote(NSString *s) {
     if ([ident isEqual:@"editor"]) ident = @"samples";
     [_tabs selectTabViewItemWithIdentifier:ident];
     [self showPresetNote:[ident isEqual:@"presets"]];
-    if ([ident isEqual:@"tools"]) [self refreshMountedImages];
-    _cmdBar.hidden = _cmdRule.hidden = !([ident isEqual:@"disk"] || [ident isEqual:@"samples"]);
+    if ([ident isEqual:@"tools"]) { [self refreshMountedImages]; [self refreshLinkSettings]; }
+    _cmdBar.hidden = _cmdRule.hidden = !([ident isEqual:@"disk"] || [ident isEqual:@"samples"]); [self updateCmdBarGroups:[ident isEqual:@"disk"]];
 }
 - (void)showPresetNote:(BOOL)show {
     _presetNote.hidden = YES; (void)show;   // the status line carries this help now
@@ -529,35 +539,142 @@ static NSTextField *toolNote(NSString *s) {
         return;
     }
 }
-- (void)resetStatus { _status.stringValue = [self pageHelp]; }   // a page change clears the last message
+- (NSString *)bankSummaryLine {
+    if (!_bank) return @"No bank open";
+    unsigned long long sb = 0; for (EDSample *sm in _bank.samples) sb += sm.left.length + sm.right.length;
+    return [NSString stringWithFormat:@"%@  ·  %lu samples  ·  %@", _bankTitle ?: @"Bank", (unsigned long)_bank.samples.count, EMU3FormatBytes(sb)];
+}
+- (void)resetStatus { _status.stringValue = _tabPicker.selectedSegment == 2 ? [self bankSummaryLine] : [self pageHelp]; }   // a page change clears the last message
 - (BOOL)isHelpText:(NSString *)s { return [[self allHelp] containsObject:s]; }
+- (NSString *)sampleInfoLine:(EDSample *)sm {
+    double rate = sm.sampleRate ?: 1;
+    NSString *loop = sm.loopEnabled ? [NSString stringWithFormat:@"loop %lu–%lu%@", (unsigned long)sm.loopStart, (unsigned long)sm.loopEnd, sm.loopInRelease ? @" (in release)" : @""] : @"no loop";
+    return [NSString stringWithFormat:@"S%03u  %@  ·  %u Hz  ·  %@  ·  %lu frames (%.3f s)  ·  %@%@", sm.number, sm.name ?: @"", sm.sampleRate, sm.isStereo ? @"stereo" : @"mono", (unsigned long)sm.frameCount, sm.frameCount / rate, loop, sm.locked ? @"  ·  locked" : @""];
+}
 - (NSString *)pageHelp {
     NSArray *h = [self allHelp]; NSInteger t = _tabPicker.selectedSegment;
     if (t == 0) { NSInteger m = _masterPicker.selectedSegment; return h[1 + MAX(0, MIN(4, m))]; }
+    if (t == 2 && _sample) return [self sampleInfoLine:_sample];   // Samples page: facts about the selected sample
+    if (t == 1) {   // Disk page: facts about the selected icon
+        EDDiskItem *it = _diskHint.selectedItem;
+        if (it.kind == EDDiskSample) return [self sampleInfoLine:it.node];
+        if (it) {
+            NSString *kind = it.kind == EDDiskBank ? @"Bank" : (it.kind == EDDiskFolder ? @"Folder" : @"Disk");
+            NSMutableString *m = [NSMutableString stringWithFormat:@"%@ %@", kind, it.title];
+            if (it.kind == EDDiskFolder) [m appendFormat:@"  ·  %lu entries", (unsigned long)((EDNode *)it.node).children.count];
+            if (it.kind == EDDiskBank && it.node == _currentNode && _bank) [m appendFormat:@"  ·  %lu samples, %lu presets", (unsigned long)_bank.samples.count, (unsigned long)_bank.presets.count];
+            if (it.subtitle.length && it.kind != EDDiskBank && it.kind != EDDiskFolder) [m appendFormat:@"  ·  %@", it.subtitle];
+            return m;
+        }
+    }
+    if (t == 2) return _bank ? @"Pick a sample from the list to see its waveform and facts." : @"Open a disk and load a bank on the Disk page, or use Open Bank.";
+    if (t == 3 && !_bank) return @"Presets appear here once a bank is loaded.";
+    if (t == 1 && !_fs && !_bank) return @"Use Open Disk, or pick a disk image here.";
     return h[5 + t];
 }
 - (void)refreshLCDVisibility {
     BOOL overview = _tabPicker.selectedSegment == 0 && _masterPicker.selectedSegment == 0;
-    _lcd.hidden = !overview; _cmdBar.hidden = _cmdRule.hidden = _tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2; _statusWidth.active = overview; _statusWide.active = !overview;   // the whole line is free when the readout is hidden
-    _status.preferredMaxLayoutWidth = overview ? 322 : 1500;
-    // the idle hint is only useful on the Disk tab; real messages (saved, errors, ...) always show
-    NSString *help = [self pageHelp], *cur = _status.stringValue;
-    if (![cur isEqualToString:help] && (cur.length == 0 || [self isHelpText:cur])) _status.stringValue = help;   // real messages stay until replaced
+    BOOL samples = _tabPicker.selectedSegment == 2;   // Samples: bank summary under the sample list, sample facts under the waveform
+    BOOL split = overview || samples;
+    _lcd.hidden = !split; _cmdBar.hidden = _cmdRule.hidden = _tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2;
+    _statusWidth.active = split; _statusWide.active = !split;
+    _statusLead.constant = overview ? 40 : (samples ? 2 : 14); _statusWidth.constant = overview ? 270 : 414;
+    _lcdLead.constant = samples ? 424 : 350; _lcdTrail.constant = samples ? -2 : -501;
+    _status.preferredMaxLayoutWidth = split ? _statusWidth.constant : 1500;
+    if (samples) { _lcd.line1 = [self pageHelp]; _lcd.line2 = nil; }
+    NSString *help = samples ? [self bankSummaryLine] : [self pageHelp], *cur = _status.stringValue;
+    if (![cur isEqualToString:help] && (cur.length == 0 || [self isHelpText:cur] || [cur isEqualToString:_autoStatus])) _status.stringValue = help;
+    _autoStatus = help;   // real messages stay until replaced
     for (NSTableView *t in @[_sampleTable]) { t.focusRingType = NSFocusRingTypeNone; t.enclosingScrollView.focusRingType = NSFocusRingTypeNone; }
 }
 - (void)observeValueForKeyPath:(NSString *)kp ofObject:(id)o change:(NSDictionary *)c context:(void *)ctx {
     if (o == _status) [self refreshLCDVisibility]; else [super observeValueForKeyPath:kp ofObject:o change:c context:ctx];
 }
-- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; [self resetStatus]; [self showPresetNote:_tabPicker.selectedSegment == 3]; if (_tabPicker.selectedSegment == 4) [self refreshMountedImages]; _cmdBar.hidden = _cmdRule.hidden = _tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2; [self refreshLCDVisibility]; }
+- (void)updateCmdBarGroups:(BOOL)diskOnly {   // Disk shows only the file operations; Samples only the sample tools
+    NSArray *gs = [(NSStackView *)_cmdBar views];
+    for (NSUInteger i = 0; i < gs.count; i++) [gs[i] setHidden:i == 0 ? !diskOnly : diskOnly];   // File: Disk only; the rest: Samples only
+}
+- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; [self resetStatus]; [self showPresetNote:_tabPicker.selectedSegment == 3]; if (_tabPicker.selectedSegment == 4) { [self refreshMountedImages]; [self refreshLinkSettings]; } _cmdBar.hidden = _cmdRule.hidden = _tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2; [self updateCmdBarGroups:_tabPicker.selectedSegment == 1]; [self refreshLCDVisibility]; }
 - (IBAction)showMasterTab:(id)s { [self selectTabNamed:@"master"]; }
 - (IBAction)showDiskTab:(id)s { [self selectTabNamed:@"disk"]; }
 - (IBAction)showSamplesTab:(id)s { [self selectTabNamed:@"samples"]; }
 - (IBAction)showPresetsTab:(id)s { [self selectTabNamed:@"presets"]; }
+// MARK: server setup (scsiid.txt, serve.txt, watch.txt in ~/Library/Application Support/EMU3)
+static NSString *LinkDir(void) { return [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/EMU3"]; }
+static NSString *LinkFile(NSString *n) { return [LinkDir() stringByAppendingPathComponent:n]; }
+- (void)refreshLinkSettings {
+    NSString *t = [NSString stringWithContentsOfFile:LinkFile(@"scsiid.txt") encoding:NSUTF8StringEncoding error:nil];
+    NSInteger cur = t.length ? t.integerValue : 7, sampler = SamplerBusID(), host = HostBusID();
+    [_linkSampler selectItemAtIndex:sampler]; [_linkHost selectItemAtIndex:host];
+    [_linkID removeAllItems];
+    for (int i = 0; i < 8; i++) if (i != sampler && i != host) [_linkID addItemWithTitle:[NSString stringWithFormat:@"%d", i]];
+    NSInteger ix = [_linkID indexOfItemWithTitle:[NSString stringWithFormat:@"%ld", (long)cur]]; [_linkID selectItemAtIndex:ix];   // -1 when the stored ID is taken: pick a free one
+    NSArray *l = [[NSString stringWithContentsOfFile:LinkFile(@"serve.txt") encoding:NSUTF8StringEncoding error:nil] componentsSeparatedByString:@"\n"];
+    NSString *img = l.count ? (NSString *)l[0] : @"";
+    BOOL ro = l.count > 1 && [[(NSString *)l[1] lowercaseString] hasPrefix:@"ro"];
+    [_linkAccess selectItemAtIndex:ro ? 1 : 0]; _linkAccess.enabled = img.length > 0;
+    NSString *w = [[NSString stringWithContentsOfFile:LinkFile(@"watch.txt") encoding:NSUTF8StringEncoding error:nil] componentsSeparatedByString:@"\n"].firstObject;
+    _linkServe.title = img.length ? @"Stop Serving" : @"Start Serving";
+    _linkInfo.stringValue = [NSString stringWithFormat:@"Serving: %@\nImage folder: %@", img.length ? img.lastPathComponent : @"nothing", w.length ? w : @"~/EMU3 Images (default)"];
+}
+static NSInteger SamplerBusID(void) { NSString *v = [NSUserDefaults.standardUserDefaults stringForKey:@"SMDITarget"]; return v.length ? MAX(0, MIN(7, v.integerValue)) : 6; }
+static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults objectForKey:@"HostID"]; return v ? MAX(0, MIN(7, [v integerValue])) : 7; }
+- (IBAction)linkBusChanged:(id)sender {
+    NSInteger sm = _linkSampler.indexOfSelectedItem, host = _linkHost.indexOfSelectedItem;
+    if (sm == host) { _status.stringValue = @"The sampler and the host cannot share a SCSI ID."; [self refreshLinkSettings]; return; }
+    [NSUserDefaults.standardUserDefaults setObject:@(sm).stringValue forKey:@"SMDITarget"]; [NSUserDefaults.standardUserDefaults setObject:@(host) forKey:@"HostID"];
+    _status.stringValue = [NSString stringWithFormat:@"Sampler is ID %ld, host (initiator) ID %ld. The host ID reaches the board through bluescsi.ini (Write bluescsi.ini…).", (long)sm, (long)host];
+    [self refreshLinkSettings];
+}
+- (IBAction)linkSettingChanged:(id)sender {
+    [NSFileManager.defaultManager createDirectoryAtPath:LinkDir() withIntermediateDirectories:YES attributes:nil error:nil];
+    if (sender == _linkID) {
+        NSInteger sid = _linkID.titleOfSelectedItem.integerValue;
+        [[NSString stringWithFormat:@"%ld\n", (long)sid] writeToFile:LinkFile(@"scsiid.txt") atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        _status.stringValue = [NSString stringWithFormat:@"The served disk answers at SCSI ID %ld. Rescan on the sampler.", (long)sid];
+    } else {
+        NSArray *l = [[NSString stringWithContentsOfFile:LinkFile(@"serve.txt") encoding:NSUTF8StringEncoding error:nil] componentsSeparatedByString:@"\n"];
+        if (((NSString *)l.firstObject).length) {
+            [[NSString stringWithFormat:@"%@\n%@\n", l[0], _linkAccess.indexOfSelectedItem == 1 ? @"ro" : @"rw"] writeToFile:LinkFile(@"serve.txt") atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            _status.stringValue = @"Access saved. It applies the next time serving starts.";
+        }
+    }
+    [self refreshLinkSettings]; [self refreshMountedImages];
+}
+/// Start / stop serving: the helper watches serve.txt, so writing or clearing it starts or stops the disk on the board.
+- (IBAction)toggleServing:(id)sender {
+    [NSFileManager.defaultManager createDirectoryAtPath:LinkDir() withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *cur = ServedImagePath();
+    if (cur) {
+        [NSUserDefaults.standardUserDefaults setObject:cur forKey:@"LastServedImage"];
+        [@"" writeToFile:LinkFile(@"serve.txt") atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        _status.stringValue = @"Stopped serving. The sampler no longer sees the disk."; [self refreshLinkSettings]; [self refreshMountedImages]; return;
+    }
+    NSString *img = _mountsIcons.selectedItem.url.path;   // the selected mount, else the open image, else the one served last
+    if (![img.pathExtension.lowercaseString isEqualToString:@"hda"] && ![img.pathExtension.lowercaseString isEqualToString:@"img"]) img = nil;
+    if (!img) img = _fs.imageURL.path;
+    if (!img) img = [NSUserDefaults.standardUserDefaults stringForKey:@"LastServedImage"];
+    if (!img || ![NSFileManager.defaultManager fileExistsAtPath:img]) {
+        NSOpenPanel *p = [NSOpenPanel openPanel]; p.message = @"Choose the disk image to serve to the sampler"; p.canChooseDirectories = NO;
+        if ([p runModal] != NSModalResponseOK) return; img = p.URL.path;
+    }
+    [[NSString stringWithFormat:@"%@\n%@\n", img, _linkAccess.indexOfSelectedItem == 1 ? @"ro" : @"rw"] writeToFile:LinkFile(@"serve.txt") atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    _status.stringValue = [NSString stringWithFormat:@"Serving %@ at SCSI ID %@.", img.lastPathComponent, BoardIDText()];
+    [self refreshLinkSettings]; [self refreshMountedImages];
+}
+- (IBAction)chooseImageFolder:(id)sender {
+    NSOpenPanel *p = [NSOpenPanel openPanel]; p.canChooseDirectories = YES; p.canChooseFiles = NO; p.canCreateDirectories = YES; p.prompt = @"Choose"; p.message = @"The folder the helper watches for disk images to serve";
+    if ([p runModal] != NSModalResponseOK) return;
+    [NSFileManager.defaultManager createDirectoryAtPath:LinkDir() withIntermediateDirectories:YES attributes:nil error:nil];
+    [[p.URL.path stringByAppendingString:@"\n"] writeToFile:LinkFile(@"watch.txt") atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    _status.stringValue = @"Image folder saved."; [self refreshLinkSettings];
+}
 // disk images on mounted volumes (SD cards, drives): top level of each volume only
 - (void)refreshMountedImages {
     __weak EDMainWindowController *weak = self;
     NSMutableArray<NSString *> *known = [NSMutableArray arrayWithArray:[NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"] ?: @[]];   // images the editor has opened
     if (_fs.imageURL.path) [known addObject:_fs.imageURL.path];
+    NSString *served = ServedImagePath(), *boardID = BoardIDText();
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         NSFileManager *fm = NSFileManager.defaultManager; NSMutableArray<EDDiskItem *> *found = [NSMutableArray array];
         // disks the Disk Manager helper serves to the sampler: mounted under ~/EMU3 Disks/<image name>
@@ -568,12 +685,9 @@ static NSTextField *toolNote(NSString *s) {
             for (NSString *k in known) if ([k.lastPathComponent.stringByDeletingPathExtension isEqualToString:name] && [fm fileExistsAtPath:k]) image = k;
             unsigned long long sz = image ? [[fm attributesOfItemAtPath:image error:nil] fileSize] : 0;
             NSString *size = sz ? [NSByteCountFormatter stringFromByteCount:(long long)sz countStyle:NSByteCountFormatterCountStyleFile] : @"size unknown";
-            NSString *idText = @"none";
-            NSRegularExpression *re = [NSRegularExpression regularExpressionWithPattern:@"^(?:HD|CD|FD)([0-7])[0-7]" options:NSRegularExpressionCaseInsensitive error:nil];
-            NSTextCheckingResult *m = [re firstMatchInString:name options:0 range:NSMakeRange(0, name.length)];
-            if (m) idText = [name substringWithRange:[m rangeAtIndex:1]];
-            EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = name; it.subtitle = m ? [NSString stringWithFormat:@"ID %@ · served", idText] : @"served"; it.url = image ? [NSURL fileURLWithPath:image] : nil;
-            it.node = [NSString stringWithFormat:@"%@ — served to the sampler, mounted at %@\nImage: %@ · %@ · SCSI ID: %@", name, mp, image ?: @"not opened in the editor yet (open it once to see where it sits)", size, idText];
+            BOOL isServed = served && [served.lastPathComponent.stringByDeletingPathExtension isEqualToString:name];
+            EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = name; it.subtitle = isServed ? [NSString stringWithFormat:@"served · ID %@", boardID] : @"mounted"; it.url = image ? [NSURL fileURLWithPath:image] : nil;
+            it.node = [NSString stringWithFormat:@"%@ — %@, mounted at %@\nImage: %@ · %@%@", name, isServed ? @"served to the sampler" : @"mounted on this Mac, not served", mp, image ?: @"not opened in the editor yet (open it once to see where it sits)", size, isServed ? [NSString stringWithFormat:@" · SCSI ID: %@ (Server setup)", boardID] : @""];
             [found addObject:it];
         }
         for (NSString *vol in [fm contentsOfDirectoryAtPath:@"/Volumes" error:nil]) {
@@ -731,11 +845,21 @@ static NSString *ScsiIDFromName(NSString *name) {
     NSTextCheckingResult *m = [re firstMatchInString:name options:0 range:NSMakeRange(0, name.length)];
     return m ? [name substringWithRange:[m rangeAtIndex:1]] : nil;
 }
+/// The SCSI ID the board's served disk answers at (scsiid.txt, default 7) and the image named in serve.txt.
+static NSString *BoardIDText(void) {
+    NSString *t = [NSString stringWithContentsOfFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/EMU3/scsiid.txt"] encoding:NSUTF8StringEncoding error:nil];
+    return [NSString stringWithFormat:@"%ld", t.length ? (long)MAX(0, MIN(7, t.integerValue)) : 7L];
+}
+static NSString *ServedImagePath(void) {
+    NSString *t = [NSString stringWithContentsOfFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/EMU3/serve.txt"] encoding:NSUTF8StringEncoding error:nil];
+    NSString *p = [[t componentsSeparatedByString:@"\n"].firstObject stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return p.length ? p : nil;
+}
 static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter stringFromByteCount:(long long)b countStyle:NSByteCountFormatterCountStyleFile]; }
 - (void)refreshDiskIcons {
     NSMutableArray *items = [NSMutableArray array];
     NSURL *d = [self samplerDiskFolder]; NSURL *root = [d.lastPathComponent isEqual:@"Default Folder"] ? d.URLByDeletingLastPathComponent : d;
-    if (root) { EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = root.lastPathComponent; { NSString *sid = ScsiIDFromName(root.lastPathComponent); it.subtitle = sid ? [NSString stringWithFormat:@"served · ID %@", sid] : @"served to the sampler"; } it.sampler = YES; it.url = root; [items addObject:it]; }
+    if (root) { EDDiskItem *it = [EDDiskItem new]; it.kind = EDDiskHard; it.title = root.lastPathComponent; it.subtitle = [NSString stringWithFormat:@"served · ID %@", BoardIDText()]; it.sampler = YES; it.url = root; [items addObject:it]; }
     for (NSString *path in [NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"]) {
         if (![NSFileManager.defaultManager fileExistsAtPath:path]) continue;
         EDDiskItem *it = [EDDiskItem new]; NSString *ext = path.pathExtension.lowercaseString;
@@ -1011,7 +1135,7 @@ static NSString *const kMinimalBlueSCSIIni =
     if (!_tabHistory) _tabHistory = [NSMutableArray array];
     if (now != _curTab && !_tabBack) { [_tabHistory addObject:@(_curTab)]; if (_tabHistory.count > 30) [_tabHistory removeObjectAtIndex:0]; }
     _curTab = now;
-    _tabPicker.selectedSegment = now; [self resetStatus]; [self refreshLCDVisibility];
+    _tabPicker.selectedSegment = now; [self resetStatus]; [self updateLCD];
     if ([item.identifier isEqual:@"presets"]) [_presetEditor reload];
     if ([item.identifier isEqual:@"master"]) [self refreshSamplerStatus];
     if ([item.identifier isEqual:@"disk"]) [self focusBrowser];
@@ -1089,7 +1213,7 @@ static NSString *const kMinimalBlueSCSIIni =
     if (sel < 0 && items.count) sel = 0;
     _diskHint.selectedIndex = sel;
     [_saveKey setTitle:_inBank ? @"Audition" : @"Save…"]; _saveKey.action = _inBank ? @selector(browserAudition:) : @selector(saveBank:);
-    [self applyBrowserVisibility]; [self focusBrowser];
+    [self applyBrowserVisibility]; [self focusBrowser]; [self refreshLCDVisibility];
 }
 /// Keeps the keyboard on the icons (Return opens, Escape backs out) while the Disk page is showing, unless a text field is being edited.
 - (void)focusBrowser {
@@ -1100,7 +1224,7 @@ static NSString *const kMinimalBlueSCSIIni =
 - (void)browserSelectionChanged {
     EDDiskItem *it = _diskHint.selectedItem;
     if (_inBank && it.kind == EDDiskSample && it.node != _sample) [self selectSample:it.node];   // keeps the Samples page and Audition on the same sample
-    [self applyBrowserVisibility];
+    [self applyBrowserVisibility]; [self refreshLCDVisibility];
 }
 - (IBAction)browserAudition:(id)s { EDDiskItem *it = _diskHint.selectedItem; if (it.kind == EDDiskSample) { if (it.node != _sample) [self selectSample:it.node]; [self togglePlay:nil]; } }
 /// Double-click / Return: open a disk, go into a folder, load a bank and show its samples.
@@ -1165,8 +1289,9 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
             for (NSString *k in [NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"]) if ([k.lastPathComponent.stringByDeletingPathExtension isEqualToString:it.title] && [NSFileManager.defaultManager fileExistsAtPath:k]) img = k;
             if (!img && [_fs.imageURL.lastPathComponent.stringByDeletingPathExtension isEqualToString:it.title]) img = _fs.imageURL.path;
         }
-        NSString *sid = ScsiIDFromName(img.lastPathComponent ?: it.title);
-        [rows addObject:@[@"SCSI ID", sid ? [NSString stringWithFormat:@"%@ (from the name %@)", sid, img.lastPathComponent ?: it.title] : @"not in the name (BlueSCSI wants HD<id>0_name.hda)"]];
+        NSString *sid = it.sampler ? nil : ScsiIDFromName(img.lastPathComponent ?: it.title);
+        if (it.sampler) [rows addObject:@[@"SCSI ID", [NSString stringWithFormat:@"%@ (set on Tools ▸ Server setup)", BoardIDText()]]];
+        else [rows addObject:@[@"SCSI ID", sid ? [NSString stringWithFormat:@"%@ (from the name %@, for a BlueSCSI SD card)", sid, img.lastPathComponent ?: it.title] : @"not in the name (a BlueSCSI SD card wants HD<id>0_name.hda)"]];
         if (img) {
             unsigned long long sz = [[NSFileManager.defaultManager attributesOfItemAtPath:img error:nil] fileSize];
             [rows addObject:@[@"Image file", img]]; [rows addObject:@[@"Folder", img.stringByDeletingLastPathComponent]]; if (sz) [rows addObject:@[@"Image size", EMU3FormatBytes(sz)]];
@@ -1453,6 +1578,7 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     [_sds present];
 }
 
+- (IBAction)findSampler:(id)sender { [self smdiTransfer:nil]; [_smdi presentAndFind]; }
 - (IBAction)smdiTransfer:(id)sender {
     if (!_smdi) {
         _smdi = [EDSMDIPanel new];

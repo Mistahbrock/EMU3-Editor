@@ -19,8 +19,9 @@
     int usb = _noUSB.state == NSControlStateValueOn ? 0 : 1, att = _attention.state == NSControlStateValueOn ? 1 : 0;
     if (bridge) return [NSString stringWithFormat:
         @"# bluescsi.ini for the USB-SCSI bridge firmware (written by EMU3 Editor).\n# Only needed when an SD card is in the board; without a card the Mac configures the board over USB.\n"
-        @"[SCSI]\nUSBBlockDriveSCSIID=%ld\nUSBBlockDriveMB=%ld\nEnableUSBMassStorage=%d\nEnableUnitAttention=%d\n",
-        (long)_id.indexOfSelectedItem, (long)MAX(1, _mb.integerValue), usb, att];
+        @"[SCSI]\nUSBBlockDriveSCSIID=%ld\nUSBBlockDriveMB=%ld\nEnableUSBMassStorage=%d\nEnableUnitAttention=%d\n%@",
+        (long)_id.indexOfSelectedItem, (long)MAX(1, _mb.integerValue), usb, att,
+        [NSUserDefaults.standardUserDefaults objectForKey:@"HostID"] && [NSUserDefaults.standardUserDefaults integerForKey:@"HostID"] != 7 ? [NSString stringWithFormat:@"InitiatorID=%ld\n", (long)[NSUserDefaults.standardUserDefaults integerForKey:@"HostID"]] : @""];
     // stock BlueSCSI serving an image to an E-mu sampler: SCSI-1, no parity, early SEL (the settings that worked on the E6400)
     return [NSString stringWithFormat:
         @"; BlueSCSI settings for an E-mu sampler (written by EMU3 Editor)\n[SCSI]\nEnableUSBMassStorage=%d\nEnableSCSI2=0\nEnableUnitAttention=%d\nEnableParity=0\nEnableSelLatch=1\nQuirks=0\n", usb, att];

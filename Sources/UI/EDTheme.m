@@ -228,7 +228,7 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
         if (![t isKindOfClass:[NSOutlineView class]]) { EDLCDCell *dc = [[EDLCDCell alloc] initTextCell:@""]; dc.editable = [(NSCell *)c.dataCell isEditable]; dc.drawsBackground = NO; dc.lineBreakMode = NSLineBreakByTruncatingTail; c.dataCell = dc; } }
     t.headerView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];   // dark header text on the green panel
 }
-+ (CGFloat)lcdFrameWidth { return 3; }
++ (CGFloat)lcdFrameWidth { return 1.5; }
 + (NSView *)framedLCD:(NSScrollView *)s {
     EDUseLCDScroller(s);
     NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 0; box.layer.masksToBounds = YES;

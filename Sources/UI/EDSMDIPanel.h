@@ -8,5 +8,6 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) EDSDSSample * (^currentSample)(void);
 @property (nonatomic, copy, nullable) void (^received)(EDSDSSample *sample, NSString *name);
 - (void)present;
+- (void)presentAndFind;   // opens the panel and scans the SCSI bus for the sampler
 @end
 NS_ASSUME_NONNULL_END
