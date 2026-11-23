@@ -11,6 +11,25 @@
 static NSArray<NSString *> *range(NSInteger lo, NSInteger hi, NSString *fmt) {
     NSMutableArray *a = [NSMutableArray array]; for (NSInteger i = lo; i <= hi; i++) [a addObject:[NSString stringWithFormat:fmt, (long)i]]; return a;
 }
+static NSArray<NSString *> *xposeList(void) {   // -12 .. +12 semitones; the sampler shows 0 as "Off"
+    NSMutableArray *a = [range(-12, 12, @"%+ld") mutableCopy]; a[12] = @"Off"; return a;
+}
+static NSArray<NSString *> *noteList(void) {   // MIDI notes 0..127 as the sampler shows them: C-1 .. G9, middle C (60) = C4
+    static NSString *const names[12] = {@"C", @"C#", @"D", @"D#", @"E", @"F", @"F#", @"G", @"G#", @"A", @"A#", @"B"};
+    NSMutableArray *a = [NSMutableArray array];
+    for (int n = 0; n < 128; n++) [a addObject:[NSString stringWithFormat:@"%@%d", names[n % 12], n / 12 - 1]];
+    return a;
+}
+static NSArray<NSString *> *fxTypesA(void) {   // EOS 4 manual, Master Effects A
+    return @[@"Room 1", @"Room 2", @"Room 3", @"Hall 1", @"Hall 2", @"Plate", @"Delay", @"Panning Delay", @"Multitap 1", @"Multitap Pan", @"3 Tap", @"3 Tap Pan", @"Soft Room", @"Warm Room", @"Perfect Room", @"Tiled Room",
+             @"Hard Plate", @"Warm Hall", @"Spacious Hall", @"Bright Hall", @"Bright Hall Pan", @"Bright Plate", @"BBall Court", @"Gymnasium", @"Cavern", @"Concert 9", @"Concert 10 Pan", @"Reverse Gate", @"Gate 2", @"Gate Pan",
+             @"Concert 11", @"Medium Concert", @"Large Concert", @"Large Concert Pan", @"Canyon", @"DelayVerb 1", @"DelayVerb 2", @"DelayVerb 3", @"DelayVerb 4 Pan", @"DelayVerb 5 Pan", @"DelayVerb 6", @"DelayVerb 7", @"DelayVerb 8", @"DelayVerb 9"];
+}
+static NSArray<NSString *> *fxTypesB(void) {   // Master Effects B
+    return @[@"Chorus 1", @"Chorus 2", @"Chorus 3", @"Chorus 4", @"Chorus 5", @"Doubling", @"Slapback", @"Flange 1", @"Flange 2", @"Flange 3", @"Flange 4", @"Flange 5", @"Flange 6", @"Flange 7", @"Big Chorus", @"Symphonic",
+             @"Ensemble", @"Delay", @"Delay Stereo 1", @"Delay Stereo 2", @"Panning Delay", @"Delay Chorus", @"Pan Delay Chorus 1", @"Pan Delay Chorus 2", @"Dual Tap 1/3", @"Dual Tap 1/4", @"Vibrato",
+             @"Distortion 1", @"Distortion 2", @"Distortion Flange", @"Distorted Chorus", @"Distorted Double"];
+}
 static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAddingObjectsFromArray:range(0, 127, @"cc%ld")]; }
 
 @implementation EDMIDIEditor {
@@ -24,7 +43,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     NSMutableDictionary *d = [@{@"basic": @"1", @"mode": @"omni", @"devid": [NSUserDefaults.standardUserDefaults stringForKey:@"SDSDevice"] ?: @"0", @"local": @"on",
         @"pitch": @"ptwheel", @"mod": @"cc1", @"press": @"chnpres", @"pedal": @"cc3", @"sw1": @"64", @"sw2": @"65", @"sw3": @"66",
         @"vcurve": @"linear", @"c7sens": @"31", @"c7curve": @"logarithmic", @"gpedal": @"off", @"rcvpc": @"on", @"sendpc": @"on", @"magic": @"off",
-        @"tuneoff": @"+0/64", @"xpose": @"+0", @"audition": @"60", @"headroom": @"3 dB", @"oboost": @"+0 dB", @"ofmt": @"analog", @"dither": @"off",
+        @"tuneoff": @"+0/64", @"xpose": @"Off", @"audition": @"C4", @"synatk": @"Fast", @"fxa": @"Room 1", @"fxb": @"Chorus 1", @"fxon": @"Enabled", @"fxctl": @"Master Settings", @"headroom": @"3 dB", @"oboost": @"+0 dB", @"ofmt": @"analog", @"dither": @"off", @"aesboost": @"off", @"oclock": @"48kHz",
         @"contrast": @"+0", @"wrap": @"on", @"saver": @"Never", @"scsiid": @"6", @"term": @"on", @"avoid": @"7", @"diskbtn": @"Last", @"combine": @"off", @"fracloop": @"off", @"autoload": @"off", @"memprefer": @"405 K", @"seqmem": @"1 K"} mutableCopy];
     NSInteger ccs[12] = {21, 22, 23, 24, 25, 26, 27, 28, 70, 71, 72, 73};
     for (int i = 0; i < 12; i++) d[[NSString stringWithFormat:@"midi%c", 'a' + i]] = [NSString stringWithFormat:@"cc%ld", (long)ccs[i]];
@@ -35,6 +54,8 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     if (!(self = [super initWithFrame:f])) return nil;
     _profile = [self.defaults mutableCopy];
     NSDictionary *saved = [NSUserDefaults.standardUserDefaults dictionaryForKey:@"SamplerMIDIProfile"]; if (saved) [_profile addEntriesFromDictionary:saved];
+    { NSInteger k = [_profile[@"audition"] integerValue]; if ([_profile[@"audition"] length] && [_profile[@"audition"] rangeOfCharacterFromSet:NSCharacterSet.letterCharacterSet].location == NSNotFound && k >= 0 && k < 128) _profile[@"audition"] = noteList()[k]; }   // older profiles stored the note number
+    if ([_profile[@"xpose"] isEqual:@"+0"]) _profile[@"xpose"] = @"Off";   // the sampler shows 0 semitones as "Off"
     NSArray *onoff = @[@"off", @"on"];
     NSMutableArray *midiRows = [NSMutableArray array];
     for (int i = 0; i < 12; i++) [midiRows addObject:@[[NSString stringWithFormat:@"midi%c", 'a' + i], [NSString stringWithFormat:@"Midi%c", 'A' + i], ccList(@[@"off"])]];
@@ -55,11 +76,11 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
             @[@"rcvpc", @"Rcv Program Change", onoff], @[@"sendpc", @"Send Program Change", onoff], @[@"magic", @"Magic load preset", onoff]]},
         @{@"menu": @"MIDI", @"soft": @"Presets", @"title": @"Preset MIDI", @"prev": @"MIDI Preferences 2", @"table": @YES},
         // Master > Setup (EOS 4.62 menu texts; value ranges from the EOS 4.0 manual)
-        @{@"menu": @"Setup", @"soft": @"Tune", @"title": @"Tuning", @"next": @"Output", @"fk": @[@"F1", @"F2", @"F3"], @"rows": @[
-            @[@"tuneoff", @"Tuning Offset", range(-64, 64, @"%+ld/64")], @[@"xpose", @"Transposition", range(-12, 12, @"%+ld")], @[@"audition", @"Audition Key", range(0, 127, @"%ld")]]},
-        @{@"menu": @"Setup", @"soft": @"Output", @"title": @"Output", @"prev": @"Tuning", @"next": @"Miscellaneous", @"fk": @[@"F1", @"F2", @"F3", @"F4"], @"rows": @[
+        @{@"menu": @"Setup", @"soft": @"Tune", @"title": @"Tuning", @"next": @"Output", @"fk": @[@"F1", @"F2", @"F3", @"F4"], @"rows": @[
+            @[@"tuneoff", @"Tuning Offset", range(-64, 64, @"%+ld/64")], @[@"xpose", @"Transposition", xposeList()], @[@"audition", @"Audition Key", noteList()], @[@"synatk", @"Synth Attack", @[@"Fast", @"Slow"]]]},
+        @{@"menu": @"Setup", @"soft": @"Output", @"title": @"Output", @"prev": @"Tuning", @"next": @"Miscellaneous", @"fk": @[@"F1", @"F2", @"F3", @"F4", @"F5", @"F6"], @"rows": @[
             @[@"headroom", @"Headroom", range(0, 15, @"%ld dB")], @[@"oboost", @"Output Boost", @[@"+0 dB", @"+12 dB"]],
-            @[@"ofmt", @"Output Format", @[@"analog", @"S/PDIF", @"AES pro"]], @[@"dither", @"ADAT Output Dither", onoff]]},
+            @[@"ofmt", @"Output Format", @[@"analog", @"S/PDIF", @"AES pro"]], @[@"aesboost", @"AES Boost", onoff], @[@"oclock", @"Output Clock", @[@"44.1kHz", @"48kHz"]], @[@"dither", @"ADAT Output Dither", onoff]]},
         @{@"menu": @"Setup", @"soft": @"Misc", @"title": @"Miscellaneous", @"prev": @"Output", @"next": @"SCSI / Disk", @"fk": @[@"F1", @"F2", @"F3"], @"rows": @[
             @[@"contrast", @"Contrast", range(-8, 7, @"%+ld")], @[@"wrap", @"Wrap Field Selection", onoff],
             @[@"saver", @"Screen Saver", @[@"Never", @"10 min", @"20 min", @"30 min", @"40 min", @"50 min", @"60 min"]]]},
@@ -71,6 +92,11 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         // CPU RAM is shared: Preset + Sequence = 406 K on the E6400 (as shown on the sampler's own screen); Sequence follows Preset
         @{@"menu": @"Setup", @"soft": @"Memory", @"title": @"Memory Configuration", @"prev": @"Import Options", @"rows": @[
             @[@"memprefer", @"Preset Memory", range(1, 405, @"%ld K")], @[@"seqmem", @"Sequence Memory", range(1, 405, @"%ld K"), @"derived"]]},
+        // Master > FX (needs the effects board; EOS 4 manual, Master Effects)
+        @{@"menu": @"FX", @"soft": @"A", @"title": @"Master Effects A", @"next": @"Master Effects B", @"fk": @[@"F1"], @"rows": @[@[@"fxa", @"Effect A", fxTypesA()]]},
+        @{@"menu": @"FX", @"soft": @"B", @"title": @"Master Effects B", @"prev": @"Master Effects A", @"next": @"Effects Setup", @"fk": @[@"F1"], @"rows": @[@[@"fxb", @"Effect B", fxTypesB()]]},
+        @{@"menu": @"FX", @"soft": @"Setup", @"title": @"Effects Setup", @"prev": @"Master Effects B", @"fk": @[@"F1", @"F2"], @"rows": @[
+            @[@"fxon", @"Effects", @[@"Enabled", @"Bypassed"]], @[@"fxctl", @"Multimode Effects Control", [@[@"Master Settings"] arrayByAddingObjectsFromArray:range(1, 16, @"Channel %ld")]]]},
         // Master > Bank
         @{@"menu": @"Bank", @"soft": @"Erase", @"title": @"Erase Bank", @"next": @"Rename Bank", @"message": @"The sampler's Erase clears all presets, samples and sequences of the bank in its RAM.\n\nHere you can clear every preset, or every preset and sample, of the open bank. Nothing is written until you save (or auto-save runs); reopen the bank to get it back.",
           @"actions": @[@[@"Erase All Presets…", @"erasePresets"], @[@"Erase All Presets and Samples…", @"eraseAll"]]},
@@ -81,7 +107,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         @{@"menu": @"Bank", @"soft": @"Flash", @"title": @"Resident FLASH", @"prev": @"Bank Auto-Load", @"message": @"Erase Resident Bank\nCompact Resident Bank\nCopy RAM to Resident (RAM->F)\nCopy Resident to RAM (F->RAM)\n\nThese act on the sampler's resident flash memory and are run on the sampler itself. They cannot be done from the editor."}];
 
     // the LCD screen
-    _screen = [NSView new]; _screen.wantsLayer = YES; _screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor; _screen.layer.cornerRadius = 6;
+    _screen = [NSView new]; _screen.wantsLayer = YES; _screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor; _screen.layer.cornerRadius = 0;
     _screen.layer.borderWidth = EDTheme.lcdFrameWidth; _screen.layer.borderColor = NSColor.blackColor.CGColor;
     _title = [NSTextField labelWithString:@""]; _title.font = [EDTheme lcdFont:26]; _title.textColor = EDTheme.lcdInk; _title.alignment = NSTextAlignmentCenter;
     _prev = [NSTextField labelWithString:@""]; _next = [NSTextField labelWithString:@""];
@@ -114,6 +140,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     _note = [NSTextField wrappingLabelWithString:@""];
     _note.textColor = NSColor.secondaryLabelColor; _note.font = [NSFont systemFontOfSize:12]; _note.translatesAutoresizingMaskIntoConstraints = NO;
     [_screen addSubview:keys]; [self addSubview:_note];   // the soft keys live in the green screen
+    [EDTheme addGlareTo:_screen];
 
     [NSLayoutConstraint activateConstraints:@[
         [_screen.topAnchor constraintEqualToAnchor:self.topAnchor constant:40], [_screen.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
@@ -168,6 +195,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     }
     for (; k < (NSInteger)_softKeys.count; k++) _softKeys[k].hidden = YES;
     _note.stringValue = [m isEqual:@"Bank"] ? @"Bank mirrors the sampler's Master ▸ Bank menu. Erase and Rename work on the open bank in the editor; Auto-Load and the resident FLASH functions belong to the sampler itself."
+        : [m isEqual:@"FX"] ? @"FX mirrors the sampler's Master ▸ FX menu (effects board): the master effect types and the Effects Setup page. The sampler keeps them in its own memory and they cannot be read over SCSI, so set them here to match it."
         : [m isEqual:@"MIDI"] ? @"Mode, Cntrls and Prefs mirror the sampler's Master ▸ MIDI menus. The sampler keeps these in its own flash memory; they cannot be read over SCSI or sample dump, so set them here to match it. The device ID is shared with MIDI Sample Dump. The Presets page edits MIDI A–D inside the bank."
         : @"Tune, Output, Misc, SCSI and Import mirror the sampler's Master ▸ Setup menus (value ranges from the EOS manual). They live in the sampler's flash memory and cannot be read or written from here, so this is a reference profile to match the sampler by hand.";
     [self showPage:first];

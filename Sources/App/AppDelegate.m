@@ -118,6 +118,8 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     item(view, @"Master ▸ MIDI", @selector(showMIDITab:), @"5", _main);
     item(view, @"Master ▸ Setup", @selector(showSetupTab:), @"6", _main);
     item(view, @"Master ▸ Bank", @selector(showBankTab:), @"7", _main);
+    item(view, @"Master ▸ FX", @selector(showFXTab:), @"8", _main);
+    item(view, @"FX Board Installed", @selector(toggleFXBoard:), @"", _main);
     [view addItem:NSMenuItem.separatorItem];
     item(view, @"Zoom In", @selector(zoomIn:), @"+", _main);
     item(view, @"Zoom Out", @selector(zoomOut:), @"-", _main);

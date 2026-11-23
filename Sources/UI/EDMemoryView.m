@@ -16,7 +16,7 @@ static NSString *kb(double k) { return k >= 1024 ? [NSString stringWithFormat:@"
 
 - (void)drawRect:(NSRect)dirty {
     NSRect r = NSInsetRect(self.bounds, EDTheme.lcdFrameWidth / 2, EDTheme.lcdFrameWidth / 2);
-    NSBezierPath *frame = [NSBezierPath bezierPathWithRoundedRect:r xRadius:6 yRadius:6];
+    NSBezierPath *frame = [NSBezierPath bezierPathWithRoundedRect:r xRadius:0 yRadius:0];
     [EDTheme.lcdBackground setFill]; [frame fill]; [NSColor.blackColor setStroke]; frame.lineWidth = EDTheme.lcdFrameWidth; [frame stroke];
     NSColor *ink = EDTheme.lcdInk; CGFloat top = NSMaxY(r), h = r.size.height;
     text(@"Memory", NSMakePoint(NSMinX(r) + 14, top - 36), 22, ink, NO);

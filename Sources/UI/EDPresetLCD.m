@@ -86,7 +86,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     for (NSInteger i = 0; i < 3; i++) { NSButton *b = [EDTheme lcdButton:@[@"Global", @"Voice", @"Zone"][i] target:self action:@selector(menuPicked:)]; b.tag = i; [b.widthAnchor constraintEqualToConstant:78].active = YES; [_menuBtns addObject:b]; [menuRow addArrangedSubview:b]; }
     menuRow.translatesAutoresizingMaskIntoConstraints = NO; _menuRow = menuRow;
     _screen = [NSView new]; _screen.wantsLayer = YES; _screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
-    _screen.layer.cornerRadius = 8; _screen.layer.borderColor = NSColor.blackColor.CGColor; _screen.layer.borderWidth = EDTheme.lcdFrameWidth;
+    _screen.layer.cornerRadius = 0; _screen.layer.borderColor = NSColor.blackColor.CGColor; _screen.layer.borderWidth = EDTheme.lcdFrameWidth;
     _screen.translatesAutoresizingMaskIntoConstraints = NO;
     _title = [NSTextField labelWithString:@""]; _title.font = [EDTheme lcdFont:22]; _title.textColor = EDTheme.lcdInk;
     _context = [NSTextField labelWithString:@""]; _context.font = [EDTheme lcdFont:14]; _context.textColor = EDTheme.lcdInk;
@@ -96,6 +96,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     _grid = [NSStackView new]; _grid.orientation = NSUserInterfaceLayoutOrientationHorizontal; _grid.alignment = NSLayoutAttributeTop; _grid.spacing = 40;
     _keys = [NSStackView new]; _keys.orientation = NSUserInterfaceLayoutOrientationVertical; _keys.spacing = 6; _keys.translatesAutoresizingMaskIntoConstraints = NO;
     for (NSView *v in @[_title, _context, _prevV, _nextV, _empty, _grid, _menuRow, _keys]) { v.translatesAutoresizingMaskIntoConstraints = NO; [_screen addSubview:v]; }
+    [EDTheme addGlareTo:_screen];
     [self addSubview:_screen];
     [NSLayoutConstraint activateConstraints:@[
         [_screen.topAnchor constraintEqualToAnchor:self.topAnchor], [_screen.leadingAnchor constraintEqualToAnchor:self.leadingAnchor], [_screen.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],

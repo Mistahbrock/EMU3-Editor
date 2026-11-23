@@ -316,8 +316,9 @@ static NSTextField *label(NSString *s) {
 
     // Master tab = overview | MIDI | Setup (the sampler's Master menus), switched by a small picker on top
     NSView *masterRoot = [NSView new];
-    NSSegmentedControl *mp = [NSSegmentedControl segmentedControlWithLabels:@[@"Overview", @"MIDI", @"Setup", @"Bank"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(masterPicked:)];
+    NSSegmentedControl *mp = [NSSegmentedControl segmentedControlWithLabels:@[@"Utilities", @"Bank", @"Setup", @"FX", @"MIDI"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(masterPicked:)];
     mp.selectedSegment = 0; _masterPicker = mp;
+    [self applyFXBoardSetting];
     _midiEditor = [[EDMIDIEditor alloc] initWithFrame:NSMakeRect(0, 0, 800, 500)];
     _midiEditor.edited = ^{ [weak updateTitle]; [weak modelChanged]; };
     _midiEditor.action = ^(NSString *n) { [weak masterAction:n]; };
@@ -536,11 +537,21 @@ static NSTextField *label(NSString *s) {
 }
 - (IBAction)masterPicked:(NSSegmentedControl *)s {
     NSInteger i = s.selectedSegment; _masterOverview.hidden = i != 0; _midiEditor.hidden = i == 0; [self refreshLCDVisibility];
-    if (i > 0) { [_midiEditor setMenu:i == 1 ? @"MIDI" : (i == 2 ? @"Setup" : @"Bank")]; [_midiEditor reload]; }
+    if (i > 0) { [_midiEditor setMenu:@[@"", @"Bank", @"Setup", @"FX", @"MIDI"][i]]; [_midiEditor reload]; }
 }
-- (IBAction)showMIDITab:(id)s { [self showMasterPage:1]; }
+- (IBAction)showMIDITab:(id)s { [self showMasterPage:4]; }
 - (IBAction)showSetupTab:(id)s { [self showMasterPage:2]; }
-- (IBAction)showBankTab:(id)s { [self showMasterPage:3]; }
+- (IBAction)showFXTab:(id)s { if (self.fxBoardInstalled) [self showMasterPage:3]; }
+// The sampler cannot tell the editor whether the effects board is fitted, so the FX page is switched on by View > FX Board Installed.
+- (BOOL)fxBoardInstalled { return [NSUserDefaults.standardUserDefaults boolForKey:@"FXBoardInstalled"]; }
+- (void)applyFXBoardSetting {
+    BOOL on = self.fxBoardInstalled;
+    [_masterPicker setEnabled:on forSegment:3];
+    [_masterPicker setToolTip:on ? nil : @"FX needs the effects board: turn on View ▸ FX Board Installed"];
+    if (!on && _masterPicker.selectedSegment == 3) { _masterPicker.selectedSegment = 0; [self masterPicked:_masterPicker]; }
+}
+- (IBAction)toggleFXBoard:(id)s { [NSUserDefaults.standardUserDefaults setBool:!self.fxBoardInstalled forKey:@"FXBoardInstalled"]; [self applyFXBoardSetting]; }
+- (IBAction)showBankTab:(id)s { [self showMasterPage:1]; }
 - (IBAction)clearAllPresets:(id)s { [self masterAction:@"erasePresets"]; }
 - (void)masterAction:(NSString *)name {
     if ([name isEqual:@"saveAs"]) { [self saveBankAs:nil]; return; }
@@ -1106,6 +1117,8 @@ static NSTextField *label(NSString *s) {
 }
 - (BOOL)validateMenuItem:(NSMenuItem *)m {
     SEL a = m.action;
+    if (a == @selector(toggleFXBoard:)) { m.state = self.fxBoardInstalled ? NSControlStateValueOn : NSControlStateValueOff; return YES; }
+    if (a == @selector(showFXTab:)) return self.fxBoardInstalled;
     if (a == @selector(saveBank:) || a == @selector(saveBankAs:)) return _bank != nil;
     if (a == @selector(sendPresetToSamplerDisk:) || a == @selector(exportPresetBank:)) return [self selectedPreset].kind == EDPresetKindE4 && [_bank.formType hasPrefix:@"E4B"];
     if (a == @selector(exportWAV:) || a == @selector(importWAV:) || a == @selector(sdsTransfer:) || a == @selector(smdiTransfer:) || a == @selector(sendToSamplerDisk:) || a == @selector(togglePlay:) || a == @selector(normalize:) ||

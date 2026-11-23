@@ -71,13 +71,39 @@
 }
 @end
 
+// A faint reflection on the glass: a soft diagonal sheen over the upper part of the screen, plus a hairline highlight along the top edge.
+static void DrawGlare(NSRect b, CGFloat radius) {
+    NSBezierPath *clip = [NSBezierPath bezierPathWithRoundedRect:b xRadius:radius yRadius:radius];
+    [NSGraphicsContext saveGraphicsState];
+    [clip addClip];
+    CGFloat top = NSMaxY(b), h = NSHeight(b), w = NSWidth(b);
+    NSBezierPath *sheen = [NSBezierPath bezierPath];       // just a hint: a small slanted wedge in the top-left corner (y grows upwards)
+    CGFloat gw = MIN(w * 0.30, 330), gh = MIN(h * 0.20, 70);
+    [sheen moveToPoint:NSMakePoint(NSMinX(b), top)];
+    [sheen lineToPoint:NSMakePoint(NSMinX(b) + gw, top)];
+    [sheen lineToPoint:NSMakePoint(NSMinX(b), top - gh)];
+    [sheen closePath];
+    NSGradient *g = [[NSGradient alloc] initWithStartingColor:[NSColor colorWithWhite:1 alpha:0.12] endingColor:[NSColor colorWithWhite:1 alpha:0.0]];
+    [g drawInBezierPath:sheen angle:-45];
+    [NSGraphicsContext restoreGraphicsState];
+}
+
+@interface EDLCDGlareView : NSView
+@end
+@implementation EDLCDGlareView
+- (NSView *)hitTest:(NSPoint)p { return nil; }
+- (BOOL)isOpaque { return NO; }
+- (void)drawRect:(NSRect)r { DrawGlare(self.bounds, 0); }
+@end
+
 @interface EDLCDFrameView : NSView
 @end
 @implementation EDLCDFrameView
 - (NSView *)hitTest:(NSPoint)p { return nil; }
 - (void)drawRect:(NSRect)r {
     CGFloat w = EDTheme.lcdFrameWidth;
-    NSBezierPath *b = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(self.bounds, w / 2, w / 2) xRadius:5 yRadius:5];
+    DrawGlare(NSInsetRect(self.bounds, w, w), 0);
+    NSBezierPath *b = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(self.bounds, w / 2, w / 2) xRadius:0 yRadius:0];
     b.lineWidth = w; [NSColor.blackColor setStroke]; [b stroke];
 }
 @end
@@ -203,16 +229,21 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
 + (CGFloat)lcdFrameWidth { return 3; }
 + (NSView *)framedLCD:(NSScrollView *)s {
     EDUseLCDScroller(s);
-    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 5; box.layer.masksToBounds = YES;
+    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 0; box.layer.masksToBounds = YES;
     EDLCDFrameView *f = [EDLCDFrameView new];
     for (NSView *v in @[s, f]) { v.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:v];
         [NSLayoutConstraint activateConstraints:@[[v.topAnchor constraintEqualToAnchor:box.topAnchor], [v.bottomAnchor constraintEqualToAnchor:box.bottomAnchor],
             [v.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [v.trailingAnchor constraintEqualToAnchor:box.trailingAnchor]]]; }
     return box;
 }
++ (void)addGlareTo:(NSView *)host {
+    EDLCDGlareView *g = [EDLCDGlareView new]; g.translatesAutoresizingMaskIntoConstraints = NO; [host addSubview:g];
+    [NSLayoutConstraint activateConstraints:@[[g.topAnchor constraintEqualToAnchor:host.topAnchor], [g.bottomAnchor constraintEqualToAnchor:host.bottomAnchor],
+        [g.leadingAnchor constraintEqualToAnchor:host.leadingAnchor], [g.trailingAnchor constraintEqualToAnchor:host.trailingAnchor]]];
+}
 + (NSView *)framedLCD:(NSView *)s footer:(NSView *)footer {
     EDUseLCDScroller(s);
-    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 5; box.layer.masksToBounds = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
+    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.cornerRadius = 0; box.layer.masksToBounds = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
     EDLCDFrameView *f = [EDLCDFrameView new];
     for (NSView *v in @[s, footer, f]) { v.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:v]; }
     NSLayoutConstraint *fl = [footer.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:8];
@@ -294,7 +325,7 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
     NSTextField *t = [NSTextField labelWithString:s]; t.font = [EDTheme lcdFont:pt]; t.textColor = EDTheme.lcdInk; return t;
 }
 + (NSView *)lcdScreenAround:(NSView *)content {
-    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor; box.layer.cornerRadius = 8;
+    NSView *box = [NSView new]; box.wantsLayer = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor; box.layer.cornerRadius = 0;
     box.layer.borderColor = NSColor.blackColor.CGColor; box.layer.borderWidth = EDTheme.lcdFrameWidth;
     content.translatesAutoresizingMaskIntoConstraints = NO; [box addSubview:content];
     [NSLayoutConstraint activateConstraints:@[[content.topAnchor constraintEqualToAnchor:box.topAnchor], [content.bottomAnchor constraintEqualToAnchor:box.bottomAnchor],
@@ -317,7 +348,7 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
     w.opaque = NO; w.backgroundColor = NSColor.clearColor; w.hasShadow = YES; w.level = NSModalPanelWindowLevel;
     NSView *box = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, W, H)];
     box.wantsLayer = YES; box.layer.backgroundColor = EDTheme.lcdBackground.CGColor;
-    box.layer.cornerRadius = 10; box.layer.borderColor = NSColor.blackColor.CGColor; box.layer.borderWidth = EDTheme.lcdFrameWidth + 1;
+    box.layer.cornerRadius = 0; box.layer.borderColor = NSColor.blackColor.CGColor; box.layer.borderWidth = EDTheme.lcdFrameWidth + 1;
     w.contentView = box;
     EDLCDDialogHandler *h = [EDLCDDialogHandler new];
     NSTextField *g = [NSTextField labelWithString:glyph]; g.font = [EDTheme lcdFont:44]; g.textColor = EDTheme.lcdInk; g.frame = NSMakeRect(24, H - 110, 50, 60); [box addSubview:g];

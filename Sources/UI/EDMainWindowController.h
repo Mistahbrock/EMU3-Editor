@@ -49,6 +49,8 @@
 - (IBAction)showMIDITab:(id)sender;
 - (IBAction)showSetupTab:(id)sender;
 - (IBAction)showBankTab:(id)sender;
+- (IBAction)showFXTab:(id)sender;
+- (IBAction)toggleFXBoard:(id)sender;
 - (IBAction)showSamplerDisk:(id)sender;
 - (IBAction)showAssignKeys:(id)sender;
 - (IBAction)showChannelVolume:(id)sender;

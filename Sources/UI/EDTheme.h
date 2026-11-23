@@ -33,6 +33,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// Gives a context menu the LCD look: green rows, ink text, a darker green under the pointer.
 /// Thickness of the black frame around every green LCD window.
 + (CGFloat)lcdFrameWidth;
+/// Lays a click-through glass reflection over a green LCD view. Call it after the view's other subviews are added.
++ (void)addGlareTo:(NSView *)host;
 /// Wraps a scroll view holding an LCD list in a view that adds that black frame (rounded, click-through). Use the returned view in the layout.
 + (NSView *)framedLCD:(NSScrollView *)s;
 /// The same frame with a row of keys inside it, under the list.
