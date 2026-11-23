@@ -273,6 +273,19 @@ static const NSUInteger kGuard = 4;   // the sampler pads each channel with 4 ze
 @implementation EDBank
 
 static void putBE32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v >> 24, v >> 16, v >> 8, v}; [d appendBytes:b length:4]; }
++ (NSData *)e3s1ChunkDataForLegacySample:(EDSample *)sample header:(NSData *)header number:(uint16_t)number {
+    if (sample.locked || header.length != kHdrSize - 2 || sample.frameCount == 0) return nil;
+    EDSample *e = [EDSample new];
+    NSMutableData *h = [NSMutableData dataWithLength:2]; [h appendData:header];
+    memset((uint8_t *)h.mutableBytes + 0x3E, 0, 8);                // the 3X data-offset words are RAM addresses of the old sampler; the E4 recomputes them
+    e.header = h; e.eosFormat = YES;
+    uint16_t f = sample.flags;
+    if ((f & EDSampleFlagRight) && !(f & EDSampleFlagLeft)) f = (f & ~EDSampleFlagRight) | EDSampleFlagLeft;   // right-only: the audio is held as the left channel
+    e.flags = f; e.number = number; e.name = sample.name; e.sampleRate = sample.sampleRate;
+    [e replaceLeft:sample.left right:sample.right];
+    e.loopStart = sample.loopStart; e.loopEnd = sample.loopEnd;
+    return [e chunkData];
+}
 + (NSData *)singleSampleBankDataForSample:(EDSample *)sample {
     if (sample.locked || !sample.eosFormat || sample.header.length < 94) return nil;
     NSMutableData *chunk = [[sample chunkData] mutableCopy];

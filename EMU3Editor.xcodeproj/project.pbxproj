@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0286222C33158D29486D1099 /* EDBankConverter.m in Sources */ = {isa = PBXBuildFile; fileRef = CE39924C7D04F029F98F06F5 /* EDBankConverter.m */; };
 		087CCCE47F17413E93E15615 /* EDMainWindowController.m in Sources */ = {isa = PBXBuildFile; fileRef = 2A3B17D58C81D61A25A80395 /* EDMainWindowController.m */; };
 		08F35643C231B300AAA9C36E /* EDPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 9EFCE0EC7C3A74FD460C454B /* EDPlayer.m */; };
 		0A50FED468DCF7BCC5B27B76 /* EDDiskIcons.m in Sources */ = {isa = PBXBuildFile; fileRef = 0BD6DC64A92F8D097982F5F9 /* EDDiskIcons.m */; };
@@ -98,9 +99,11 @@
 		B785C6D42D66DD5DA8D175AF /* EDWaveformView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDWaveformView.h; sourceTree = "<group>"; };
 		BC9B9B29623B7E1A1A9D8CF3 /* EMU3Directory.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EMU3Directory.m; sourceTree = "<group>"; };
 		C12792A4EA81594A84AE4088 /* EDNewImage.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDNewImage.m; sourceTree = "<group>"; };
+		C3E1DF395177AB2CCAAF4172 /* EDBankConverter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDBankConverter.h; sourceTree = "<group>"; };
 		C47C203F32B4B95B751DB20A /* EDEmuEgg.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDEmuEgg.m; sourceTree = "<group>"; };
 		C6C4E055C65AAEFB3F24748A /* EDSMDI.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDSMDI.m; sourceTree = "<group>"; };
 		CCFFF094349C7F4792DFC564 /* EDMemoryView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDMemoryView.m; sourceTree = "<group>"; };
+		CE39924C7D04F029F98F06F5 /* EDBankConverter.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDBankConverter.m; sourceTree = "<group>"; };
 		CF51C182835E2EAEA8F8465A /* EDBank.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EDBank.m; sourceTree = "<group>"; };
 		D1C2B47E8D8ED040C9D25288 /* EDSMDIPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDSMDIPanel.h; sourceTree = "<group>"; };
 		D3E290799052FB9884DF67AE /* EDDefaultPreset.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EDDefaultPreset.h; sourceTree = "<group>"; };
@@ -137,6 +140,8 @@
 			children = (
 				8E5150785BBA51C1757841F3 /* EDBank.h */,
 				CF51C182835E2EAEA8F8465A /* EDBank.m */,
+				C3E1DF395177AB2CCAAF4172 /* EDBankConverter.h */,
+				CE39924C7D04F029F98F06F5 /* EDBankConverter.m */,
 				1A03A19154F5070E0233C155 /* EDBankInternal.h */,
 				D3E290799052FB9884DF67AE /* EDDefaultPreset.h */,
 				F00B33DF6ACB49DA0BF1CFC8 /* EDLegacyBank.h */,
@@ -359,6 +364,7 @@
 				960F3B1B7C5D2F42829A0C1C /* AppDelegate.m in Sources */,
 				D76864DC93AA8A3A5710C73D /* EDAlert.m in Sources */,
 				88ADF1D05448E513D3924C6B /* EDBank.m in Sources */,
+				0286222C33158D29486D1099 /* EDBankConverter.m in Sources */,
 				37C639447D2F2C525C0F20E3 /* EDBlueSCSIIni.m in Sources */,
 				0A50FED468DCF7BCC5B27B76 /* EDDiskIcons.m in Sources */,
 				9EB8208B02FF3205B61F5976 /* EDEmuEgg.m in Sources */,

@@ -310,6 +310,11 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
     m.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
     for (NSMenuItem *i in m.itemArray) if (!i.isSeparatorItem) i.view = [[EDLCDMenuItemView alloc] initWithItem:i];
 }
++ (void)refreshLCDMenuItem:(NSMenuItem *)i {
+    NSView *v = i.view; if (!v) return;
+    NSDictionary *a = @{NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold]};
+    NSRect f = v.frame; f.size.width = ceil([i.title sizeWithAttributes:a].width) + 36; v.frame = f; v.needsDisplay = YES;
+}
 + (void)styleLCDPopup:(NSPopUpButton *)p {
     p.menu.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
     for (NSMenuItem *i in p.menu.itemArray) { EDLCDMenuItemView *v = [[EDLCDMenuItemView alloc] initWithItem:i]; v.popup = p; i.view = v; }

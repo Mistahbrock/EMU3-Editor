@@ -134,6 +134,7 @@ static NSView *column(NSString *title, NSView *content) {
     [line.heightAnchor constraintEqualToConstant:2].active = YES;
     NSStackView *st = [NSStackView stackViewWithViews:@[t, line, content]];
     st.orientation = NSUserInterfaceLayoutOrientationVertical; st.alignment = NSLayoutAttributeLeading; st.spacing = 5;
+    [st setCustomSpacing:12 afterView:line];                       // a little air between the red line and the panel
     st.edgeInsets = NSEdgeInsetsMake(8, 8, 0, 8);
     [line.widthAnchor constraintEqualToAnchor:st.widthAnchor constant:-16].active = YES;
     [content.widthAnchor constraintEqualToAnchor:st.widthAnchor constant:-16].active = YES;
@@ -229,6 +230,12 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
 - (void)menuNeedsUpdate:(NSMenu *)menu {
     NSInteger r = _presetTable.clickedRow;
     if (r >= 0 && r != _presetTable.selectedRow) [_presetTable selectRowIndexes:[NSIndexSet indexSetWithIndex:r] byExtendingSelection:NO];
+    EDPreset *p = (r >= 0 && r < (NSInteger)_bank.presets.count) ? _bank.presets[r] : nil;
+    BOOL old = p.kind == EDPresetKindLegacy3X;
+    NSMenuItem *info = [menu itemWithTag:901], *conv = [menu itemWithTag:902];
+    info.title = !p ? @"No preset" : [NSString stringWithFormat:@"%@ · %ld voices", old ? @"Emulator 3X / ESI-32 preset (older)" : @"EOS E4 preset", (long)p.voiceCount];
+    conv.hidden = !old;
+    for (NSMenuItem *i in menu.itemArray) [EDTheme refreshLCDMenuItem:i];
 }
 - (void)setBank:(EDBank *)bank { _bank = bank; [self reload]; }
 - (NSInteger)selectedIndex { return _presetTable.selectedRow; }

@@ -16,3 +16,4 @@ clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/NSDa
 build/erasetest build/test.e4b
 [ -f build/real.e4b ] && build/erasetest build/real.e4b
 true
+clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/NSData+EDWrite.m Sources/Model/EDLegacyBank.m Sources/Model/EDPreset+Params.m Sources/Model/EDBankConverter.m Tests/ConvertTest.m -framework Foundation -framework AudioToolbox -o build/converttest

@@ -78,6 +78,8 @@ typedef NS_ENUM(NSInteger, EDPresetKind) { EDPresetKindE4 = 0, EDPresetKindLegac
 
 /// A new EOS bank file holding only this sample (TOC1 + E3S1), ready to load on the sampler. nil for samples that are not EOS E3S1 samples.
 + (nullable NSData *)singleSampleBankDataForSample:(EDSample *)sample;
+/// E3S1 chunk data (starting with the 2-byte sample number) for a sample read from a 3X bank, given that sample's original 0x5C-byte header.
++ (nullable NSData *)e3s1ChunkDataForLegacySample:(EDSample *)sample header:(NSData *)header number:(uint16_t)number;
 + (nullable instancetype)bankWithData:(NSData *)data error:(NSError **)error;
 - (nullable NSData *)serializeWithError:(NSError **)error;
 /// Call after the serialized data has been written somewhere: forgets the unsaved-changes state without reloading.

@@ -12,5 +12,7 @@
 NS_ASSUME_NONNULL_BEGIN
 @interface EDLegacyBank : EDBank
 + (nullable instancetype)legacyBankWithData:(NSData *)data error:(NSError **)error;
+/// The sample object's original 0x5C-byte header (name, addresses, rate, flags and the fields that are not decoded), or nil.
+- (nullable NSData *)originalHeaderForSample:(EDSample *)sample;
 @end
 NS_ASSUME_NONNULL_END

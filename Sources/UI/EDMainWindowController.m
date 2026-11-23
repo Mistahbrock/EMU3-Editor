@@ -6,6 +6,8 @@
 #import "EDEmuEgg.h"
 #include <sys/mount.h>
 #import "EDBank.h"
+#import "EDBankConverter.h"
+#import "EDPreset+Params.h"
 #import "EDSample+Ops.h"
 #import "EDWaveformView.h"
 #import "EDPlayer.h"
@@ -108,7 +110,7 @@ static NSString *ServedImagePath(void); static NSString *BoardIDText(void);
     EDSDSPanel *_sds;
     EDSMDIPanel *_smdi;
     EDPresetEditor *_presetEditor;
-    EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn; BOOL _autoBackedUp;
+    EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn, *_convertBtn; BOOL _autoBackedUp, _noConvertOffer;
     EDHomeList *_home;
     EDMemoryView *_memory;
     NSTextField *_samplerStatus; EDDiskIcons *_diskHint; NSView *_mountsBox; id _eggMonitor;
@@ -132,6 +134,7 @@ static NSString *ServedImagePath(void); static NSString *BoardIDText(void);
         _player.onStop = ^{ [weak playbackStopped]; };
         [self buildUI];
         [self refreshAll];
+        [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidResizeNotification object:w queue:nil usingBlock:^(NSNotification *n) { [weak refreshLCDVisibility]; }];
         // Easter egg: Shift+F7 sends a small emu walking over the MOUNTS panel (like the bird in the Emax II's hidden menu).
         _eggMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
             EDMainWindowController *s = weak;
@@ -274,6 +277,9 @@ static NSTextField *toolNote(NSString *s) {
     _presetEditor.selectionChanged = ^{ [weak modelChanged]; };
     _presetEditor.presetCountChanged = ^{ [weak refreshBankStatus]; };
     NSMenu *pm = [[NSMenu alloc] initWithTitle:@"Preset"];
+    NSMenuItem *mi = [pm addItemWithTitle:@"Preset" action:nil keyEquivalent:@""]; mi.tag = 901; mi.enabled = NO;     // info line, filled in when the menu opens
+    NSMenuItem *mc = [pm addItemWithTitle:@"Convert Preset to E4B…" action:@selector(convertSelectedPreset:) keyEquivalent:@""]; mc.tag = 902; mc.target = self;
+    [pm addItem:NSMenuItem.separatorItem];
     NSMenuItem *m1 = [pm addItemWithTitle:@"Save as Bank on Sampler Disk…" action:@selector(sendPresetToSamplerDisk:) keyEquivalent:@""]; m1.target = self;
     NSMenuItem *m2 = [pm addItemWithTitle:@"Export as Bank File…" action:@selector(exportPresetBank:) keyEquivalent:@""]; m2.target = self;
     [pm addItem:NSMenuItem.separatorItem];
@@ -319,6 +325,7 @@ static NSTextField *toolNote(NSString *s) {
     [gSampler.widthAnchor constraintEqualToAnchor:leftCol.widthAnchor].active = YES; [gUtils.widthAnchor constraintEqualToAnchor:leftCol.widthAnchor].active = YES; [gMasterMenu.widthAnchor constraintEqualToAnchor:leftCol.widthAnchor].active = YES;
     _home = [EDHomeList new]; __weak EDMainWindowController *wself = self;
     _home.onOpen = ^(NSURL *u) { [wself openURL:u]; };
+    _home.onConvert = ^(NSURL *u) { [wself convertBankFileAtURL:u]; };
     NSScrollView *homeScroll = [NSScrollView new]; homeScroll.documentView = _home.table; homeScroll.hasVerticalScroller = YES; NSView *homeFrame = [EDTheme framedLCD:homeScroll];
     NSTextField *homeHint = label(@"Double-click a bank to open it.");
     NSStackView *gOpen = [self group:@"Open a bank" views:@[homeHint, homeFrame]];
@@ -334,7 +341,9 @@ static NSTextField *toolNote(NSString *s) {
     NSStackView *gBank = [self group:@"Current bank" views:@[_masterSummary, _memory, _autoSaveBtn,
         [self wideButton:@"Open Bank File…" action:@selector(openBankFile:)],
         [self wideButton:@"Save Bank" action:@selector(saveBank:)], [self wideButton:@"Save Bank As…" action:@selector(saveBankAs:)],
-        [self wideButton:@"Send Sample to Sampler Disk…" action:@selector(sendToSamplerDisk:)]]];
+        [self wideButton:@"Send Sample to Sampler Disk…" action:@selector(sendToSamplerDisk:)],
+        _convertBtn = [self wideButton:@"Convert 3X Bank to E4B…" action:@selector(convertLegacyBank:)]]];
+    _convertBtn.toolTip = @"Turns an Emulator 3X / ESI-32 bank (the open one, or a file you pick) into an EOS bank for the E64 / E6400. The original stays as it is.";
     NSView *masterView = [NSView new];
     for (NSView *v in @[leftCol, gOpen, gBank]) { v.translatesAutoresizingMaskIntoConstraints = NO; [masterView addSubview:v]; [v.topAnchor constraintEqualToAnchor:masterView.topAnchor constant:-10].active = YES; }
     [NSLayoutConstraint activateConstraints:@[
@@ -465,9 +474,9 @@ static NSTextField *toolNote(NSString *s) {
     for (NSView *v in @[_status, _lcd]) { v.translatesAutoresizingMaskIntoConstraints = NO; [foot addSubview:v]; }
     [NSLayoutConstraint activateConstraints:@[
         [foot.heightAnchor constraintEqualToConstant:36],
-        (_statusLead = [_status.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:14]), [_status.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor],
+        (_statusLead = [_status.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:14]), [_status.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor constant:4],
         (_lcdLead = [_lcd.leadingAnchor constraintEqualToAnchor:foot.leadingAnchor constant:350]), (_lcdTrail = [_lcd.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-501]),
-        [_lcd.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor], [_lcd.heightAnchor constraintEqualToConstant:36]]];
+        [_lcd.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor constant:4], [_lcd.heightAnchor constraintEqualToConstant:36]]];
     _statusWidth = [_status.widthAnchor constraintEqualToConstant:322]; _statusWide = [_status.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-14]; _statusWide.active = YES;
     _status.alignment = NSTextAlignmentCenter;   // centred under the page (beside the readout on Master ▸ Utilities)
     NSStackView *root = [NSStackView stackViewWithViews:@[head, rule, bar, rule2, _tabs, foot]];
@@ -547,7 +556,7 @@ static NSTextField *toolNote(NSString *s) {
         @"Disk: browse a disk like the sampler's Disk screen. Return opens, Esc goes back, Load… brings a bank into the editor.",
         @"Samples: select a sample to see its waveform, set loops, audition it and edit it with the toolbar.",
         @"Presets: here you can edit presets, voices and zones, as in the sampler's Preset Edit menus. Changes go straight into the preset (Edit ▸ Undo works).",
-        @"Tools: make disk images, prepare an SD card, set up the server."];
+        @"Tools: make disk images, prepare an SD card, set up the Image Server."];
 }
 // Escape always goes back to the page you came from
 - (void)cancelOperation:(id)sender {
@@ -580,7 +589,7 @@ static NSTextField *toolNote(NSString *s) {
         if (it.kind == EDDiskSample) return [self sampleInfoLine:it.node];
         if (it) {
             NSString *kind = it.kind == EDDiskBank ? @"Bank" : (it.kind == EDDiskFolder ? @"Folder" : @"Disk");
-            NSMutableString *m = [NSMutableString stringWithFormat:@"%@ %@", kind, it.title];
+            NSMutableString *m = [NSMutableString stringWithFormat:@"%@: %@", kind, it.title];
             if (it.kind == EDDiskFolder) [m appendFormat:@"  ·  %lu entries", (unsigned long)((EDNode *)it.node).children.count];
             if (it.kind == EDDiskBank && it.node == _currentNode && _bank) [m appendFormat:@"  ·  %lu samples, %lu presets", (unsigned long)_bank.samples.count, (unsigned long)_bank.presets.count];
             if (it.subtitle.length && it.kind != EDDiskBank && it.kind != EDDiskFolder) [m appendFormat:@"  ·  %@", it.subtitle];
@@ -601,6 +610,7 @@ static NSTextField *toolNote(NSString *s) {
     _statusWidth.active = split; _statusWide.active = !split;
     _statusLead.constant = overview ? 40 : (samples ? 2 : 14); _statusWidth.constant = overview ? 270 : 414;
     _lcdLead.constant = (samples || tools) ? 424 : 350; _lcdTrail.constant = (samples || tools) ? -2 : -501;
+    if (tools) { CGFloat half = floor(NSWidth(_lcd.superview.bounds) / 2); _statusLead.constant = 0; _statusWidth.constant = half; _lcdLead.constant = half; _lcdTrail.constant = 0; }   // each text centred under its half of the page
     _status.preferredMaxLayoutWidth = split ? _statusWidth.constant : 1500;
     if (samples) { _lcd.line1 = [self pageHelp]; _lcd.line2 = nil; }
     if (tools) {
@@ -949,6 +959,63 @@ static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter s
     if ([p runModal] == NSModalResponseOK) [self openImageAtURL:p.URL];
 }
 /// A blank 1.44 MB floppy volume in the EOS file system: saved where the user chooses, then opened as a disk.
+- (IBAction)convertSelectedPreset:(id)sender {
+    NSInteger i = _presetEditor.selectedIndex; EDBank *b = _bank;
+    if (![b.formType isEqualToString:@"3X"] || i < 0 || i >= (NSInteger)b.presets.count) return;
+    EDPreset *pr = b.presets[i]; NSError *e = nil; NSArray<NSString *> *warn = nil;
+    NSData *out = [EDBankConverter e4bDataFromLegacyBank:b presets:@[pr] warnings:&warn error:&e];
+    if (!out) { [self alertError:e title:@"Could not convert the preset"]; return; }
+    NSSavePanel *p = [NSSavePanel savePanel]; p.title = @"Save EOS Bank"; p.message = @"A bank holding this preset and the samples it uses (the 3X bank is not changed)";
+    p.nameFieldStringValue = [pr.name.length ? pr.name : @"Preset" stringByAppendingString:@".E4B"]; p.allowsOtherFileTypes = YES; p.extensionHidden = NO;
+    if (_standaloneURL) p.directoryURL = [_standaloneURL URLByDeletingLastPathComponent];
+    if ([p runModal] != NSModalResponseOK) return;
+    if (![out writeToURL:p.URL options:NSDataWritingAtomic error:&e]) { [self alertError:e title:@"Could not save the bank"]; return; }
+    EDBank *r = [EDBank bankWithData:out error:nil];
+    NSMutableString *t = [NSMutableString stringWithFormat:@"%@ saved with %lu voices and %lu samples. Voices keep their sample, key and velocity range; other voice settings start from the default E4 voice.", p.URL.lastPathComponent, (unsigned long)[r.presets.firstObject voiceCount], (unsigned long)r.samples.count];
+    if (warn.count) [t appendFormat:@"\n\nNote: %@", warn.firstObject];
+    EDAlert *a = [EDAlert new]; a.messageText = @"Preset converted"; a.informativeText = t; [a addButtonWithTitle:@"OK"]; [a runModal];
+}
+- (IBAction)convertLegacyBank:(id)sender {
+    EDBank *b = _bank; NSString *title = _bankTitle; NSURL *dir = _standaloneURL;
+    NSError *e = nil;
+    if (![b.formType isEqualToString:@"3X"]) {          // no 3X bank open: pick one to convert, without opening it
+        NSOpenPanel *o = [NSOpenPanel openPanel]; o.title = @"Convert 3X Bank"; o.message = @"Choose an Emulator 3X / ESI-32 bank file";
+        o.allowsOtherFileTypes = YES; o.canChooseDirectories = NO;
+        if ([o runModal] != NSModalResponseOK) return;
+        NSData *src = [NSData dataWithContentsOfURL:o.URL options:0 error:&e];
+        b = src ? [EDBank bankWithData:src error:&e] : nil;
+        if (!b) { [self alertError:e title:@"Could not read the bank"]; return; }
+        if (![b.formType isEqualToString:@"3X"]) {
+            EDAlert *a = [EDAlert new]; a.messageText = @"Not a 3X bank"; a.informativeText = @"This file is not an Emulator 3X / ESI-32 bank, so there is nothing to convert."; [a addButtonWithTitle:@"OK"]; [a runModal]; return;
+        }
+        title = o.URL.lastPathComponent; dir = o.URL;
+    }
+    [self convertBank:b title:title dir:dir];
+}
+/// Converts a 3X bank and asks where to save the E4B (the source is never changed).
+- (void)convertBank:(EDBank *)b title:(NSString *)title dir:(NSURL *)dir {
+    NSError *e = nil;
+    NSArray<NSString *> *warn = nil; NSData *out = [EDBankConverter e4bDataFromLegacyBank:b warnings:&warn error:&e];
+    if (!out) { [self alertError:e title:@"Could not convert the bank"]; return; }
+    NSSavePanel *p = [NSSavePanel savePanel]; p.title = @"Save EOS Bank"; p.message = @"Name the converted bank (the original is not changed)";
+    p.nameFieldStringValue = [[title stringByDeletingPathExtension] stringByAppendingString:@" E4.E4B"]; p.allowsOtherFileTypes = YES; p.extensionHidden = NO;
+    if (dir) p.directoryURL = [dir URLByDeletingLastPathComponent];
+    if ([p runModal] != NSModalResponseOK) return;
+    if (![out writeToURL:p.URL options:NSDataWritingAtomic error:&e]) { [self alertError:e title:@"Could not save the bank"]; return; }
+    NSUInteger left = [warn filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF BEGINSWITH 'Sample '"]].count;
+    NSMutableString *t = [NSMutableString stringWithFormat:@"%lu presets and %lu samples written to %@. Samples are converted exactly; presets keep their samples, key and velocity ranges, and start from the default E4 voice settings (tuning, envelopes and filter are not carried over yet). Test on the sampler before relying on it.", (unsigned long)b.presets.count, (unsigned long)(b.samples.count - left), p.URL.lastPathComponent];
+    if (warn.count) [t appendFormat:@"\n\n%lu notes, first: %@", (unsigned long)warn.count, warn.firstObject];
+    EDAlert *a = [EDAlert new]; a.messageText = @"Bank converted"; a.informativeText = t; [a addButtonWithTitle:@"OK"]; [a runModal];
+}
+- (void)convertBankFileAtURL:(NSURL *)url {
+    NSError *e = nil; NSData *src = [NSData dataWithContentsOfURL:url options:0 error:&e];
+    EDBank *b = src ? [EDBank bankWithData:src error:&e] : nil;
+    if (!b) { [self alertError:e title:@"Could not read the bank"]; return; }
+    if (![b.formType isEqualToString:@"3X"]) {
+        EDAlert *a = [EDAlert new]; a.messageText = @"Not a 3X bank"; a.informativeText = @"This file is already an EOS bank, so there is nothing to convert."; [a addButtonWithTitle:@"OK"]; [a runModal]; return;
+    }
+    [self convertBank:b title:url.lastPathComponent dir:url];
+}
 - (IBAction)newFloppyImage:(id)sender {
     if (![self confirmDiscard]) return;
     NSSavePanel *p = [NSSavePanel savePanel]; p.message = @"Name the new 1.44 MB floppy image"; p.title = @"New Floppy Image";
@@ -1139,6 +1206,16 @@ static NSString *const kMinimalBlueSCSIIni =
     _status.stringValue = [NSString stringWithFormat:@"%@ [%@]: %lu samples, %lu presets", title,
         [bank.formType isEqualToString:@"3X"] ? @"Emulator 3X / ESI-32" : @"EOS E4B", (unsigned long)bank.samples.count, (unsigned long)bank.presets.count];
     [self modelChanged];
+    if ([bank.formType isEqualToString:@"3X"] && !_noConvertOffer) {
+        __weak EDMainWindowController *weak = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            EDMainWindowController *me = weak; if (!me || me->_bank != bank) return;
+            EDAlert *a = [EDAlert new]; a.messageText = @"Older bank format";
+            a.informativeText = @"This is an Emulator 3X / ESI-32 bank. The E64 and E6400 work with EOS (E4B) banks. Convert it now? The original file is not changed.";
+            [a addButtonWithTitle:@"Convert…"]; [a addButtonWithTitle:@"Keep as is"];
+            if ([a runModal] == NSAlertFirstButtonReturn) [me convertLegacyBank:nil];
+        });
+    }
     return YES;
 }
 
@@ -1641,7 +1718,7 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
         [_fs synchronizeToDisk:nil];
     } else return;
     NSInteger keep = _sampleTable.selectedRow;
-    [self loadBankData:out title:_bankTitle];
+    _noConvertOffer = YES; [self loadBankData:out title:_bankTitle]; _noConvertOffer = NO;
     if (keep >= 0 && keep < (NSInteger)_bank.samples.count) [_sampleTable selectRowIndexes:[NSIndexSet indexSetWithIndex:keep] byExtendingSelection:NO];
     _status.stringValue = [NSString stringWithFormat:@"Saved %@ (%@)", _bankTitle, EMU3FormatBytes(out.length)];
     if ([self urlIsOnSamplerDisk:_standaloneURL])

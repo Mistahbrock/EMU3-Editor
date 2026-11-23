@@ -42,6 +42,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// The same frame with a row of keys inside it, under the list.
 + (NSView *)framedLCD:(NSView *)s footer:(NSView *)footer;
 + (void)styleLCDMenu:(NSMenu *)m;
+/// After changing a styled menu item's title or enabled state (e.g. in menuNeedsUpdate:): resizes its view to the new title and redraws it.
++ (void)refreshLCDMenuItem:(NSMenuItem *)i;
 /// Same look for the dropdown list of a popup button (call after its items are added).
 + (void)styleLCDPopup:(NSPopUpButton *)p;
 + (void)styleWindow:(NSWindow *)w;

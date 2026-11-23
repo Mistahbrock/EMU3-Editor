@@ -133,6 +133,11 @@ static EDSample *sampleFromObject(NSData *obj, NSUInteger number, NSUInteger tab
     return bank;
 }
 
+- (NSData *)originalHeaderForSample:(EDSample *)sample {
+    for (EDLegacySlot *sl in _slots) if (sl.sample == sample && sl.object.length >= kObjHdr) return [sl.object subdataWithRange:NSMakeRange(0, kObjHdr)];
+    return nil;
+}
+
 /// Writes an edited sample into a fresh object, keeping the header bytes that are not understood.
 static NSData *objectFromSample(EDSample *s, NSData *orig) {
     NSMutableData *h = [[orig subdataWithRange:NSMakeRange(0, kObjHdr)] mutableCopy];

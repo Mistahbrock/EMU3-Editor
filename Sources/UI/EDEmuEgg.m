@@ -37,6 +37,7 @@ static __weak EDEmuEgg *sRunning;
     __weak EDEmuEgg *w = self;
     _monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown | NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown handler:^NSEvent *(NSEvent *ev) {
         EDEmuEgg *s = w; if (!s) return ev;
+        if (ev.window != s.window) return ev;            // dialogs and open/save panels keep their keys and clicks
         if (s->_state == EggRoam) { s->_state = EggRaise; s->_t = 0; s->_headFrom = s->_head; s->_speed = 0; return nil; }   // the key or click that wakes the bird is not passed on
         return ev.type == NSEventTypeKeyDown ? nil : ev;   // while it leaves, keys are ignored; clicks work as usual
     }];
@@ -89,6 +90,8 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
 }
 
 - (void)tick {
+    if (self.isHiddenOrHasHiddenAncestor) { [self finish]; return; }      // the page was left: the bird goes away with it
+
     _us = [self scaleAt:_y]; const double dt = 1.0 / 24; _t += dt; CGFloat W = self.bounds.size.width, maxX = W - 9 * _u;
     CGPoint walkHead = CGPointMake(9, 20), floorHead = CGPointMake(13, 3), upHead = CGPointMake(4, 28);
     _stepping = NO;
@@ -166,6 +169,7 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
     int fx = lround(foot.x), fy = lround(foot.y); [self cx:fx + 1 y:fy]; [self cx:fx + 2 y:fy]; [self cx:fx + 3 y:fy];   // toes
 }
 - (void)drawRect:(NSRect)dirty {
+    NSRectClip(NSMakeRect(0, 0, self.bounds.size.width - 16, self.bounds.size.height));   // the bird comes and goes behind the scroll bar
     [EDTheme.lcdInk setFill];
     BOOL run = _state == EggRun && _t > 0.12, mv = _stepping, jumping = _state == EggJump;
     int bodyY = mv ? (int)lround(fabs(sin(_ph)) * (run ? 2 : 1)) : 0; if (jumping) bodyY = (int)lround(_jump);

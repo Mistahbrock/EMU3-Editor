@@ -55,3 +55,6 @@ Model tests: `Tests/run-tests.sh` (synthetic E4B bank; not real-sampler data).
 
 ## SMDI over SCSI (2026-11-22)
 Working end to end with the BlueSCSI initiator firmware: send, receive, list and delete samples (see docs/SMDI.md). Panel: File ▸ SMDI Transfer (SCSI)… (⌘T). Not yet done: stereo/8-bit/24-bit samples, sending whole banks, RaSCSI/SCSI2Pi executor, sample placement control.
+
+## 3X → E4B converter (Tools ▸ Convert 3X Bank to E4B…)
+- `Sources/Model/EDBankConverter`: 87 real 3X banks convert, re-parse, and every sample's audio, loop, rate, name and number match (`Tests/ConvertTest.m`). Presets: one E4 voice per zone voice (primary and secondary) with its sample, key window from the key map and velocity window from the preset header; all other voice settings start from the default E4 voice (3X voice bytes beyond the sample number are not decoded). Not yet loaded on a sampler: save, load on the E6400 and report.
