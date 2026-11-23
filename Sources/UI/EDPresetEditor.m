@@ -113,7 +113,7 @@
     NSTextField *_nameField, *_numberField, *_hint;
     NSButton *_addRef, *_removeRef, *_dupVoice, *_removeVoice;
     EDPNode *_root;
-    NSArray<EDPRow *> *_rows; NSInteger _split;   // the list view runs in two columns: rows [0,_split) on the left, the rest on the right
+    NSArray<EDPRow *> *_rows; NSInteger _setStart[3], _setEnd[3];   // the list view's three column sets, as ranges of _rows: voice parameters (two sets when long) and, last, the effects
     NSDictionary<NSNumber *, NSString *> *_sampleNames;
     EDPreset *_preset;
     EDPNode *_sel;
@@ -188,7 +188,7 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
 
     [EDTheme styleLCDTable:_presetTable]; [EDTheme styleLCDTable:_outline]; [EDTheme styleLCDTable:_sampleList];
     _paramTable = [[NSTableView alloc] init]; _paramTable.dataSource = self; _paramTable.delegate = self; _paramTable.usesAlternatingRowBackgroundColors = YES; _paramTable.rowHeight = 24;
-    for (NSArray *c in @[@[@"label", @"Parameter", @170], @[@"value", @"Value", @70], @[@"info", @"", @130], @[@"label2", @"Parameter", @170], @[@"value2", @"Value", @70], @[@"info2", @"", @130]]) {
+    for (NSArray *c in @[@[@"label", @"Parameter", @150], @[@"value", @"Value", @64], @[@"info", @"", @96], @[@"gap1", @"", @44], @[@"label2", @"Parameter", @150], @[@"value2", @"Value", @64], @[@"info2", @"", @96], @[@"gap2", @"", @44], @[@"label3", @"Parameter", @150], @[@"value3", @"Value", @64], @[@"info3", @"", @96]]) {
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:c[0]]; col.title = c[1]; col.width = [c[2] doubleValue]; [_paramTable addTableColumn:col];
     }
     _keyMap = [[EDKeyMapView alloc] init]; _keyMap.translatesAutoresizingMaskIntoConstraints = NO;
@@ -307,18 +307,37 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
 }
 
 - (void)rebuildRows {
-    NSMutableArray *rows = [NSMutableArray array];
+    // Dual pane: the left pane lists the selected preset / voice / zone, the right pane always lists the preset's effects.
+    NSMutableArray *left = [NSMutableArray array], *right = [NSMutableArray array];
+    void (^addGroup)(NSMutableArray *, EDParam *, NSString **) = ^(NSMutableArray *dst, EDParam *p, NSString **last) {
+        if (![p.group isEqualToString:*last]) { EDPRow *h = [EDPRow new]; h.group = p.group; [dst addObject:h]; *last = p.group; }
+        EDPRow *r = [EDPRow new]; r.group = p.group; r.param = p; [dst addObject:r];
+    };
+    NSString *leftTitle = @"Parameter";
     if (_preset && _sel) {
         EDParamScope sc = _sel.ref >= 0 ? EDScopeRef : (_sel.voice >= 0 ? EDScopeVoice : EDScopePreset);
+        leftTitle = sc == EDScopeRef ? @"Zone" : (sc == EDScopeVoice ? [NSString stringWithFormat:@"Voice %ld", (long)_sel.voice + 1] : @"Preset");
         NSString *last = nil;
-        for (EDParam *p in [_preset paramsForScope:sc]) {
-            if (![p.group isEqualToString:last]) { EDPRow *h = [EDPRow new]; h.group = p.group; [rows addObject:h]; last = p.group; }
-            EDPRow *r = [EDPRow new]; r.group = p.group; r.param = p; [rows addObject:r];
-        }
+        for (EDParam *p in [_preset paramsForScope:sc]) if (![p.group hasPrefix:@"Effect"]) addGroup(left, p, &last);
     }
-    _rows = rows;
-    _split = (NSInteger)rows.count;   // two columns when there is enough to fill them: split at a group heading near the middle
-    if (rows.count >= 16) { NSInteger best = -1; for (NSInteger i = 1; i < (NSInteger)rows.count; i++) if (!((EDPRow *)rows[i]).param && (best < 0 || llabs(i - (NSInteger)rows.count / 2) < llabs(best - (NSInteger)rows.count / 2))) best = i; if (best > 0) _split = best; }
+    if (_preset) { NSString *last = nil; for (EDParam *p in [_preset paramsForScope:EDScopePreset]) if ([p.group hasPrefix:@"Effect"]) addGroup(right, p, &last); }
+    // a long left pane (a voice or a zone) runs over two column sets, split at a group heading near the middle; the effects are always the last set
+    NSInteger cut = (NSInteger)left.count;
+    if (left.count >= 18) { NSInteger best = -1; for (NSInteger k = 1; k < (NSInteger)left.count; k++) if (!((EDPRow *)left[k]).param && (best < 0 || llabs(k - (NSInteger)left.count / 2) < llabs(best - (NSInteger)left.count / 2))) best = k; if (best > 0) cut = best; }
+    NSInteger nl = (NSInteger)left.count, nr = (NSInteger)right.count; [left addObjectsFromArray:right]; _rows = left;
+    BOOL twoLeft = cut < nl;
+    _setStart[0] = 0; _setEnd[0] = cut;
+    if (twoLeft) { _setStart[1] = cut; _setEnd[1] = nl; _setStart[2] = nl; _setEnd[2] = nl + nr; }
+    else { _setStart[1] = nl; _setEnd[1] = nl + nr; _setStart[2] = nl + nr; _setEnd[2] = nl + nr; }   // effects take the second set when the left pane is short
+    [_paramTable tableColumnWithIdentifier:@"label"].headerCell.stringValue = leftTitle;
+    [_paramTable tableColumnWithIdentifier:@"label2"].headerCell.stringValue = twoLeft ? @"" : (nr ? @"Effects" : @"");
+    [_paramTable tableColumnWithIdentifier:@"label3"].headerCell.stringValue = twoLeft && nr ? @"Effects" : @"";
+    for (NSInteger k = 0; k < 3; k++) {   // headings only over sets that hold rows
+        NSString *sfx = k == 0 ? @"" : (k == 1 ? @"2" : @"3"); BOOL used = _setEnd[k] > _setStart[k];
+        [_paramTable tableColumnWithIdentifier:[@"value" stringByAppendingString:sfx]].headerCell.stringValue = used ? @"Value" : @"";
+        if (k) { NSTableColumn *lc = [_paramTable tableColumnWithIdentifier:[@"label" stringByAppendingString:sfx]]; if (!used) lc.headerCell.stringValue = @""; }
+    }
+    [_paramTable.headerView setNeedsDisplay:YES];
     [_paramTable reloadData]; [self refreshLCD];
     BOOL e4 = _preset.canEditStructure, onVoice = _sel.voice >= 0;
     _newVoice.enabled = e4;
@@ -328,7 +347,7 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
 
 // MARK: tables / outline data
 
-- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { if (t == _sampleList) return (NSInteger)_bank.samples.count; if (t == _presetTable) return (NSInteger)_bank.presets.count; return MAX(_split, (NSInteger)_rows.count - _split); }
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { if (t == _sampleList) return (NSInteger)_bank.samples.count; if (t == _presetTable) return (NSInteger)_bank.presets.count; return MAX(_setEnd[0] - _setStart[0], MAX(_setEnd[1] - _setStart[1], _setEnd[2] - _setStart[2])); }
 - (BOOL)tableView:(NSTableView *)t isGroupRow:(NSInteger)r { return NO; }   // group headings are drawn as a bold label in the first cell of their column set
 - (NSTableRowView *)tableView:(NSTableView *)t rowViewForRow:(NSInteger)r { return [EDTheme lcdRowView]; }
 - (NSTableRowView *)outlineView:(NSOutlineView *)ov rowViewForItem:(id)item { return [EDTheme lcdRowView]; }
@@ -339,9 +358,11 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
         EDPreset *p = _bank.presets[r];
         return [EDTheme lcdLabel:[k isEqual:@"num"] ? [NSString stringWithFormat:@"%u", p.number] : p.name];
     }
-    BOOL right = [k hasSuffix:@"2"]; if (right) k = [k substringToIndex:k.length - 1];
-    NSInteger flat = right ? _split + r : r;
-    if (flat >= (right ? (NSInteger)_rows.count : _split)) return nil;            // the shorter column ends here
+    if ([k hasPrefix:@"gap"]) return nil;
+    NSInteger set = 0; if ([k hasSuffix:@"2"]) set = 1; else if ([k hasSuffix:@"3"]) set = 2;
+    if (set) k = [k substringToIndex:k.length - 1];
+    NSInteger flat = _setStart[set] + r;
+    if (flat >= _setEnd[set]) return nil;            // a shorter column ends here
     r = flat;
     EDPRow *row = _rows[r];
     if (!row.param) { if (![k isEqual:@"label"]) return nil; NSTextField *f = [EDTheme lcdLabel:row.group]; f.font = [EDTheme lcdFont:13]; return f; }
