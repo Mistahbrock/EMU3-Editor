@@ -375,6 +375,7 @@ static NSTextField *label(NSString *s) {
     // footer: status text on the left, the green LCD readout on the right
     NSView *foot = [NSView new]; _presetNote.hidden = YES;
     // the readout lines up with the left edge of the bank list above (x = 350); the status text wraps in the space to its left
+    [_status addObserver:self forKeyPath:@"stringValue" options:0 context:NULL];
     _status.lineBreakMode = NSLineBreakByTruncatingTail; _status.maximumNumberOfLines = 1; _status.preferredMaxLayoutWidth = 322;
     [_status setContentCompressionResistancePriority:250 forOrientation:NSLayoutConstraintOrientationHorizontal];
     for (NSView *v in @[_status, _lcd]) { v.translatesAutoresizingMaskIntoConstraints = NO; [foot addSubview:v]; }
@@ -452,7 +453,17 @@ static NSTextField *label(NSString *s) {
     if (show && !_presetNoteLeading) { _presetNoteLeading = [_presetNote.leadingAnchor constraintEqualToAnchor:_presetEditor.lcdView.leadingAnchor]; _presetNoteLeading.active = YES; }
 }
 // the readout line only belongs on Master > Overview
-- (void)refreshLCDVisibility { _lcd.hidden = !(_tabPicker.selectedSegment == 0 && _masterPicker.selectedSegment == 0); }
+- (void)dealloc { @try { [_status removeObserver:self forKeyPath:@"stringValue"]; } @catch (NSException *e) {} }
+- (void)refreshLCDVisibility {
+    BOOL overview = _tabPicker.selectedSegment == 0 && _masterPicker.selectedSegment == 0;
+    _lcd.hidden = !overview;
+    // the idle hint is only useful on Master > Overview; real messages (saved, errors, ...) always show
+    BOOL onMasterSub = _tabPicker.selectedSegment == 0 && _masterPicker.selectedSegment != 0;
+    _status.hidden = onMasterSub && [_status.stringValue isEqualToString:@"Open a disk image or a bank file."];
+}
+- (void)observeValueForKeyPath:(NSString *)kp ofObject:(id)o change:(NSDictionary *)c context:(void *)ctx {
+    if (o == _status) [self refreshLCDVisibility]; else [super observeValueForKeyPath:kp ofObject:o change:c context:ctx];
+}
 - (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; [self showPresetNote:_tabPicker.selectedSegment == 3]; [self refreshLCDVisibility]; }
 - (IBAction)showMasterTab:(id)s { [self selectTabNamed:@"master"]; }
 - (IBAction)showDiskTab:(id)s { [self selectTabNamed:@"disk"]; }

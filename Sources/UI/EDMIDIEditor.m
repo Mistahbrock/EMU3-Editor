@@ -39,9 +39,9 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
     NSMutableArray *midiRows = [NSMutableArray array];
     for (int i = 0; i < 12; i++) [midiRows addObject:@[[NSString stringWithFormat:@"midi%c", 'a' + i], [NSString stringWithFormat:@"Midi%c", 'A' + i], ccList(@[@"off"])]];
     _pages = @[
-        @{@"menu": @"MIDI", @"soft": @"Mode", @"title": @"MIDI Mode", @"next": @"MIDI Controllers 1", @"fk": @[@"F1", @"F2", @"F3", @"F4"], @"rows": @[
+        @{@"menu": @"MIDI", @"soft": @"Mode", @"title": @"MIDI Mode", @"next": @"MIDI Controllers 1", @"fk": @[@"F1", @"F2", @"F3"], @"percol": @3, @"rows": @[
             @[@"basic", @"Basic Channel", range(1, 16, @"%ld")], @[@"mode", @"MIDI mode", @[@"omni", @"poly", @"multi"]],
-            @[@"devid", @"MIDI Device ID", range(0, 127, @"%ld")], @[@"local", @"Local Control", onoff, @"disabled"],
+            @[@"devid", @"MIDI Device ID", range(0, 127, @"%ld")],
             @[@"ifout", @"MIDI Interface Out", @[]], @[@"ifin", @"MIDI Interface In", @[]]]},
         @{@"menu": @"MIDI", @"soft": @"Cntrls 1", @"title": @"MIDI Controllers 1", @"prev": @"MIDI Mode", @"next": @"MIDI Controllers 2", @"fk": @[@"F1", @"F2", @"F3", @"F4", @"F5", @"", @""], @"rows": @[
             @[@"pitch", @"Pitch Control", ccList(@[@"ptwheel", @"chnpres", @"off"])], @[@"mod", @"Mod Control", ccList(@[@"ptwheel", @"chnpres", @"off"])],
@@ -117,7 +117,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
 
     [NSLayoutConstraint activateConstraints:@[
         [_screen.topAnchor constraintEqualToAnchor:self.topAnchor constant:40], [_screen.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-        [_screen.widthAnchor constraintEqualToConstant:1100], [_screen.heightAnchor constraintEqualToConstant:430],
+        [_screen.widthAnchor constraintEqualToConstant:1100], [_screen.heightAnchor constraintGreaterThanOrEqualToConstant:430],
         [_screen.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.leadingAnchor constant:20], [_screen.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-20],
         [keys.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:16], [keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-14],
         [_title.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:14], [_title.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor],
@@ -131,7 +131,8 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         [_empty.centerXAnchor constraintEqualToAnchor:_tableScroll.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_tableScroll.centerYAnchor],
         [keys.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
         [_note.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor], [_note.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor],
-        [_note.topAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:14]]];
+        [_note.topAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:14],
+        [_note.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-12]]];   // the green screen stretches down to the note, which sits at the bottom
     [self setMenu:@"MIDI"];
     return self;
 }
@@ -194,7 +195,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         }
         [_table.headerView setNeedsDisplay:YES]; [_table reloadData]; return;
     }
-    NSArray *rows = pg[@"rows"], *fk = pg[@"fk"]; NSInteger perCol = 4, ncol = (rows.count + perCol - 1) / perCol;
+    NSArray *rows = pg[@"rows"], *fk = pg[@"fk"]; NSInteger perCol = pg[@"percol"] ? [pg[@"percol"] integerValue] : 4, ncol = (rows.count + perCol - 1) / perCol;
     for (NSInteger c = 0; c < ncol; c++) {
         NSStackView *col = [NSStackView new]; col.orientation = NSUserInterfaceLayoutOrientationVertical; col.alignment = NSLayoutAttributeLeading; col.spacing = 10;
         for (NSInteger r = c * perCol; r < MIN((NSInteger)rows.count, (c + 1) * perCol); r++) [col addArrangedSubview:[self rowViewFor:rows[r] fkey:r < (NSInteger)fk.count ? fk[r] : @""]];

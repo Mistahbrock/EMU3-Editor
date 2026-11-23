@@ -2,18 +2,29 @@
 
 @implementation EDMIDIEndpointInfo @end
 
-static NSString *EndpointName(MIDIEndpointRef e) {
-    CFStringRef n = NULL;
-    MIDIObjectGetStringProperty(e, kMIDIPropertyDisplayName, &n);
-    return n ? (__bridge_transfer NSString *)n : @"(unnamed)";
+// One CoreMIDI client for the whole run; it also makes sure the MIDI service connection exists before ports are listed.
+static MIDIClientRef SharedClient(OSStatus *status) {
+    static MIDIClientRef shared = 0; static OSStatus st = 0;
+    if (!shared) st = MIDIClientCreate(CFSTR("EMU3 Editor"), NULL, NULL, &shared);
+    if (status) *status = st;
+    return shared;
+}
+static NSString *StringProp(MIDIObjectRef o, CFStringRef key) {
+    CFStringRef n = NULL; MIDIObjectGetStringProperty(o, key, &n);
+    return n ? (__bridge_transfer NSString *)n : nil;
+}
+static NSString *EndpointName(MIDIEndpointRef e, ItemCount index) {
+    NSString *n = StringProp(e, kMIDIPropertyDisplayName);
+    if (!n.length) n = StringProp(e, kMIDIPropertyName);
+    return n.length ? n : [NSString stringWithFormat:@"MIDI port %lu", (unsigned long)index + 1];
 }
 static NSArray *Endpoints(BOOL dest) {
-    NSMutableArray *a = [NSMutableArray array];
+    NSMutableArray *a = [NSMutableArray array]; SharedClient(NULL);
     ItemCount c = dest ? MIDIGetNumberOfDestinations() : MIDIGetNumberOfSources();
     for (ItemCount i = 0; i < c; i++) {
         EDMIDIEndpointInfo *e = [EDMIDIEndpointInfo new];
         e.ref = dest ? MIDIGetDestination(i) : MIDIGetSource(i);
-        e.name = EndpointName(e.ref); [a addObject:e];
+        e.name = EndpointName(e.ref, i); [a addObject:e];
     }
     return a;
 }
@@ -29,8 +40,7 @@ static NSArray *Endpoints(BOOL dest) {
 - (BOOL)connectSource:(EDMIDIEndpointInfo *)source destination:(EDMIDIEndpointInfo *)dest error:(NSError **)error {
     [self disconnect];
     // one CoreMIDI client for the whole run; creating and disposing one per transfer was unreliable
-    static MIDIClientRef shared = 0; static OSStatus st;
-    if (!shared) st = MIDIClientCreate(CFSTR("EMU3 Editor"), NULL, NULL, &shared);
+    OSStatus st = 0; MIDIClientRef shared = SharedClient(&st);
     _client = shared;
     if (!shared) { if (error) *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:st userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Could not open CoreMIDI (error %d). The MIDI service was not ready when the app started: quit and reopen EMU3 Editor.", (int)st]}]; return NO; }
     _dst = dest.ref; _src = source.ref; _acc = [NSMutableData data]; _inSysex = NO;
