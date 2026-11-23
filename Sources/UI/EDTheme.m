@@ -1,3 +1,4 @@
+#import "EDAlert.h"
 #import "EDTheme.h"
 
 // Column caption of an LCD list: a slightly darker strip of the LCD green with bold ink text.
@@ -97,12 +98,13 @@ static void DrawGlare(NSRect b, CGFloat radius) {
 @end
 
 @interface EDLCDFrameView : NSView
+@property (nonatomic) BOOL hideGlare;   // the panel has its own glare on top of everything
 @end
 @implementation EDLCDFrameView
 - (NSView *)hitTest:(NSPoint)p { return nil; }
 - (void)drawRect:(NSRect)r {
     CGFloat w = EDTheme.lcdFrameWidth;
-    DrawGlare(NSInsetRect(self.bounds, w, w), 0);
+    if (!self.hideGlare) DrawGlare(NSInsetRect(self.bounds, w, w), 0);
     NSBezierPath *b = [NSBezierPath bezierPathWithRoundedRect:NSInsetRect(self.bounds, w / 2, w / 2) xRadius:0 yRadius:0];
     b.lineWidth = w; [NSColor.blackColor setStroke]; [b stroke];
 }
@@ -236,6 +238,12 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
             [v.leadingAnchor constraintEqualToAnchor:box.leadingAnchor], [v.trailingAnchor constraintEqualToAnchor:box.trailingAnchor]]]; }
     return box;
 }
++ (void)addGlareOver:(NSView *)panel in:(NSView *)container {
+    for (NSView *v in panel.subviews) if ([v isKindOfClass:EDLCDFrameView.class]) { ((EDLCDFrameView *)v).hideGlare = YES; v.needsDisplay = YES; }
+    EDLCDGlareView *g = [EDLCDGlareView new]; g.translatesAutoresizingMaskIntoConstraints = NO; [container addSubview:g positioned:NSWindowAbove relativeTo:nil];
+    [NSLayoutConstraint activateConstraints:@[[g.topAnchor constraintEqualToAnchor:panel.topAnchor], [g.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor],
+        [g.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor], [g.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor]]];
+}
 + (void)addGlareTo:(NSView *)host {
     EDLCDGlareView *g = [EDLCDGlareView new]; g.translatesAutoresizingMaskIntoConstraints = NO; [host addSubview:g];
     [NSLayoutConstraint activateConstraints:@[[g.topAnchor constraintEqualToAnchor:host.topAnchor], [g.bottomAnchor constraintEqualToAnchor:host.bottomAnchor],
@@ -335,6 +343,7 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
 @end
 
 @implementation EDTheme (LCDKeys)
++ (void)useLCDScroller:(NSScrollView *)s { EDUseLCDScroller(s); }
 + (NSButton *)lcdKey:(NSString *)title target:(id)t action:(SEL)a {
     EDLCDButton *b = [[EDLCDButton alloc] initWithFrame:NSMakeRect(0, 0, 100, 28)]; b.title = title; b.target = t; b.action = a; b.bordered = NO; b.filled = YES;
     b.font = [EDTheme lcdFont:13]; [b setButtonType:NSButtonTypeMomentaryPushIn]; return b;
@@ -370,13 +379,18 @@ static void Recolor(NSView *v, NSColor *oldBg, NSColor *newBg, NSColor *oldInk, 
     return r >= 100 ? r - 100 : -1;   // Esc = -1
 }
 + (NSInteger)choose:(NSString *)message buttons:(NSArray<NSString *> *)titles { return [self runLCDDialogGlyph:@"?" message:message buttons:titles]; }
-+ (BOOL)confirm:(NSString *)message okTitle:(NSString *)ok cancelTitle:(NSString *)cancel { return [self runLCDDialogGlyph:@"?" message:message buttons:@[cancel ?: @"Cancel", ok]] == 1; }
-+ (void)notice:(NSString *)message { [self runLCDDialogGlyph:@"!" message:message buttons:@[@"OK"]]; }
+// standard dialogs (same look as About)
++ (BOOL)confirm:(NSString *)message okTitle:(NSString *)ok cancelTitle:(NSString *)cancel {
+    EDAlert *a = [EDAlert new]; a.messageText = message; [a addButtonWithTitle:ok ?: @"OK"]; [a addButtonWithTitle:cancel ?: @"Cancel"];
+    return [a runModal] == NSAlertFirstButtonReturn;
+}
++ (void)notice:(NSString *)message { EDAlert *a = [EDAlert new]; a.messageText = message; [a addButtonWithTitle:@"OK"]; [a runModal]; }
 @end
 
 @implementation EDLCDSideTab { NSString *_title; }
 - (instancetype)initWithTitle:(NSString *)title { if ((self = [super initWithFrame:NSZeroRect])) { _title = [title copy]; } return self; }
 - (BOOL)isFlipped { return YES; }
+- (void)setTitleString:(NSString *)t { _title = [t copy]; self.needsDisplay = YES; }
 - (void)drawRect:(NSRect)dirty {
     NSRect b = NSInsetRect(self.bounds, 1.5, 1.5);
     NSBezierPath *frame = [NSBezierPath bezierPathWithRoundedRect:b xRadius:3 yRadius:3];

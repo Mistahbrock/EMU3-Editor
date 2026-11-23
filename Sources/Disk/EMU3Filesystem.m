@@ -124,6 +124,23 @@ static void EMU3EditEnd(EMU3EditToken *t) { if (t->active) [t->fs _endEdit]; }
 // Layout rules derived from images formatted by a real E-mu sampler (1 GB and 14 GB):
 //   FAT blocks F6, clusters F8 = 256*F6-1, root dir = 7 blocks right after the FAT,
 //   folder pool = F8/16 + 106 blocks, data area after the pool, cluster = 32 kB << (5 + log2(size/1 GB)), header field 9 = 0x100 | shift.
++ (BOOL)createFormattedImageAtURL:(NSURL *)url sizeBytes:(NSUInteger)bytes error:(NSError **)error {
+    if (bytes < 64 * EMU3_BLOCK_SIZE || bytes % EMU3_BLOCK_SIZE) { if (error) *error = [NSError errorWithDomain:EMU3ErrorDomain code:EMU3ErrorInvalidParam userInfo:@{NSLocalizedDescriptionKey: @"Bad image size"}]; return NO; }
+    int fd = open(url.fileSystemRepresentation, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0 || ftruncate(fd, (off_t)bytes) != 0) {
+        if (fd >= 0) close(fd);
+        if (error) *error = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Could not create %@: %s", url.lastPathComponent, strerror(errno)]}];
+        return NO;
+    }
+    close(fd);
+    EMU3Filesystem *fs = [[EMU3Filesystem alloc] init];
+    fs.imageURL = url; fs.ioQueue = dispatch_queue_create("com.emu3diskmanager.io", DISPATCH_QUEUE_SERIAL); fs->_fd = -1;
+    if (![fs _mapImageWithError:error]) return NO;
+    BOOL ok = [fs formatWithError:error];
+    [fs closeImage];
+    return ok;
+}
+
 - (BOOL)formatWithError:(NSError **)error {
     EMU3_GATED_EDIT
     if (self.isReadOnly || !_imageBytes) {
@@ -136,7 +153,8 @@ static void EMU3EditEnd(EMU3EditToken *t) { if (t->active) [t->fs _endEdit]; }
     NSUInteger total = MIN((NSUInteger)(_imageSize / EMU3_BLOCK_SIZE), kMaxBlocks);   // 2^30 blocks = 512 GB
     NSInteger lg = (NSInteger)floor(log2((double)total / 2097152.0));   // 2097152 blocks = 1 GB
     // Measured on the sampler: 32 GB .. 512 GB disks all get a 4-block FAT and 1023 clusters of size/1024.
-    NSInteger fatBlocks = lg >= 5 ? 4 : MAX(2, MIN(16, 4 + lg));
+    BOOL floppy = total <= 8192;   // up to 4 MB: a floppy-sized volume
+    NSInteger fatBlocks = floppy ? 3 : (lg >= 5 ? 4 : MAX(2, MIN(16, 4 + lg)));
     NSUInteger maxClusters = 256 * (NSUInteger)fatBlocks - 1;
     NSUInteger fatStart = 2;
     NSUInteger rootStart = fatStart + fatBlocks;
@@ -153,7 +171,7 @@ static void EMU3EditEnd(EMU3EditToken *t) { if (t->active) [t->fs _endEdit]; }
     uint32_t f[12] = { (uint32_t)(total - 1), (uint32_t)rootStart, (uint32_t)rootCount,
                        (uint32_t)poolStart, (uint32_t)poolCount, (uint32_t)fatStart,
                        (uint32_t)fatBlocks, (uint32_t)dataStart, (uint32_t)maxClusters,
-                       (uint32_t)(0x100 + MAX(1, MIN(14, 5 + lg))), 2048, 0x0D010000 };
+                       (uint32_t)(floppy ? 0x100 : 0x100 + MAX(1, MIN(14, 5 + lg))), 2048, 0x0D010000 };   // floppy: cluster size comes from the geometry (2 kB)
     memcpy(_imageBytes, "EMU3", 4);
     for (int i = 0; i < 12; i++) {
         uint32_t v = CFSwapInt32HostToLittle(f[i]);

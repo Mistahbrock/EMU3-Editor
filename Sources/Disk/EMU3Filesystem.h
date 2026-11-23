@@ -50,6 +50,10 @@ typedef NS_ENUM(NSInteger, EMU3ErrorCode) {
 /// While YES every write operation is refused (isReadOnly reports YES). Used for "sampler mode".
 @property (atomic) BOOL locked;
 
+/// Creates a new zero-filled image file of `bytes` and formats it with an empty EOS file system.
+/// Floppy sizes (up to 4 MB) get a small layout: 3 FAT blocks, 2 kB clusters.
++ (BOOL)createFormattedImageAtURL:(NSURL *)url sizeBytes:(NSUInteger)bytes error:(NSError **)error;
+
 /// Erases the whole image and writes an empty EOS file system (superblock, allocation table,
 /// empty root directory) using the layout the sampler itself creates.
 - (BOOL)formatWithError:(NSError **)error;

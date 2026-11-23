@@ -15,6 +15,7 @@ static NSMenuItem *item(NSMenu *m, NSString *title, SEL a, NSString *key, id tar
     if (![NSUserDefaults.standardUserDefaults objectForKey:@"NSWindow Frame EMU3EditorMain"]) [_main.window center];
 }
 - (void)applicationDidFinishLaunching:(NSNotification *)n {
+    NSApp.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];   // dialogs, panels and menus match the dark UI
     [NSApp activateIgnoringOtherApps:YES];
     if ([NSUserDefaults.standardUserDefaults boolForKey:@"LogInteractions"]) [self startInteractionLog];
 }
@@ -67,6 +68,10 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
 
     NSMenu *file = SUB(@"File");
     item(file, @"Open Disk Image…", @selector(openDiskImage:), @"o", _main);
+    item(file, @"New Floppy Image…", @selector(newFloppyImage:), @"", _main);
+    item(file, @"New Disk Image…", @selector(newDiskImage:), @"", _main);
+    item(file, @"Copy Disk to SD Card…", @selector(copyToSDCard:), @"", _main);
+    item(file, @"Write bluescsi.ini…", @selector(writeBlueSCSIIni:), @"", _main);
     item(file, @"Open Bank File…", @selector(openBankFile:), @"O", _main);
     [file addItem:NSMenuItem.separatorItem];
     item(file, @"Save Bank", @selector(saveBank:), @"s", _main);
@@ -115,6 +120,7 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     item(view, @"Disk", @selector(showDiskTab:), @"2", _main);
     item(view, @"Samples", @selector(showSamplesTab:), @"3", _main);
     item(view, @"Presets", @selector(showPresetsTab:), @"4", _main);
+    item(view, @"Tools", @selector(showToolsTab:), @"9", _main);
     item(view, @"Master ▸ MIDI", @selector(showMIDITab:), @"5", _main);
     item(view, @"Master ▸ Setup", @selector(showSetupTab:), @"6", _main);
     item(view, @"Master ▸ Bank", @selector(showBankTab:), @"7", _main);

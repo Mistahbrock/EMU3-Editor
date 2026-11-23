@@ -35,6 +35,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (CGFloat)lcdFrameWidth;
 /// Lays a click-through glass reflection over a green LCD view. Call it after the view's other subviews are added.
 + (void)addGlareTo:(NSView *)host;
+/// For a framed panel that has its own children on top (side tab, icons): moves the glare above all of them. `container` is the panel's superview.
++ (void)addGlareOver:(NSView *)panel in:(NSView *)container;
 /// Wraps a scroll view holding an LCD list in a view that adds that black frame (rounded, click-through). Use the returned view in the layout.
 + (NSView *)framedLCD:(NSScrollView *)s;
 /// The same frame with a row of keys inside it, under the list.
@@ -52,6 +54,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSTextField *)lcdLabel:(NSString *)s size:(CGFloat)pt;
 + (NSView *)lcdScreenAround:(NSView *)content;                // green framed screen around a stack of controls
 + (NSButton *)lcdKey:(NSString *)title target:(nullable id)target action:(nullable SEL)action;
+/// Gives a scroll view the LCD scroll bar.
++ (void)useLCDScroller:(NSScrollView *)s;
 /// Returns the index of the pressed button (the last one is the default); -1 for Esc.
 + (NSInteger)choose:(NSString *)message buttons:(NSArray<NSString *> *)titles;
 + (void)notice:(NSString *)message;
@@ -60,6 +64,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// The sampler's vertical page label (hatched strip with stacked letters), e.g. D I S K.
 @interface EDLCDSideTab : NSView
 - (instancetype)initWithTitle:(NSString *)title;
+- (void)setTitleString:(NSString *)title;   // DISK / FOLDER / BANK
 @end
 
 NS_ASSUME_NONNULL_END

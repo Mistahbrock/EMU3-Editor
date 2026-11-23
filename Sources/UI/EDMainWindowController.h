@@ -22,6 +22,12 @@
 - (BOOL)confirmQuit;                           // YES when nothing is unsaved or the user chose to discard
 // menu actions
 - (IBAction)openDiskImage:(id)sender;
+- (IBAction)newFloppyImage:(id)sender;
+- (IBAction)writeBlueSCSIIni:(id)sender;
+- (IBAction)showToolsTab:(id)sender;
+- (IBAction)newDiskImage:(id)sender;
+- (IBAction)copyToSDCard:(id)sender;
+- (IBAction)browserRename:(id)sender;
 - (IBAction)openBankFile:(id)sender;
 - (IBAction)saveBank:(id)sender;
 - (IBAction)saveBankAs:(id)sender;
