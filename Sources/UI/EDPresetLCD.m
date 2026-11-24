@@ -63,6 +63,119 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     return t.integerValue;
 }
 
+
+// Small graph of a six-stage envelope: a line through seven points with square drag handles. Horizontal position of a handle is
+// its stage's rate (further right = slower), vertical position is its level.
+@interface EDEnvGraph : NSView
+@property (nonatomic) BOOL scaled;     // zoom the stages to fill the frame (Scaled) instead of a fixed time axis (Fixed)
+@property (nonatomic) BOOL unipolar;   // volume envelope: levels 0…127 (handles stop at the zero line)
+@property (nonatomic, strong) NSArray<EDParam *> *params;   // 12: rate, level per stage
+@property (nonatomic, copy) NSInteger (^get)(EDParam *);
+@property (nonatomic, copy) void (^set)(EDParam *, NSInteger);
+@end
+@implementation EDEnvGraph { NSInteger _drag; CGFloat _dragScale; }
+static const CGFloat kSeg = 62, kMin = 8, kPad = 14;
+- (BOOL)isFlipped { return YES; }
+- (CGFloat)zeroY { CGFloat h = self.bounds.size.height - 2 * kPad; return kPad + h / 2; }   // same layout for all envelopes; volume just cannot go below zero
+- (CGFloat)pxPerLevel { CGFloat h = self.bounds.size.height - 2 * kPad; return h / 2 / 127.0; }
+// EOS rates: 0 is instant, 127 is slowest. In the time-scaled display a stage also takes longer the further its level has to travel.
+- (CGFloat)levelFactor:(NSInteger)i level:(NSInteger)lvl {
+    if (!_scaled) return 1;
+    NSInteger prev = i ? _get(_params[i * 2 - 1]) : 0;
+    return 0.25 + 0.75 * MIN(127, labs(lvl - prev)) / 127.0;
+}
+- (CGFloat)rawWidth:(NSInteger)i { return kMin + kSeg * _get(_params[i * 2]) / 127.0 * [self levelFactor:i level:_get(_params[i * 2 + 1])]; }
+- (CGFloat)timeScale {
+    if (!_scaled) return 1;
+    CGFloat t = 0; for (int i = 0; i < 6; i++) t += [self rawWidth:i];
+    return (self.bounds.size.width - 2 * kPad) / t;
+}
+- (NSArray<NSValue *> *)points {
+    NSMutableArray *a = [NSMutableArray array]; CGFloat x = kPad, sc = [self timeScale];
+    [a addObject:[NSValue valueWithPoint:NSMakePoint(x, [self zeroY])]];
+    for (int i = 0; i < 6; i++) {
+        NSInteger lvl = _get(_params[i * 2 + 1]);
+        x += [self rawWidth:i] * sc;
+        [a addObject:[NSValue valueWithPoint:NSMakePoint(x, [self zeroY] - MAX(_unipolar ? 0 : -127, lvl) * [self pxPerLevel])]];
+    }
+    return a;
+}
+- (void)drawRect:(NSRect)r {
+    if (_params.count != 12) return;
+    NSColor *ink = EDTheme.lcdInk;
+    NSBezierPath *frame = [NSBezierPath bezierPathWithRect:NSInsetRect(self.bounds, 1, 1)]; frame.lineWidth = 2; [ink setStroke]; [frame stroke];
+    [[ink colorWithAlphaComponent:0.35] setStroke];
+    NSBezierPath *zero = [NSBezierPath bezierPath]; [zero moveToPoint:NSMakePoint(kPad, [self zeroY])]; [zero lineToPoint:NSMakePoint(self.bounds.size.width - kPad, [self zeroY])];
+    zero.lineWidth = 1; CGFloat dash[2] = {3, 3}; [zero setLineDash:dash count:2 phase:0]; [zero stroke];
+    NSArray<NSValue *> *pts = [self points];
+    NSBezierPath *ticks = [NSBezierPath bezierPath]; ticks.lineWidth = 1; [ticks setLineDash:dash count:2 phase:0];   // stage boundaries
+    for (NSInteger i = 1; i < 7; i++) { NSPoint pt = pts[i].pointValue; [ticks moveToPoint:NSMakePoint(pt.x, kPad)]; [ticks lineToPoint:NSMakePoint(pt.x, self.bounds.size.height - kPad)]; }
+    [[ink colorWithAlphaComponent:0.35] setStroke]; [ticks stroke];
+    NSBezierPath *line = [NSBezierPath bezierPath]; line.lineWidth = 2; line.lineJoinStyle = NSLineJoinStyleRound;
+    for (NSInteger i = 0; i < 7; i++) { NSPoint pt = pts[i].pointValue; i ? [line lineToPoint:pt] : [line moveToPoint:pt]; }
+    [ink setStroke]; [line stroke];
+    for (NSInteger i = 1; i < 7; i++) {
+        NSPoint pt = pts[i].pointValue; NSRect b = NSMakeRect(pt.x - 4, pt.y - 4, 8, 8);
+        [EDTheme.lcdBackground setFill]; NSRectFill(b); [ink setStroke]; NSBezierPath *bp = [NSBezierPath bezierPathWithRect:b]; bp.lineWidth = i == _drag ? 3 : 1.5; [bp stroke];
+    }
+}
+- (void)mouseDown:(NSEvent *)e {
+    NSPoint m = [self convertPoint:e.locationInWindow fromView:nil]; _drag = 0; CGFloat best = 12;
+    NSArray<NSValue *> *pts = [self points];
+    for (NSInteger i = 1; i < 7; i++) { NSPoint p = pts[i].pointValue; CGFloat d = hypot(p.x - m.x, p.y - m.y); if (d < best) { best = d; _drag = i; } }
+    _dragScale = [self timeScale]; if (_drag) [self mouseDragged:e];
+}
+- (void)mouseDragged:(NSEvent *)e {
+    if (!_drag) return;
+    NSPoint m = [self convertPoint:e.locationInWindow fromView:nil];
+    NSArray<NSValue *> *pts = [self points]; CGFloat prevX = pts[_drag - 1].pointValue.x;
+    NSInteger lvl = (NSInteger)llround(([self zeroY] - m.y) / [self pxPerLevel]);
+    lvl = MAX(_unipolar ? 0 : -127, MIN(127, lvl));
+    NSInteger rate = (NSInteger)llround(((m.x - prevX) / _dragScale - kMin) / kSeg * 127 / [self levelFactor:_drag - 1 level:lvl]);
+    EDParam *rp = _params[(_drag - 1) * 2], *lp = _params[(_drag - 1) * 2 + 1];
+    rate = MAX(rp.min, MIN(rp.max, rate)); lvl = MAX(_unipolar ? 0 : lp.min, MIN(lp.max, lvl));
+    if (rate != _get(rp)) _set(rp, rate);
+    if (lvl != _get(lp)) _set(lp, lvl);
+    self.needsDisplay = YES;
+}
+- (void)mouseUp:(NSEvent *)e { _drag = 0; self.needsDisplay = YES; }
+@end
+
+// Waveform preview of one LFO shape, drawn like the sampler's small LFO graph (one cycle, zero line, frame).
+@interface EDLFOGraph : NSView
+@property (nonatomic) NSInteger shape; @property (nonatomic, copy) NSString *caption;
+@end
+@implementation EDLFOGraph
+- (BOOL)isFlipped { return YES; }
+static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, result -1…1
+    switch (shape) {
+        case 0: return t < 0.25 ? t * 4 : (t < 0.75 ? 2 - t * 4 : t * 4 - 4);
+        case 1: return sin(t * 2 * M_PI);
+        case 2: return 1 - 2 * t;   // manual: smoothly decreases, then jumps back up
+        case 3: return t < 0.5 ? 1 : -1;
+        case 14: return 0.8 * sin(t * 2 * M_PI) + 0.25 * sin(t * 61.0) * cos(t * 17.0);
+        default: { int k = (int)(t * 8); return fmod(sin(k * 12.9898) * 43758.5453, 2.0) - 1 > 1 ? 1 : (fmod(fabs(sin(k * 12.9898) * 43758.5453), 2.0) - 1); }
+    }
+}
+- (void)drawRect:(NSRect)r {
+    NSColor *ink = EDTheme.lcdInk; NSRect f = NSInsetRect(self.bounds, 1, 1);
+    NSBezierPath *fr = [NSBezierPath bezierPathWithRect:f]; fr.lineWidth = 2; [ink setStroke]; [fr stroke];
+    CGFloat pad = 10, top = 22, h = f.size.height - top - pad, w = f.size.width - 2 * pad, mid = top + h / 2;
+    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:11], NSForegroundColorAttributeName: ink};
+    [_caption drawAtPoint:NSMakePoint(8, 4) withAttributes:at];
+    NSBezierPath *z = [NSBezierPath bezierPath]; [z moveToPoint:NSMakePoint(pad, mid)]; [z lineToPoint:NSMakePoint(pad + w, mid)];
+    CGFloat d[2] = {3, 3}; [z setLineDash:d count:2 phase:0]; [[ink colorWithAlphaComponent:0.35] setStroke]; [z stroke];
+    NSBezierPath *p = [NSBezierPath bezierPath]; p.lineWidth = 2; p.lineJoinStyle = NSLineJoinStyleRound;
+    BOOL steps = _shape != 0 && _shape != 1 && _shape != 2 && _shape != 3 && _shape != 14;
+    for (int i = 0; i <= 160; i++) {
+        double t = MIN(i / 160.0, 0.9999), y = lfoAt(_shape, t);
+        NSPoint pt = NSMakePoint(pad + w * i / 160.0, mid - y * h / 2 * 0.9);
+        i ? [p lineToPoint:pt] : [p moveToPoint:pt]; (void)steps;
+    }
+    [ink setStroke]; [p stroke];
+}
+@end
+
 @interface EDPresetLCDField : NSTextField
 @property (nonatomic) NSInteger paramTag;
 @end
@@ -76,7 +189,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     NSMutableArray<EDParam *> *_fieldParams;
     NSMutableArray<NSButton *> *_menuBtns; NSStackView *_menuRow;
     NSView *_screen; NSTextField *_title, *_context, *_empty; NSButton *_prevV, *_nextV;
-    NSStackView *_grid, *_keys;
+    NSStackView *_grid, *_keys; EDEnvGraph *_graph; NSButton *_scaleBtn; EDLFOGraph *_lfoGraph[2];
 }
 
 - (instancetype)initWithFrame:(NSRect)f {
@@ -96,6 +209,18 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     _grid = [NSStackView new]; _grid.orientation = NSUserInterfaceLayoutOrientationHorizontal; _grid.alignment = NSLayoutAttributeTop; _grid.spacing = 40;
     _keys = [NSStackView new]; _keys.orientation = NSUserInterfaceLayoutOrientationVertical; _keys.spacing = 6; _keys.translatesAutoresizingMaskIntoConstraints = NO;
     for (NSView *v in @[_title, _context, _prevV, _nextV, _empty, _grid, _menuRow, _keys]) { v.translatesAutoresizingMaskIntoConstraints = NO; [_screen addSubview:v]; }
+    _graph = [EDEnvGraph new]; _graph.translatesAutoresizingMaskIntoConstraints = NO; _graph.hidden = YES; [_screen addSubview:_graph];
+    _scaleBtn = [EDTheme lcdButton:@"Fixed" target:self action:@selector(toggleScale:)]; _scaleBtn.translatesAutoresizingMaskIntoConstraints = NO; _scaleBtn.hidden = YES;
+    [_scaleBtn.widthAnchor constraintEqualToConstant:104].active = YES; [_screen addSubview:_scaleBtn];
+    _graph.scaled = [NSUserDefaults.standardUserDefaults boolForKey:@"EnvScaled"]; _scaleBtn.title = _graph.scaled ? @"Scaled" : @"Fixed";
+    for (int i = 0; i < 2; i++) {
+        _lfoGraph[i] = [EDLFOGraph new]; _lfoGraph[i].translatesAutoresizingMaskIntoConstraints = NO; _lfoGraph[i].hidden = YES; _lfoGraph[i].caption = [NSString stringWithFormat:@"LFO %d", i + 1]; [_screen addSubview:_lfoGraph[i]];
+        [NSLayoutConstraint activateConstraints:@[[_lfoGraph[i].topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:40], [_lfoGraph[i].leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:560 + i * 200],
+            [_lfoGraph[i].widthAnchor constraintEqualToConstant:180], [_lfoGraph[i].heightAnchor constraintEqualToConstant:110]]];
+    }
+    __weak EDPresetLCD *ws = self;
+    _graph.get = ^NSInteger(EDParam *p) { EDPresetLCD *me = ws; return me.getValue ? me.getValue(p, [me vIndex], [me rIndex]) : 0; };
+    _graph.set = ^(EDParam *p, NSInteger v) { EDPresetLCD *me = ws; if (me.setValue) me.setValue(p, [me vIndex], [me rIndex], v); };
     [EDTheme addGlareTo:_screen];
     [self addSubview:_screen];
     [NSLayoutConstraint activateConstraints:@[
@@ -106,9 +231,12 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
         [_nextV.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-14], [_nextV.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor],
         [_prevV.trailingAnchor constraintEqualToAnchor:_nextV.leadingAnchor constant:-6], [_prevV.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor],
         [_context.trailingAnchor constraintEqualToAnchor:_prevV.leadingAnchor constant:-12], [_context.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor],
+        [_graph.topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:40], [_graph.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:330],
+        [_scaleBtn.topAnchor constraintEqualToAnchor:_graph.bottomAnchor constant:8], [_scaleBtn.trailingAnchor constraintEqualToAnchor:_graph.trailingAnchor],
+        [_graph.widthAnchor constraintEqualToConstant:460], [_graph.heightAnchor constraintEqualToConstant:250],
         [_grid.topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:22], [_grid.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:24],
         [_empty.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_screen.centerYAnchor constant:-20], [_empty.widthAnchor constraintEqualToConstant:420],
-        [_keys.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:14], [_keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-12],
+        [_keys.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-12],
         [_screen.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]]];
     return self;
 }
@@ -154,6 +282,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     if ([_menu isEqual:@"Voice"]) _context.stringValue = [NSString stringWithFormat:@"Voice %ld of %ld", (long)[self vIndex] + 1, (long)nv];
     else if ([_menu isEqual:@"Zone"]) _context.stringValue = nz ? [NSString stringWithFormat:@"Voice %ld  Zone %ld of %ld", (long)[self vIndex] + 1, (long)[self rIndex] + 1, (long)nz] : @"";
     else _context.stringValue = _preset ? [NSString stringWithFormat:@"%@", _preset.name] : @"";
+    _graph.hidden = YES; _scaleBtn.hidden = YES; _lfoGraph[0].hidden = _lfoGraph[1].hidden = YES;
     if (!_active.count) {
         _title.stringValue = _menu; _empty.hidden = NO; _grid.hidden = YES;
         _empty.stringValue = !_preset ? @"No preset selected." : ([_menu isEqual:@"Zone"] ? @"Select a voice's sample zone in the structure list." : (_preset.kind == EDPresetKindLegacy3X ? @"Emulator 3X preset: only some parameters are decoded. See the List view." : @"Nothing to show."));
@@ -169,6 +298,16 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
     }
     NSDictionary *pg = _active[_page]; _title.stringValue = pg[@"title"];
     NSArray *rows = [self resolvedRows:pg]; NSArray *heads = pg[@"heads"];
+    if (rows.count == 6 && [pg[@"title"] hasSuffix:@"Envelope"]) {
+        NSMutableArray *ep = [NSMutableArray array];
+        for (NSArray *r in rows) [ep addObjectsFromArray:r[1]];
+        _graph.params = ep; _graph.unipolar = [pg[@"title"] isEqual:@"Volume Envelope"]; _graph.hidden = NO; _scaleBtn.hidden = NO; _graph.needsDisplay = YES;
+    }
+    if ([pg[@"title"] isEqual:@"LFOs and Lag"])
+        for (int i = 0; i < 2 && i < (int)rows.count; i++) {
+            NSArray<EDParam *> *c = rows[i][1];
+            _lfoGraph[i].shape = c.count > 1 && self.getValue ? self.getValue(c[1], [self vIndex], [self rIndex]) : 0; _lfoGraph[i].hidden = NO; _lfoGraph[i].needsDisplay = YES;
+        }
     NSInteger perCol = heads ? 8 : 7, ncol = ((NSInteger)rows.count + perCol - 1) / perCol;
     for (NSInteger c = 0; c < ncol; c++) {
         NSStackView *col = [NSStackView new]; col.orientation = NSUserInterfaceLayoutOrientationVertical; col.alignment = NSLayoutAttributeLeading; col.spacing = heads ? 5 : 10;
@@ -223,6 +362,10 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
 
 // MARK: actions
 
+- (void)toggleScale:(NSButton *)b {
+    _graph.scaled = !_graph.scaled; b.title = _graph.scaled ? @"Scaled" : @"Fixed"; _graph.needsDisplay = YES;
+    [NSUserDefaults.standardUserDefaults setBool:_graph.scaled forKey:@"EnvScaled"];
+}
 - (void)softKey:(NSButton *)b { _page = b.tag; [self rebuild]; }
 - (void)popPicked:(NSPopUpButton *)b {
     EDParam *p = _fieldParams[b.tag]; if (self.setValue) self.setValue(p, [self vIndex], [self rIndex], b.selectedItem.tag);

@@ -362,7 +362,6 @@ static NSTextField *toolNote(NSString *s) {
     NSMenuItem *mnb = [pm addItemWithTitle:@"New Bank" action:@selector(newBank:) keyEquivalent:@""]; mnb.target = self;
     [pm addItem:NSMenuItem.separatorItem];
     NSMenuItem *mimp = [pm addItemWithTitle:@"Import Presets from Bank…" action:@selector(importPresetsFromBank:) keyEquivalent:@""]; mimp.target = self;
-    NSMenuItem *mimd = [pm addItemWithTitle:@"Import Presets from Disk…" action:@selector(importPresetsFromDisk:) keyEquivalent:@""]; mimd.target = self;
     [pm addItem:NSMenuItem.separatorItem];
     NSMenuItem *mc = [pm addItemWithTitle:@"Convert Preset to E4B…" action:@selector(convertSelectedPreset:) keyEquivalent:@""]; mc.tag = 902; mc.target = self;
     [pm addItem:NSMenuItem.separatorItem];
@@ -1445,7 +1444,9 @@ static NSString *const kMinimalBlueSCSIIni =
     _standaloneURL = nil; _currentNode = nil; _inBank = YES; [self refreshBrowser];
     _originalData = nil;   // nothing to back up
     [self selectTabNamed:@"presets"]; _tabPicker.selectedSegment = 3;
-    _status.stringValue = @"New empty bank. Use New preset or import presets and samples, then Save As.";
+    [_presetEditor newPreset:nil];   // a bank starts with one empty preset, like the sampler's
+    [self.window.undoManager removeAllActions];
+    _status.stringValue = @"New bank with one empty preset. Add voices, samples or import presets, then Save As.";
 }
 - (IBAction)openBankFile:(id)sender {
     if (![self confirmDiscard]) return;

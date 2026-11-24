@@ -146,7 +146,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         [_screen.topAnchor constraintEqualToAnchor:self.topAnchor constant:40], [_screen.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
         [_screen.widthAnchor constraintEqualToConstant:1100], [_screen.heightAnchor constraintGreaterThanOrEqualToConstant:430],
         [_screen.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.leadingAnchor constant:20], [_screen.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-20],
-        [keys.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:16], [keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-14],
+        [keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-14],
         [_title.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:14], [_title.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor],
         [_prev.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:14], [_prev.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:16],
         [_next.topAnchor constraintEqualToAnchor:_screen.topAnchor constant:14], [_next.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-16],
@@ -156,7 +156,7 @@ static NSArray<NSString *> *ccList(NSArray *extra) { return [extra arrayByAdding
         [_tableScroll.topAnchor constraintEqualToAnchor:_title.bottomAnchor constant:16], [_tableScroll.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:12],
         [_tableScroll.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-12], [_tableScroll.bottomAnchor constraintEqualToAnchor:keys.topAnchor constant:-10],
         [_empty.centerXAnchor constraintEqualToAnchor:_tableScroll.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_tableScroll.centerYAnchor],
-        [keys.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+        [keys.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor],
         [_note.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor], [_note.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor],
         [_note.topAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:14],
         [_note.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-12]]];   // the green screen stretches down to the note, which sits at the bottom

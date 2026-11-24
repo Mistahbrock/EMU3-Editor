@@ -532,7 +532,7 @@ static void EDShowPop(NSMenu *m, NSRect anchor, NSScreen *screen) {
     EDLCDDialogHandler *h = [EDLCDDialogHandler new];
     NSTextField *g = [NSTextField labelWithString:glyph]; g.font = [EDTheme lcdFont:44]; g.textColor = EDTheme.lcdInk; g.frame = NSMakeRect(24, H - 110, 50, 60); [box addSubview:g];
     NSTextField *t = [NSTextField ed_wrappingLabelWithString:msg]; t.font = [EDTheme lcdFont:15]; t.textColor = EDTheme.lcdInk;
-    t.frame = NSMakeRect(86, 66, W - 86 - 56, H - 66 - 24); t.preferredMaxLayoutWidth = W - 142;   // stops short of the close box in the corner [box addSubview:t];
+    t.frame = NSMakeRect(86, 66, W - 86 - 56, H - 66 - 24); t.preferredMaxLayoutWidth = W - 142; [box addSubview:t];   // stops short of the close box in the corner
     EDLCDButton *x = [[EDLCDButton alloc] initWithFrame:NSMakeRect(W - 14 - 30, H - 14 - 30, 30, 30)]; x.title = @"×"; x.target = h; x.action = @selector(pick:); x.tag = -1; x.bordered = NO;   // close box: same as Esc
     x.toolTip = @"Close"; [box addSubview:x];
     NSInteger n = (NSInteger)titles.count; const CGFloat bw = 130, margin = 24;
