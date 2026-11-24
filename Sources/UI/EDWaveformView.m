@@ -102,7 +102,7 @@ static const CGFloat kRulerH = 26, kOverviewH = 52;
         NSDictionary *ha = @{NSFontAttributeName: [NSFont monospacedDigitSystemFontOfSize:11 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: EDTheme.lcdBackground};
         NSSize sz = [h sizeWithAttributes:ha];
         NSRect r = NSMakeRect(w - sz.width - 18, 3, sz.width + 12, 19);
-        [EDTheme.lcdInk setFill]; [[NSBezierPath bezierPathWithRoundedRect:r xRadius:4 yRadius:4] fill];
+        [EDTheme.lcdInk setFill]; [[NSBezierPath bezierPathWithRoundedRect:r xRadius:0 yRadius:0] fill];
         [h drawAtPoint:NSMakePoint(r.origin.x + 6, r.origin.y + 2) withAttributes:ha];
     }
 }

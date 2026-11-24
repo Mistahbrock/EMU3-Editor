@@ -316,6 +316,7 @@ static void putBE32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v >> 24, v >
 - (NSArray<EDSample *> *)samples { return _samples; }
 - (NSArray<EDPreset *> *)presets { return _presets; }
 - (void)markClean { for (EDSample *s in _samples) s.dirty = NO; for (EDPreset *p in _presets) p.dirty = NO; _loadedPresets = [_presets copy]; _loadedSamples = [_samples copy]; }
+- (void)markAllDirty { for (EDSample *s in _samples) s.dirty = YES; for (EDPreset *p in _presets) p.dirty = YES; }
 - (BOOL)dirty {
     if (_loadedPresets && ![_presets isEqualToArray:_loadedPresets]) return YES;
     if (_loadedSamples && ![_samples isEqualToArray:_loadedSamples]) return YES;

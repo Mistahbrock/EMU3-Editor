@@ -1,4 +1,5 @@
 #import "AppDelegate.h"
+#import "EDTheme.h"
 #import "EDSettings.h"
 #import "EDHelp.h"
 #import "EDMainWindowController.h"
@@ -15,10 +16,23 @@ static NSMenuItem *item(NSMenu *m, NSString *title, SEL a, NSString *key, id tar
     [self buildMenus];
     [_main showWindow:nil];
     if (![NSUserDefaults.standardUserDefaults objectForKey:@"NSWindow Frame EMU3EditorMain"]) [_main.window center];
+    // a saved frame from a bigger screen (or an old size) must not leave the window hanging off this one
+    NSWindow *w = _main.window; NSRect vis = NSInsetRect((w.screen ?: NSScreen.mainScreen).visibleFrame, 16, 12), f = w.frame;   // a little space on each side
+    f.size.width = MIN(NSWidth(f), NSWidth(vis)); f.size.height = MIN(NSHeight(f), NSHeight(vis));
+    f.origin.x = MAX(NSMinX(vis), MIN(NSMinX(f), NSMaxX(vis) - NSWidth(f))); f.origin.y = MAX(NSMinY(vis), MIN(NSMinY(f), NSMaxY(vis) - NSHeight(f)));
+    if (!NSEqualRects(f, w.frame)) [w setFrame:f display:YES];
 }
 - (void)applicationDidFinishLaunching:(NSNotification *)n {
     NSApp.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];   // dialogs, panels and menus match the dark UI
     [NSApp activateIgnoringOtherApps:YES];
+    [_main restoreSession];
+    // Esc closes a settings / transfer / utility window, like Exit on the sampler. (The main window and dialogs handle Esc themselves.)
+    [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
+        NSWindow *w = e.window;
+        if (e.keyCode != 53 || !w || w == self->_main.window || NSApp.modalWindow || w.attachedSheet || [w isKindOfClass:NSSavePanel.class] || ![w isKindOfClass:NSWindow.class]) return e;
+        if (!(w.styleMask & NSWindowStyleMaskClosable) || !w.isVisible) return e;
+        if ([w.firstResponder isKindOfClass:[NSText class]]) [w makeFirstResponder:nil];
+        [w performClose:nil]; return nil; }];
     if ([NSUserDefaults.standardUserDefaults boolForKey:@"LogInteractions"]) [self startInteractionLog];
 }
 
@@ -80,6 +94,7 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     item(file, @"Copy Disk to SD Card…", @selector(copyToSDCard:), @"", _main);
     item(file, @"Write bluescsi.ini…", @selector(writeBlueSCSIIni:), @"", _main);
     item(file, @"Open Bank File…", @selector(openBankFile:), @"O", _main);
+    item(file, @"Recover Unsaved Bank…", @selector(recoverUnsaved:), @"", _main);
     [file addItem:NSMenuItem.separatorItem];
     item(file, @"Save Bank", @selector(saveBank:), @"s", _main);
     item(file, @"Save Bank As…", @selector(saveBankAs:), @"S", _main);
@@ -103,6 +118,14 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     item(smp, @"Remove DC Offset", @selector(removeDC:), @"", _main);
     item(smp, @"Crop to Loop", @selector(cropToLoop:), @"", _main);
     item(smp, @"Crossfade Loop", @selector(crossfadeLoop:), @"", _main);
+    [smp addItem:NSMenuItem.separatorItem];
+    item(smp, @"Gain Change…", @selector(gainChange:), @"", _main);
+    item(smp, @"Digital Tuning…", @selector(digitalTuning:), @"", _main);
+    item(smp, @"Sample Rate Convert…", @selector(sampleRateConvert:), @"", _main);
+    item(smp, @"Bit Converter…", @selector(bitConvert:), @"", _main);
+    item(smp, @"Swap Left & Right", @selector(swapChannels:), @"", _main);
+    item(smp, @"Stereo to Mono", @selector(stereoToMono:), @"", _main);
+    item(smp, @"Mono to Stereo", @selector(monoToStereo:), @"", _main);
     [smp addItem:NSMenuItem.separatorItem];
     item(smp, @"Export as WAV…", @selector(exportWAV:), @"e", _main);
     item(smp, @"Replace from Audio…", @selector(importWAV:), @"i", _main);
@@ -138,12 +161,16 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     item(view, @"Zoom Out", @selector(zoomOut:), @"-", _main);
     item(view, @"Fit Sample", @selector(zoomFit:), @"0", _main);
     item(view, @"Zoom to Loop", @selector(zoomLoop:), @"l", _main);
+    [view addItem:NSMenuItem.separatorItem];
+    NSWindow.allowsAutomaticWindowTabbing = NO;   // no Show Tab Bar items; our own full-screen item so macOS adds none
+    NSMenuItem *fs = item(view, @"Enter Full Screen", @selector(toggleFullScreen:), @"f", nil); fs.keyEquivalentModifierMask = NSEventModifierFlagControl | NSEventModifierFlagCommand;
 
     NSMenu *win = SUB(@"Window");
     item(win, @"Minimize", @selector(performMiniaturize:), @"m", nil);
-    NSApp.windowsMenu = win;
+    // not registered as NSApp.windowsMenu: that makes macOS add its own Fill / Move & Resize / Tab items, which cannot be styled
     NSMenu *help = SUB(@"Help"); item(help, @"EMU3 Editor Help", @selector(showHelp:), @"?", self); NSApp.helpMenu = help;
     #undef SUB
+    for (NSMenuItem *mi in bar.itemArray) if (mi.submenu) [EDTheme styleDarkMenu:mi.submenu];
 }
 
 - (BOOL)application:(NSApplication *)a openFile:(NSString *)f {
@@ -152,7 +179,7 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     return ok;
 }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)a { return [_main confirmQuit] ? NSTerminateNow : NSTerminateCancel; }
-- (void)applicationWillTerminate:(NSNotification *)n { [_main closeRemoteDiskAndWait:YES]; }
+- (void)applicationWillTerminate:(NSNotification *)n { [_main writeSession]; [_main closeRemoteDiskAndWait:YES]; }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)a { return YES; }
 // MARK: About
 

@@ -83,7 +83,7 @@ static EDUtils *sCurrent;   // keeps the open sheet alive
     NSPanel *p = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 780, 430) styleMask:NSWindowStyleMaskTitled backing:NSBackingStoreBuffered defer:NO];
     [EDTheme styleWindow:p]; u.panel = p;
     NSView *content = p.contentView;
-    NSView *screen = [NSView new]; screen.wantsLayer = YES; screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor; screen.layer.cornerRadius = 6;
+    NSView *screen = [NSView new]; screen.wantsLayer = YES; screen.layer.backgroundColor = EDTheme.lcdBackground.CGColor; screen.layer.cornerRadius = 0;
     screen.layer.borderWidth = EDTheme.lcdFrameWidth; screen.layer.borderColor = NSColor.blackColor.CGColor; screen.translatesAutoresizingMaskIntoConstraints = NO; [content addSubview:screen];
     NSTextField *t = [NSTextField labelWithString:title]; t.font = [EDTheme lcdFont:26]; t.textColor = EDTheme.lcdInk; t.translatesAutoresizingMaskIntoConstraints = NO; [screen addSubview:t];
     NSButton *close = [EDTheme lcdKey:@"Done" target:u action:@selector(done:)]; close.keyEquivalent = @"\r"; close.toolTip = @"Close this panel."; close.translatesAutoresizingMaskIntoConstraints = NO; [screen addSubview:close];

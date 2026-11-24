@@ -100,4 +100,74 @@ static inline int16_t clip16(double v) { return (int16_t)(v > 32767 ? 32767 : (v
         }
     }];
 }
+
+- (void)swapChannels {
+    if (!self.isStereo) return;
+    [self replaceLeft:self.right right:self.left];
+}
+- (void)convertToMono {
+    if (!self.isStereo) return;
+    NSUInteger n = self.frameCount; const int16_t *l = self.leftFrames, *r = self.rightFrames;
+    NSMutableData *m = [NSMutableData dataWithLength:n * 2]; int16_t *d = m.mutableBytes;
+    for (NSUInteger i = 0; i < n; i++) d[i] = (int16_t)(((int)l[i] + (int)r[i]) / 2);
+    [self replaceLeft:m right:nil];
+}
+- (void)convertToStereo {
+    if (self.isStereo || !self.frameCount) return;
+    [self replaceLeft:self.left right:[self.left mutableCopy]];
+}
+
+// Catmull-Rom interpolation of src[0…n-1] at position x (edges clamp).
+static inline double cubicAt(const int16_t *s, NSUInteger n, double x) {
+    long i = (long)floor(x); double t = x - i;
+    #define S(k) ((double)s[MAX(0L, MIN((long)n - 1, (long)(k)))])
+    double p0 = S(i - 1), p1 = S(i), p2 = S(i + 1), p3 = S(i + 2);
+    #undef S
+    return p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+}
+/// ratio = new length / old length. Low-pass first when shrinking so the result does not alias.
+- (void)resampleByRatio:(double)ratio newRate:(uint32_t)rate {
+    NSUInteger n = self.frameCount; if (n < 8 || ratio <= 0) return;
+    NSUInteger m = MAX((NSUInteger)8, (NSUInteger)llround(n * ratio));
+    NSUInteger ls = self.loopStart, le = self.loopEnd;
+    NSMutableData *(^go)(NSData *) = ^NSMutableData *(NSData *src) {
+        if (!src) return nil;
+        const int16_t *s = src.bytes;
+        NSMutableData *o = [NSMutableData dataWithLength:m * 2]; int16_t *d = o.mutableBytes;
+        NSMutableData *tmp = nil;
+        if (ratio < 1) {   // box low-pass of width 1/ratio, applied before decimating
+            int w = (int)ceil(1.0 / ratio); tmp = [NSMutableData dataWithLength:n * 2]; int16_t *t = tmp.mutableBytes;
+            double acc = 0; for (NSUInteger i = 0; i < n; i++) { acc += s[i]; if (i >= (NSUInteger)w) acc -= s[i - w]; t[i] = (int16_t)(acc / MIN((NSUInteger)w, i + 1)); }
+            // centre the box (it delays by (w-1)/2)
+            int sh = (w - 1) / 2; if (sh) { memmove(t, t + sh, (n - sh) * 2); for (NSUInteger i = n - sh; i < n; i++) t[i] = t[n - sh - 1]; }
+            s = t;
+        }
+        for (NSUInteger i = 0; i < m; i++) d[i] = clip16(cubicAt(s, n, (double)i / ratio));
+        return o;
+    };
+    NSMutableData *l = go(self.left), *r = go(self.right);
+    NSUInteger nls = (NSUInteger)llround(ls * ratio), nle = (NSUInteger)llround(le * ratio);
+    [self replaceLeft:l right:r];
+    self.loopStart = MIN(nls, m - 1); self.loopEnd = MIN(nle, m - 1);
+    if (rate) self.sampleRate = rate;
+}
+- (void)convertToSampleRate:(uint32_t)rate {
+    uint32_t old = self.sampleRate; if (!old || !rate || rate == old) return;
+    [self resampleByRatio:(double)rate / old newRate:rate];
+}
+- (void)tuneByCents:(double)cents {
+    if (fabs(cents) < 0.01) return;
+    [self resampleByRatio:pow(2, -cents / 1200.0) newRate:0];   // higher pitch = fewer frames at the same rate
+}
+- (void)reduceToBits:(int)bits dither:(BOOL)dither {
+    if (bits < 1 || bits > 15) return;
+    double step = pow(2, 16 - bits);
+    [self transform:^(int16_t *d, NSUInteger n) {
+        for (NSUInteger i = 0; i < n; i++) {
+            double v = d[i];
+            if (dither) v += ((double)arc4random() / UINT32_MAX - (double)arc4random() / UINT32_MAX) * step * 0.5;
+            d[i] = clip16(floor(v / step + 0.5) * step);
+        }
+    }];
+}
 @end

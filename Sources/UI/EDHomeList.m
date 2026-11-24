@@ -94,5 +94,5 @@ static NSString *bankKind(NSURL *u) {
 - (void)openFromMenu:(id)s { [self openClicked:s]; }
 - (void)convertFromMenu:(id)s { NSInteger r = _table.clickedRow; if (r >= 0 && r < (NSInteger)_rows.count && self.onConvert) self.onConvert(_rows[r][@"url"]); }
 - (void)revealFromMenu:(id)s { NSInteger r = _table.clickedRow; if (r >= 0 && r < (NSInteger)_rows.count) [NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:@[_rows[r][@"url"]]]; }
-- (void)openClicked:(id)s { NSInteger r = _table.clickedRow; if (r >= 0 && r < (NSInteger)_rows.count && self.onOpen) self.onOpen(_rows[r][@"url"]); }
+- (void)openClicked:(id)s { NSInteger r = _table.clickedRow >= 0 ? _table.clickedRow : _table.selectedRow; if (r >= 0 && r < (NSInteger)_rows.count && self.onOpen) self.onOpen(_rows[r][@"url"]); }
 @end

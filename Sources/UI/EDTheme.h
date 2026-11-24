@@ -66,6 +66,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSButton *)lcdKey:(NSString *)title target:(nullable id)target action:(nullable SEL)action;
 /// Gives a scroll view the LCD scroll bar.
 + (void)useLCDScroller:(NSScrollView *)s;
+/// YES while an LCD pop-up menu is open (Esc belongs to it).
++ (BOOL)lcdPopupOpen;
+/// Dark menu-bar menu: opaque dark rows, light text, shortcuts on the right (replaces the system glass look).
++ (void)styleDarkMenu:(NSMenu *)m;
 /// Returns the index of the pressed button (the last one is the default); -1 for Esc.
 + (NSInteger)choose:(NSString *)message buttons:(NSArray<NSString *> *)titles;
 + (void)notice:(NSString *)message;

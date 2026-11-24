@@ -2,7 +2,7 @@
 #import "EDTheme.h"
 
 typedef NS_ENUM(NSInteger, EggState) { EggRoam, EggRaise, EggLook, EggJump, EggRun, EggDone };
-typedef NS_ENUM(NSInteger, EggAct) { ActWalk, ActPeck, ActLook, ActTrot, ActMount };
+typedef NS_ENUM(NSInteger, EggAct) { ActWalk, ActPeck, ActLook, ActTrot, ActMount, ActGaze };
 
 @implementation EDEmuEgg {
     NSTimer *_timer; id _monitor;
@@ -20,6 +20,7 @@ typedef NS_ENUM(NSInteger, EggAct) { ActWalk, ActPeck, ActLook, ActTrot, ActMoun
 
 static __weak EDEmuEgg *sRunning;
 
++ (BOOL)isRunning { return sRunning != nil; }
 + (void)playOver:(NSView *)host avoiding:(NSArray<NSValue *> *)rects mount:(NSRect)mount leftLimit:(CGFloat)left peck:(void (^)(BOOL))peck done:(void (^)(BOOL))done {
     if (sRunning || !host.window) return;
     EDEmuEgg *e = [[EDEmuEgg alloc] initWithFrame:host.bounds]; e.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -79,13 +80,15 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
 - (void)pickAct {
     EggAct n;
     BOOL mountOK = !NSIsEmptyRect(_mount) && NSMinY(_mount) - 30 * [self scaleAt:NSMinY(_mount)] >= 74 - 1 && _y > 0;
-    if (mountOK && ((_actCount >= 3 && arc4random() % 4 == 0))) n = ActMount;
+    if (_act == ActWalk || _act == ActTrot) n = ActGaze;   // after every walk the bird stops and gazes about
+    else if (mountOK && ((_actCount >= 3 && arc4random() % 4 == 0))) n = ActMount;
     else do { n = (EggAct)(arc4random() % 4); } while (n == _act);
     _act = n; _actT = 0; _lookFlips = 0; _actCount++;
     switch (n) {
         case ActWalk: case ActTrot: _actDur = 9; [self pickTarget]; break;
         case ActPeck: _actDur = 2.1; break;
         case ActLook: _actDur = 2.4; break;
+        case ActGaze: _actDur = 3.2 + (arc4random() % 20) / 10.0; break;
         case ActMount: _actDur = 30; _mountPhase = 0; _tx = NSMidX(_mount); _ty = NSMinY(_mount) - 30 * _u; for (int i = 0; i < 4; i++) _ty = NSMinY(_mount) - 30 * [self scaleAt:_ty]; break;
     }
 }
@@ -119,6 +122,10 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
                 double sv = fabs(sin(_actT * M_PI / 0.42)); _head = CGPointMake(upHead.x + 3, upHead.y - 2 + 4 * sv); _peck = 0;   // the beak is highest, at the icon, when sv = 1
                 _hit = sv > 0.86; if (_peckBlock) _peckBlock(_hit); _pecked = YES;
                 if (_actT > 1.3) { _state = EggLook; _t = 0; _head = upHead; _hit = NO; if (_peckBlock) _peckBlock(NO); }
+            } else if (_act == ActGaze) {                // standing tall, the neck up, the head turning slowly from side to side
+                CGPoint g = CGPointMake(3.5 + 7 * MAX(-1, MIN(1, 1.6 * sin(_actT * 1.3))), 27 + 0.6 * sin(_actT * 2.1));
+                double k = Ease(_actT / 0.5), b = Ease((_actT - (_actDur - 0.5)) / 0.5);
+                _head = CGPointMake(Lerp(Lerp(walkHead.x, g.x, k), walkHead.x, b), Lerp(Lerp(walkHead.y, g.y, k), walkHead.y, b)); _peck = 0; _wag += dt * 1.5;
             } else if (_act == ActPeck) {
                 double ph = fmod(_actT, 0.7) / 0.7; _peck = ph < 0.3 ? Ease(ph / 0.3) : (ph < 0.5 ? 1 - Ease((ph - 0.3) / 0.2) * 0.15 : 1 - Ease((ph - 0.5) / 0.5) * 1.0);
                 if (ph < 0.3 || ph >= 0.5) {} // keep value
@@ -148,7 +155,7 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
             break; }
         default: break;
     }
-    _headBack = _head.x < 2.5 && (_state == EggLook || (_state == EggRoam && _act == ActLook));
+    _headBack = _head.x < 2.5 && (_state == EggLook || (_state == EggRoam && (_act == ActLook || _act == ActGaze)));
     self.needsDisplay = YES;
 }
 
@@ -161,19 +168,26 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
         if (x0 == x1 && y0 == y1) break; int e2 = 2 * err; if (e2 > -dy) { err -= dy; x0 += sx; } if (e2 < dx) { err += dx; y0 += sy; } }
 }
 - (void)leg:(int)hipX phase:(double)ph moving:(BOOL)mv running:(BOOL)run bodyY:(int)by {
-    CGPoint hip = CGPointMake(hipX, 9 + by), foot, knee;
+    CGPoint hip = CGPointMake(hipX, 9 + by), foot;
+    double swing = MAX(0, cos(ph));   // >0 while this foot swings forward
     if (_state == EggJump) { foot = CGPointMake(hipX + (hipX < 0 ? -2 : 3), MAX(0, by - 1)); }
-    else if (mv) { double stride = run ? 5 : 3; foot = CGPointMake(hipX + round(sin(ph) * stride), MAX(0, cos(ph)) * (run ? 5 : 3)); }
+    else if (mv) { double stride = run ? 6 : 4, back = run ? 2 : 1.5;   // emu: foot plants ahead, trails well behind the hip
+        foot = CGPointMake(hipX + round(sin(ph) * stride - back), swing * (run ? 5 : 3)); }
     else foot = CGPointMake(hipX, 0);
-    knee = CGPointMake((hip.x + foot.x) / 2 + (run ? 3 : 2), (hip.y + foot.y) / 2 + 1);
+    // two rigid bones (thigh and shin never change length); the joint in between bends to the rear
+    const double L = 5.6;
+    double dx = foot.x - hip.x, dy = foot.y - hip.y, d = MAX(0.01, MIN(hypot(dx, dy), 2 * L - 0.01)), hh = sqrt(L * L - d * d / 4);
+    double nx = -dy / d, ny = dx / d; if (nx > 0) { nx = -nx; ny = -ny; }   // perpendicular, pointing backward
+    CGPoint knee = CGPointMake((hip.x + foot.x) / 2 + nx * hh, (hip.y + foot.y) / 2 + ny * hh);
     [self line:hip to:knee thick:2]; [self line:knee to:foot thick:1];
-    int fx = lround(foot.x), fy = lround(foot.y); [self cx:fx + 1 y:fy]; [self cx:fx + 2 y:fy]; [self cx:fx + 3 y:fy];   // toes
+    int fx = lround(foot.x), fy = lround(foot.y), td = (mv && swing > 0.4 && _state != EggJump) ? 1 : 0;   // toes hang down while the foot is in the air
+    [self cx:fx + 1 y:MAX(0, fy - td)];   // one-pixel toe
 }
 - (void)drawRect:(NSRect)dirty {
     NSRectClip(NSMakeRect(0, 0, self.bounds.size.width - 16, self.bounds.size.height));   // the bird comes and goes behind the scroll bar
     [EDTheme.lcdInk setFill];
     BOOL run = _state == EggRun && _t > 0.12, mv = _stepping, jumping = _state == EggJump;
-    int bodyY = mv ? (int)lround(fabs(sin(_ph)) * (run ? 2 : 1)) : 0; if (jumping) bodyY = (int)lround(_jump);
+    int bodyY = mv ? (int)lround(fabs(cos(_ph)) * (run ? 2 : 1)) : 0;   // highest over the planted leg, lowest with the legs spread if (jumping) bodyY = (int)lround(_jump);
     [self leg:-2 phase:_ph moving:mv running:run bodyY:bodyY]; [self leg:2 phase:_ph + M_PI moving:mv running:run bodyY:bodyY];
     // body: a rounded block with a few LCD-gap feathers
     for (int y = 9; y <= 15; y++) { int a = (y == 9) ? -4 : (y == 15 ? -3 : -5), b = (y == 9) ? 3 : (y == 15 ? 2 : 4); for (int x = a; x <= b; x++) [self cx:x y:y + bodyY]; }
@@ -186,10 +200,14 @@ static double Ease(double t) { t = MAX(0, MIN(1, t)); return t * t * (3 - 2 * t)
     [EDTheme.lcdInk setFill];
     // neck: a bent S curve from the shoulder to the head
     CGPoint p0 = CGPointMake(3, 14 + bodyY), p3 = CGPointMake(_head.x, _head.y);
-    CGPoint p1 = CGPointMake(p0.x + 3, p0.y + (p3.y - p0.y) * 0.7), p2 = CGPointMake(p3.x - 3, p3.y + (p0.y - p3.y) * 0.3);
+    CGPoint ax;   // unit vector along the neck, and a gentle reversed S: the base leans forward, the middle sways back, the head comes forward again
+    { double vx = p3.x - p0.x, vy = p3.y - p0.y; if (vy > 0) vx *= 0.5;   // more upright
+      double vl = MAX(0.01, hypot(vx, vy)); ax = CGPointMake(vx / vl, vy / vl); p3 = CGPointMake(p0.x + ax.x * 9.7, p0.y + ax.y * 9.7); }   // the neck keeps its length
+    CGPoint nrm = CGPointMake(ax.y, -ax.x);   // forward-pointing perpendicular
+    CGPoint p1 = CGPointMake(p0.x + ax.x * 3.2 + nrm.x * 2.2, p0.y + ax.y * 3.2 + nrm.y * 2.2), p2 = CGPointMake(p0.x + ax.x * 6.5 - nrm.x * 2.2, p0.y + ax.y * 6.5 - nrm.y * 2.2);
     for (int i = 0; i <= 40; i++) { double t = i / 40.0, m = 1 - t;
         CGFloat x = m*m*m*p0.x + 3*m*m*t*p1.x + 3*m*t*t*p2.x + t*t*t*p3.x, y = m*m*m*p0.y + 3*m*m*t*p1.y + 3*m*t*t*p2.y + t*t*t*p3.y;
-        int cx = (int)lround(x), cy = (int)lround(y); [self cx:cx y:cy]; [self cx:cx + 1 y:cy]; [self cx:cx y:cy + 1]; }
+        int cx = (int)lround(x), cy = (int)lround(y); [self cx:cx y:cy]; [self cx:cx + 1 y:cy]; }
     // head and beak (the beak tips down while pecking)
     int hx = (int)lround(p3.x), hy = (int)lround(p3.y);
     int f = _headBack ? -1 : 1;   // beak side

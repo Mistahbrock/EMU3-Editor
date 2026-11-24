@@ -21,12 +21,12 @@
     return self;
 }
 
-- (NSTextField *)label:(NSString *)s { return [EDTheme lcdLabel:s size:12]; }
+- (NSTextField *)label:(NSString *)s { NSTextField *t = [NSTextField labelWithString:s]; t.font = [NSFont systemFontOfSize:12]; t.textColor = NSColor.labelColor; return t; }
 - (NSButton *)closeButton {
-    NSButton *b = [EDTheme lcdKey:@"Close" target:self.window action:@selector(performClose:)]; b.toolTip = @"Close this window.";
+    NSButton *b = [NSButton buttonWithTitle:@"Close" target:self.window action:@selector(performClose:)]; b.keyEquivalent = @"\e"; b.toolTip = @"Close this window.";
     [b.widthAnchor constraintEqualToConstant:100].active = YES; return b;
 }
-- (NSButton *)button:(NSString *)t action:(SEL)a { return [EDTheme lcdKey:t target:self action:a]; }
+- (NSButton *)button:(NSString *)t action:(SEL)a { return [NSButton buttonWithTitle:t target:self action:a]; }
 
 - (void)build {
     _outPop = [NSPopUpButton new]; _inPop = [NSPopUpButton new];
@@ -35,13 +35,13 @@
     _devField.toolTip = @"SDS device (channel) ID, 0–127. Many samplers answer to 127 (all).";
     _numField.toolTip = @"The sample number sent in the dump header. EOS keeps sample numbers through a dump.";
     _status = [self label:@"Sampler side: Sample Manage ▸ Utils ▸ Dump… starts every transfer. To send from here, set Direction = Receive on the sampler, pick the sample, press OK, then press Send. To receive, set Direction = Transmit, then press \"Wait for dump\" here first and OK on the sampler."];
-    _status.font = [EDTheme lcdFont:11]; _status.textColor = EDTheme.lcdInk; _status.maximumNumberOfLines = 6; _status.preferredMaxLayoutWidth = 480; _status.lineBreakMode = NSLineBreakByWordWrapping;
+    _status.font = [NSFont systemFontOfSize:11]; _status.textColor = NSColor.secondaryLabelColor; _status.maximumNumberOfLines = 6; _status.preferredMaxLayoutWidth = 464; _status.lineBreakMode = NSLineBreakByWordWrapping;
     _bar = [NSProgressIndicator new]; _bar.style = NSProgressIndicatorStyleBar; _bar.indeterminate = NO; _bar.maxValue = 1;
     _sendBtn = [self button:@"Send selected sample" action:@selector(send:)];
     _listenBtn = [self button:@"Wait for dump from sampler" action:@selector(listen:)];
     _cancelBtn = [self button:@"Cancel transfer" action:@selector(cancel:)]; _cancelBtn.enabled = NO;
-    _fastCheck = [EDTheme lcdButton:@"Open loop: send without acknowledgements (single cable only)" target:nil action:nil]; [_fastCheck.widthAnchor constraintEqualToConstant:440].active = YES;
-    for (NSTextField *f in @[_devField, _numField]) [EDTheme styleLCDField:f];
+    _fastCheck = [NSButton checkboxWithTitle:@"Open loop: send without acknowledgements (single cable only)" target:nil action:nil];
+    for (NSTextField *f in @[_devField, _numField]) [f.widthAnchor constraintEqualToConstant:80].active = YES;
     NSButton *refresh = [self button:@"Refresh ports" action:@selector(refresh:)];
     _outPop.toolTip = @"The MIDI port that goes to the sampler's MIDI In (your interface's output).";
     _inPop.toolTip = @"The MIDI port that comes from the sampler's MIDI Out (your interface's input).";
@@ -60,12 +60,14 @@
     g.rowSpacing = 8; g.columnSpacing = 10; [g columnAtIndex:0].xPlacement = NSGridCellPlacementTrailing;
     NSStackView *row1 = [NSStackView stackViewWithViews:@[_sendBtn, _bitsPop]];
     NSStackView *row2 = [NSStackView stackViewWithViews:@[_listenBtn, _cancelBtn, refresh]];
-    NSStackView *root = [NSStackView stackViewWithViews:@[g, row1, row2, _fastCheck, _bar, _status, [self closeButton]]];
+    NSButton *closeBtn = [self closeButton];
+    NSStackView *root = [NSStackView stackViewWithViews:@[g, row1, row2, _fastCheck, _bar, _status, closeBtn]];
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.alignment = NSLayoutAttributeLeading; root.spacing = 12;
-    root.edgeInsets = NSEdgeInsetsMake(18, 18, 18, 18);
+    root.edgeInsets = NSEdgeInsetsMake(24, 28, 24, 28);
+    [closeBtn.centerXAnchor constraintEqualToAnchor:root.centerXAnchor].active = YES;   // Close is always centred
     _bar.translatesAutoresizingMaskIntoConstraints = NO;
-    [_bar.widthAnchor constraintEqualToConstant:484].active = YES;
-    [EDTheme styleWindow:self.window]; self.window.contentView = [EDTheme lcdScreenAround:root]; [self.window setContentSize:root.fittingSize];
+    [_bar.widthAnchor constraintEqualToConstant:464].active = YES;
+    [EDTheme styleWindow:self.window]; self.window.contentView = root; [self.window setContentSize:root.fittingSize];
     [self refresh:nil];
 }
 
@@ -80,7 +82,6 @@
     if (po) [_outPop selectItemWithTitle:po]; if (pi) [_inPop selectItemWithTitle:pi];
     if (!_outs.count) { [_outPop addItemWithTitle:@"(no MIDI outputs found)"]; }
     if (!_ins.count) { [_inPop addItemWithTitle:@"(no MIDI inputs found)"]; }
-    [EDTheme styleLCDPopup:_outPop]; [EDTheme styleLCDPopup:_inPop]; [EDTheme styleLCDPopup:_bitsPop];
 }
 
 - (void)present {

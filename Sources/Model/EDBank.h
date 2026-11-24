@@ -86,6 +86,8 @@ typedef NS_ENUM(NSInteger, EDPresetKind) { EDPresetKindE4 = 0, EDPresetKindLegac
 - (nullable NSData *)serializeWithError:(NSError **)error;
 /// Call after the serialized data has been written somewhere: forgets the unsaved-changes state without reloading.
 - (void)markClean;
+/// Marks everything as changed (a bank restored from the unsaved-work session is still unsaved).
+- (void)markAllDirty;
 /// Adds an empty E4 preset (Preset Manage > New) with the lowest unused number, placed after the last preset in the file and listed in the
 /// table of contents. nil for 3X banks.
 - (nullable EDPreset *)addPresetNamed:(NSString *)name;

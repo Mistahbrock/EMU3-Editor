@@ -100,7 +100,7 @@ static void RememberFolder(NSSavePanel *p, NSString *key) {
 
 @implementation EDMainWindowController {
     NSView *_cmdBar, *_cmdRule; NSPopUpButton *_linkSampler, *_linkHost; NSButton *_linkServe; NSPopUpButton *_linkID, *_linkAccess; NSTextField *_linkInfo; EDDiskIcons *_mountsIcons; NSTextField *_mountsDetail;
-    NSLayoutConstraint *_statusPLead, *_statusPTrail, *_statusWidth, *_statusWide, *_statusLead, *_lcdLead, *_lcdTrail; NSString *_autoStatus; NSMutableArray<NSNumber *> *_tabHistory; BOOL _fromMounts; NSInteger _curTab; BOOL _tabBack; NSTimer *_statusTimer; NSString *_statusSig; BOOL _statusBusy;
+    NSLayoutConstraint *_statusPLead, *_statusPTrail, *_statusWidth, *_statusWide, *_statusLead, *_lcdLead, *_lcdTrail; NSString *_autoStatus; NSString *_overloadWarned; NSMutableArray<NSNumber *> *_tabHistory; BOOL _fromMounts; NSInteger _curTab; BOOL _tabBack; NSTimer *_statusTimer; NSString *_statusSig; BOOL _statusBusy;
     // model
     EMU3Filesystem *_fs;
     EDNode *_rootNode;
@@ -128,11 +128,11 @@ static void RememberFolder(NSSavePanel *p, NSString *key) {
     EDSDSPanel *_sds;
     EDSMDIPanel *_smdi;
     EDPresetEditor *_presetEditor;
-    EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn, *_convertBtn; BOOL _autoBackedUp, _noConvertOffer;
+    EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn, *_convertBtn; BOOL _autoBackedUp, _noConvertOffer, _sessionActive;
     EDHomeList *_home;
     EDMemoryView *_memory; NSTextField *_ramRow; BOOL _liveMem, _remoteBusy; NSDate *_remoteAt;
     EDRemoteDisk *_remoteDisk; EDSMDIBoard *_remoteBoard; pid_t _remotePid; BOOL _remoteRestoreTarget, _openingRemote; NSString *_remotePort; NSArray<EDSMDIDevice *> *_scsiDrives; BOOL _scsiBusy;
-    NSTextField *_samplerStatus; EDDiskIcons *_diskHint; NSView *_mountsBox; id _eggMonitor;
+    NSTextField *_samplerStatus; EDDiskIcons *_diskHint; NSView *_mountsBox; id _eggMonitor, _escMonitor, _enterMonitor;
     NSScrollView *_diskScroll, *_outlineScroll; EDLCDSideTab *_diskSideTab; EDNode *_browseNode; BOOL _listView, _inBank, _bankList; NSArray<EDDiskItem *> *_diskItems; NSButton *_viewKey, *_loadKey, *_saveKey, *_infoKey;
 }
 
@@ -171,6 +171,24 @@ static void RememberFolder(NSSavePanel *p, NSString *key) {
                     done:^(BOOL pecked) { EDDiskIcons *i2 = ic; if (pecked && i2 && mi < (NSInteger)i2.items.count && i2.onOpen) i2.onOpen(i2.items[mi]); }]; return nil;
             }
             return e; }];
+        // Esc goes back to the previous page from anywhere in the window (also right after the bird has gone), except while typing or while the bird is out.
+        _escMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
+            EDMainWindowController *me = weak;
+            if (!me || e.window != me.window || e.keyCode != 53 || me.window.attachedSheet || [EDEmuEgg isRunning] || [EDTheme lcdPopupOpen]) return e;
+            if ([me.window.firstResponder isKindOfClass:[NSText class]]) [me.window makeFirstResponder:nil];   // leave a text field first, then go back in the same press
+            if (me->_tabPicker.selectedSegment == 3 && [me->_presetEditor handleExit]) return nil;   // Presets page: Exit goes up one level (zone → voice → preset → list) before it leaves the page
+            if (me->_tabPicker.selectedSegment == 1) [me browserGoUp]; else [me cancelOperation:nil];
+            return nil; }];
+        // Enter = Exit's partner, like the sampler's Enter key: it opens / goes into the selected row of the focused list (what a double-click does).
+        _enterMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *e) {
+            EDMainWindowController *me = weak;
+            if (!me || e.window != me.window || (e.keyCode != 36 && e.keyCode != 76) || me.window.attachedSheet || [EDEmuEgg isRunning] || [EDTheme lcdPopupOpen]) return e;
+            if (e.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption)) return e;
+            id fr = me.window.firstResponder; if ([fr isKindOfClass:[NSText class]]) return e;
+            if (me->_tabPicker.selectedSegment == 3 && [me->_presetEditor handleEnter]) return nil;   // Presets page: Enter goes one level in
+            if (![fr isKindOfClass:[NSTableView class]]) return e;   // buttons keep their own Return
+            NSTableView *tv = fr; if (tv.selectedRow < 0 || !tv.doubleAction) return e;
+            [NSApp sendAction:tv.doubleAction to:tv.target from:tv]; return nil; }];
         // Space = play / stop from anywhere in the window except while typing in a text field.
         _spaceMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown | NSEventMaskKeyUp handler:^NSEvent *(NSEvent *e) {
             EDMainWindowController *me = weak;
@@ -233,7 +251,7 @@ static NSTextField *toolNote(NSString *s) {
     t.drawsBackground = YES; t.backgroundColor = [EDTheme.lcdInk colorWithAlphaComponent:0.14]; return t;
 }
 - (NSButton *)button:(NSString *)title action:(SEL)sel {
-    NSButton *b = [NSButton buttonWithTitle:title target:self action:sel]; b.controlSize = NSControlSizeRegular; b.bezelStyle = NSBezelStyleRounded;
+    NSButton *b = [NSButton buttonWithTitle:title target:self action:sel]; b.controlSize = NSControlSizeRegular; b.bezelStyle = NSBezelStyleRegularSquare;
     NSString *tip = [self toolTips][NSStringFromSelector(sel)]; if (tip && !b.toolTip) b.toolTip = tip;
     return b;
 }
@@ -246,6 +264,7 @@ static NSTextField *toolNote(NSString *s) {
         @"openBankFile:": @"Open a bank file (.E4B, .EBK, a 3X/ESI-32 bank…) in the editor.",
         @"saveBank:": @"Save the open bank. If it came from the sampler's disk, it is written back there.",
         @"saveBankAs:": @"Save the open bank as a new file.",
+        @"fitPresets:": @"See how much preset memory each preset takes, and remove duplicates or the biggest ones until the bank fits.",
         @"sendToSamplerDisk:": @"Copy this to the disk the sampler is reading, so it shows up in the sampler's Disk screen.",
         @"togglePlay:": @"Play or stop the selected sample (Space).",
         @"normalize:": @"Raise the whole sample so its loudest peak reaches full level.",
@@ -254,6 +273,13 @@ static NSTextField *toolNote(NSString *s) {
         @"fadeOut:": @"Fade the selection (or the whole sample) out to silence.",
         @"removeDC:": @"Remove a constant offset so the waveform is centred on zero.",
         @"cropToLoop:": @"Cut the sample down to its loop.",
+        @"gainChange:": @"Make the whole sample louder or quieter by a number of dB.",
+        @"digitalTuning:": @"Shift the pitch by cents (the sample gets shorter or longer).",
+        @"sampleRateConvert:": @"Resample to another sample rate; the pitch stays the same.",
+        @"bitConvert:": @"Reduce the resolution to fewer bits, with dither.",
+        @"swapChannels:": @"Swap the left and right channels (stereo samples).",
+        @"stereoToMono:": @"Mix the two channels down to one.",
+        @"monoToStereo:": @"Copy the channel into a second one to make a stereo sample.",
         @"crossfadeLoop:": @"Blend the loop's end into its start to remove the click.",
         @"exportWAV:": @"Save the selected sample as a WAV file.",
         @"importWAV:": @"Replace the selected sample with a WAV file.",
@@ -429,6 +455,7 @@ static NSTextField *toolNote(NSString *s) {
        
         [self wideButton:@"Open Bank File…" action:@selector(openBankFile:)],
         [self wideButton:@"Save Bank" action:@selector(saveBank:)], [self wideButton:@"Save Bank As…" action:@selector(saveBankAs:)],
+        [self wideButton:@"Fit Presets to Memory…" action:@selector(fitPresets:)],
         [self wideButton:@"Send Sample to Sampler Disk…" action:@selector(sendToSamplerDisk:)]]];     // converting 3X banks: right-click a bank or preset
     NSView *masterView = [NSView new];
     for (NSView *v in @[leftCol, gOpen, gBank]) { v.translatesAutoresizingMaskIntoConstraints = NO; [masterView addSubview:v]; [v.topAnchor constraintEqualToAnchor:masterView.topAnchor constant:-10].active = YES; }
@@ -440,7 +467,7 @@ static NSTextField *toolNote(NSString *s) {
 
     // Master tab = overview | MIDI | Setup (the sampler's Master menus), switched by a small picker on top
     NSView *masterRoot = [NSView new];
-    NSSegmentedControl *mp = [NSSegmentedControl segmentedControlWithLabels:@[@"Utilities", @"Bank", @"Setup", @"FX", @"MIDI"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(masterPicked:)];
+    NSSegmentedControl *mp = [NSSegmentedControl segmentedControlWithLabels:@[@"Utilities", @"Bank", @"Setup", @"FX", @"MIDI"] trackingMode:NSSegmentSwitchTrackingSelectOne target:self action:@selector(masterPicked:)]; mp.segmentStyle = NSSegmentStyleSmallSquare;
     mp.selectedSegment = 0; _masterPicker = mp;
     [self applyFXBoardSetting];
     _midiEditor = [[EDMIDIEditor alloc] initWithFrame:NSMakeRect(0, 0, 800, 500)];
@@ -482,8 +509,9 @@ static NSTextField *toolNote(NSString *s) {
         toolNote(@"Bus IDs: the sampler is normally ID 6 and the board is the host (initiator) at ID 7, so the served disk takes one of the others (0–5). Change them here if your setup differs; rescan on the sampler afterwards."),
         busRow, idRow, accRow, _linkInfo, _linkServe = [self wideButton:@"Stop Serving" action:@selector(toggleServing:)], [self wideButton:@"Image Folder…" action:@selector(chooseImageFolder:)]]];
     NSStackView *gSamplerTools = [self group:@"Sampler" views:@[
-        toolNote(@"Find the sampler on the SCSI bus, send samples by MIDI, or see the disk it uses. SMDI transfers are on the Samples page."),
+        toolNote(@"Find the sampler on the SCSI bus, send samples over SCSI (SMDI) or by MIDI, or see the disk it uses."),
         [self wideButton:@"Find Sampler (SCSI scan)…" action:@selector(findSampler:)],
+        [self wideButton:@"SMDI Transfer (SCSI)…" action:@selector(smdiTransfer:)],
         [self wideButton:@"MIDI Sample Dump…" action:@selector(sdsTransfer:)],
         [self wideButton:@"Show Sampler Disk" action:@selector(showSamplerDisk:)], [self wideButton:@"Mount SCSI Drives…" action:@selector(mountSCSIDrives:)],
         [self wideButton:@"Open Disk Image…" action:@selector(openDiskImage:)]]];
@@ -519,7 +547,7 @@ static NSTextField *toolNote(NSString *s) {
     for (NSArray *d in defs) { NSTabViewItem *t = [[NSTabViewItem alloc] initWithIdentifier:d[0]]; t.label = d[1]; t.view = d[2]; [_tabs addTabViewItem:t]; }
     _tabPicker = [NSSegmentedControl segmentedControlWithLabels:@[@"Master", @"Disk", @"Samples", @"Presets", @"Tools"] trackingMode:NSSegmentSwitchTrackingSelectOne
         target:self action:@selector(tabPicked:)];
-    _tabPicker.font = [NSFont systemFontOfSize:14 weight:NSFontWeightSemibold]; _tabPicker.selectedSegment = 0;
+    _tabPicker.segmentStyle = NSSegmentStyleSmallSquare; _tabPicker.font = [NSFont systemFontOfSize:14 weight:NSFontWeightSemibold]; _tabPicker.selectedSegment = 0;
     for (NSInteger i = 0; i < 5; i++) [_tabPicker setWidth:80 forSegment:i];
 
     // header: wordmark, tab picker, LCD readout, red rule
@@ -544,12 +572,14 @@ static NSTextField *toolNote(NSString *s) {
         [self barGroup:@"Audition" keys:@[@[@"▶ Play", @"togglePlay:", @1]]],
         [self barGroup:@"Sample edit" keys:@[@[@"Normalize", @"normalize:", @1], @[@"Reverse", @"reverseSample:", @1], @[@"Fade In", @"fadeIn:", @1], @[@"Fade Out", @"fadeOut:", @1],
             @[@"Remove DC", @"removeDC:", @1], @[@"Crop Loop", @"cropToLoop:", @1], @[@"X-Fade Loop", @"crossfadeLoop:", @1]]],
+        [self barGroup:@"Sample tools" keys:@[@[@"Gain…", @"gainChange:", @1], @[@"Tune…", @"digitalTuning:", @1], @[@"Rate…", @"sampleRateConvert:", @1], @[@"Bits…", @"bitConvert:", @1],
+            @[@"Swap L/R", @"swapChannels:", @1], @[@"To Mono", @"stereoToMono:", @1], @[@"To Stereo", @"monoToStereo:", @1]]],
         [self barGroup:@"Convert" keys:@[@[@"Export WAV", @"exportWAV:", @1], @[@"Replace", @"importWAV:", @1]]],
         [self barGroup:@"Transfer" keys:@[@[@"SMDI", @"smdiTransfer:", @0], @[@"MIDI Dump", @"sdsTransfer:", @1], @[@"To Disk", @"sendToSamplerDisk:", @1]]],
         [self barGroup:@"Zoom" keys:@[@[@"−", @"zoomOut:", @0], @[@"+", @"zoomIn:", @0], @[@"Fit", @"zoomFit:", @0], @[@"Loop", @"zoomLoop:", @0]]]]];
     _cmdBar = bar;
-    bar.spacing = 24; bar.alignment = NSLayoutAttributeTop;
-    { NSArray *gs = bar.arrangedSubviews; for (NSView *v in gs) [bar removeArrangedSubview:v]; [bar setViews:gs inGravity:NSStackViewGravityCenter]; } bar.edgeInsets = NSEdgeInsetsMake(12, 36, 0, 36);
+    bar.spacing = 14; bar.alignment = NSLayoutAttributeTop;
+    { NSArray *gs = bar.arrangedSubviews; for (NSView *v in gs) [bar removeArrangedSubview:v]; [bar setViews:gs inGravity:NSStackViewGravityCenter]; } bar.edgeInsets = NSEdgeInsetsMake(12, 16, 0, 16);
     bar.wantsLayer = YES; bar.layer.backgroundColor = NSColor.clearColor.CGColor;
     [bar.heightAnchor constraintEqualToConstant:96].active = YES;
     NSView *rule2 = [NSView new]; rule2.wantsLayer = YES; rule2.layer.backgroundColor = NSColor.clearColor.CGColor;
@@ -607,7 +637,7 @@ static NSTextField *toolNote(NSString *s) {
         if ([k[2] intValue] == 1) [_sampleBtns addObject:b]; else if ([k[2] intValue] == 2) [_bankBtns addObject:b];
         [btns addObject:b];
     }
-    NSStackView *row = [NSStackView stackViewWithViews:btns]; row.spacing = 8;
+    NSStackView *row = [NSStackView stackViewWithViews:btns]; row.spacing = 6;
     NSTextField *cap = [NSTextField labelWithString:title.uppercaseString];
     cap.font = [NSFont systemFontOfSize:12 weight:NSFontWeightBold]; cap.textColor = EDTheme.labelWhite;
     NSView *line = [NSView new]; line.wantsLayer = YES; line.layer.backgroundColor = EDTheme.accent.CGColor;
@@ -655,7 +685,7 @@ static NSTextField *toolNote(NSString *s) {
     while (_tabHistory.count) {
         NSInteger t = _tabHistory.lastObject.integerValue; [_tabHistory removeLastObject];
         if (t == _curTab) continue;
-        _tabBack = YES; [_tabs selectTabViewItemAtIndex:t]; _tabBack = NO; _tabPicker.selectedSegment = t;
+        _tabBack = YES; _tabPicker.selectedSegment = t; [self tabPicked:nil]; _tabBack = NO;   // same path as clicking the tab: toolbar, status line and page refresh follow
         if (t == 1) [self focusBrowser];
         return;
     }
@@ -852,6 +882,7 @@ static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults o
     _inBank = NO; _browseNode = nil; [self refreshBrowser];   // the DISK page: the list of disks, with the disk icons
     _fromMounts = YES; [self selectTabNamed:@"disk"]; _tabPicker.selectedSegment = 1; [self focusBrowser]; }
 - (void)mountsSelectionChanged { EDDiskItem *it = _mountsIcons.selectedItem; _mountsDetail.stringValue = it ? (NSString *)it.node : @" "; }
+- (IBAction)fitPresets:(id)s { if (!_bank) { NSBeep(); return; } [_presetEditor presentFitToMemoryLimitK:_memory.presetTotalK]; }
 - (IBAction)showToolsTab:(id)s { [self selectTabNamed:@"tools"]; }
 - (IBAction)writeBlueSCSIIni:(id)s { __weak EDMainWindowController *weak = self; [EDBlueSCSIIni runWithImage:_fs.imageURL status:^(NSString *t) { EDMainWindowController *me = weak; if (me) me->_status.stringValue = t; }]; }
 - (NSString *)samplerSignature {
@@ -1139,12 +1170,17 @@ static NSString *SizeText(unsigned long long b) { return [NSByteCountFormatter s
     else if (_bank) l2 = [NSString stringWithFormat:@"%lu samples · %lu presets", (unsigned long)_bank.samples.count, (unsigned long)_bank.presets.count];
     else l2 = @"Open a disk image or bank file to begin";
     _lcd.line1 = l1; _lcd.line2 = l2; [self refreshLCDVisibility];
-    for (NSButton *b in _sampleBtns) b.enabled = _sample && !_sample.locked;
+    for (NSButton *b in _sampleBtns) {
+        b.enabled = _sample && !_sample.locked;
+        if (b.enabled && (b.action == @selector(swapChannels:) || b.action == @selector(stereoToMono:))) b.enabled = _sample.isStereo;
+        if (b.enabled && b.action == @selector(monoToStereo:)) b.enabled = !_sample.isStereo;
+    }
     for (NSButton *b in _bankBtns) b.enabled = _bank != nil;
     NSMutableString *m = [NSMutableString string];
     if (disk) [m appendFormat:@"Disk: %@\n", disk];
     if (_bank) [m appendFormat:@"Bank: %@\n%lu samples, %lu presets\n%@", _bankTitle, (unsigned long)_bank.samples.count, (unsigned long)_bank.presets.count, _bank.dirty ? @"Unsaved changes" : @"No unsaved changes"];
     else [m appendString:@"No bank open."];
+    { NSString *ov = [self overloadText]; if (ov) [m appendFormat:@"\n⚠ %@", ov]; }
     _masterSummary.stringValue = m;
     [self applyBrowserVisibility];
     double pBytes = 0, sBytes = 0;
@@ -1455,20 +1491,22 @@ static NSString *const kMinimalBlueSCSIIni =
 }
 
 - (BOOL)openImageAtURL:(NSURL *)url {
-    if (![self confirmDiscard]) return NO;
+    // A bank with unsaved work that does not live on the disk being replaced (new, imported or opened from a file) stays open while you browse disks.
+    BOOL keepBank = _bank.dirty && !_currentNode;
+    if (!keepBank && ![self confirmDiscard]) return NO;
     if (!_openingRemote) [self closeRemoteDisk];
     NSError *e = nil;
     EMU3Filesystem *fs = [[EMU3Filesystem alloc] initWithURL:url error:&e];
     if (!fs) { [self alertError:e title:@"Could not open the disk image"]; return NO; }
     [_fs closeImage];
     { NSMutableArray *r = [([NSUserDefaults.standardUserDefaults arrayForKey:@"RecentDisks"] ?: @[]) mutableCopy]; [r removeObject:url.path]; [r insertObject:url.path atIndex:0]; while (r.count > 8) [r removeLastObject]; [NSUserDefaults.standardUserDefaults setObject:r forKey:@"RecentDisks"]; }
-    _fs = fs; _standaloneURL = nil;
+    _fs = fs; if (!keepBank) _standaloneURL = nil;
     _rootNode = [self nodeForDirectory:fs.rootDirectory title:url.lastPathComponent path:@[]];
-    [self closeBank];
+    if (!keepBank) [self closeBank];
     [_outline reloadData]; [_outline expandItem:_rootNode]; _browseNode = _rootNode; [self refreshBrowser];
     _status.stringValue = [NSString stringWithFormat:@"%@ — %@ free of %@", url.lastPathComponent,
         EMU3FormatBytes((unsigned long long)fs.freeBlocks * 512), EMU3FormatBytes((unsigned long long)fs.totalBlocks * 512)];
-    self.window.title = [@"EMU3 Editor — " stringByAppendingString:url.lastPathComponent];
+    if (keepBank) [self updateTitle]; else self.window.title = [@"EMU3 Editor — " stringByAppendingString:url.lastPathComponent];
     [self updateLCD]; [self selectTabNamed:@"disk"];
     return YES;
 }
@@ -1496,6 +1534,26 @@ static NSString *const kMinimalBlueSCSIIni =
     return n;
 }
 
+/// nil when the open bank fits the sampler; otherwise what is too big. Uses the memory the sampler reported over MIDI when it is connected, else the Preset Memory setting and installed RAM.
+- (NSString *)overloadText {
+    if (!_bank) return nil;
+    double pK = 0, sMB = 0; for (EDPreset *p in _bank.presets) pK += p.raw.length / 1024.0; for (EDSample *sm in _bank.samples) sMB += (sm.left.length + sm.right.length) / 1048576.0;
+    NSMutableArray *bits = [NSMutableArray array];
+    if (_memory.presetTotalK > 0 && pK > _memory.presetTotalK) [bits addObject:[NSString stringWithFormat:@"presets %.0f K of %.0f K", pK, _memory.presetTotalK]];
+    if (_memory.sampleTotalMB > 0 && sMB > _memory.sampleTotalMB) [bits addObject:[NSString stringWithFormat:@"samples %.1f MB of %.0f MB", sMB, _memory.sampleTotalMB]];
+    if (!bits.count) return nil;
+    return [NSString stringWithFormat:@"Too big for %@: %@", _liveMem ? @"the connected sampler" : @"this sampler setup", [bits componentsJoinedByString:@", "]];
+}
+- (void)warnIfOverloaded {
+    NSString *ov = [self overloadText]; if (!ov || [_overloadWarned isEqual:_bankTitle]) return; _overloadWarned = _bankTitle;
+    BOOL presets = _memory.presetTotalK > 0 && ({ double k = 0; for (EDPreset *p in _bank.presets) k += p.raw.length / 1024.0; k > _memory.presetTotalK; });
+    __weak EDMainWindowController *weak = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        EDMainWindowController *me = weak; if (!me) return;
+        if (presets) { if ([EDTheme confirm:[ov stringByAppendingString:@".\nThe sampler cannot hold all of it at once."] okTitle:@"Fit Presets to Memory…" cancelTitle:@"Later"]) [me fitPresets:nil]; }
+        else [EDTheme notice:[ov stringByAppendingString:@".\nThe sampler cannot hold all of it at once."]];
+    });
+}
 - (BOOL)loadBankData:(NSData *)data title:(NSString *)title {
     NSError *e = nil;
     EDBank *bank = [EDBank bankWithData:data error:&e];
@@ -1517,6 +1575,7 @@ static NSString *const kMinimalBlueSCSIIni =
     self.window.documentEdited = NO;
     [self updateTitle];
     [self.window makeFirstResponder:_sampleTable];
+    [self warnIfOverloaded];
     _status.stringValue = [NSString stringWithFormat:@"%@ [%@]: %lu samples, %lu presets", title,
         [bank.formType isEqualToString:@"3X"] ? @"Emulator 3X / ESI-32" : @"EOS E4B", (unsigned long)bank.samples.count, (unsigned long)bank.presets.count];
     [self modelChanged];
@@ -1544,7 +1603,7 @@ static NSString *const kMinimalBlueSCSIIni =
     NSString *base = _fs ? _fs.imageURL.lastPathComponent : @"";
     NSString *t = _bank ? (base.length ? [NSString stringWithFormat:@"%@ ▸ %@", base, _bankTitle] : _bankTitle) : (base.length ? base : @"");
     self.window.title = t.length ? [@"EMU3 Editor — " stringByAppendingString:t] : @"EMU3 Editor";
-    self.window.documentEdited = _bank.dirty; [self scheduleAutoSave];
+    self.window.documentEdited = _bank.dirty; [self scheduleAutoSave]; [self sessionChanged];
     [self modelChanged];
 }
 
@@ -1749,7 +1808,7 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     NSInteger r = _currentNode ? [_outline rowForItem:_currentNode] : -1;
     if (r >= 0) [_outline selectRowIndexes:[NSIndexSet indexSetWithIndex:r] byExtendingSelection:NO]; else [_outline deselectAll:nil];
 }
-- (void)outlineDoubleClick:(id)s { EDNode *i = [_outline itemAtRow:_outline.clickedRow]; if (i.file && i == _currentNode) { [self selectTabNamed:@"samples"]; return; } if (i && !i.file) { if ([_outline isItemExpanded:i]) [_outline collapseItem:i]; else [_outline expandItem:i]; } }
+- (void)outlineDoubleClick:(id)s { EDNode *i = [_outline itemAtRow:_outline.clickedRow >= 0 ? _outline.clickedRow : _outline.selectedRow]; if (i.file && i == _currentNode) { [self selectTabNamed:@"samples"]; return; } if (i && !i.file) { if ([_outline isItemExpanded:i]) [_outline collapseItem:i]; else [_outline expandItem:i]; } }
 
 // MARK: tables
 
@@ -1876,6 +1935,34 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
 - (IBAction)cropToLoop:(id)s { [self applyOp:@"Crop to Loop" block:^(EDSample *x) { [x cropToLoop]; }]; }
 - (IBAction)crossfadeLoop:(id)s {
     [self applyOp:@"Crossfade Loop" block:^(EDSample *x) { [x crossfadeLoopFrames:MIN((x.loopEnd - x.loopStart) / 4, (NSUInteger)4410)]; }];
+}
+- (double)askNumber:(NSString *)title message:(NSString *)msg initial:(NSString *)init {
+    NSString *t = [self askText:title message:msg initial:init]; if (!t) return NAN;
+    return [t stringByReplacingOccurrencesOfString:@"," withString:@"."].doubleValue;
+}
+- (IBAction)gainChange:(id)s {
+    double db = [self askNumber:@"Gain Change" message:@"Change the level of the whole sample by this many dB (negative = quieter). Peaks are clipped." initial:@"-3"];
+    if (isnan(db) || db == 0) return;
+    [self applyOp:@"Gain Change" block:^(EDSample *x) { [x applyGainDB:MAX(-60, MIN(24, db))]; }];
+}
+- (IBAction)swapChannels:(id)s { [self applyOp:@"Swap Left & Right" block:^(EDSample *x) { [x swapChannels]; }]; }
+- (IBAction)stereoToMono:(id)s { [self applyOp:@"Stereo to Mono" block:^(EDSample *x) { [x convertToMono]; }]; }
+- (IBAction)monoToStereo:(id)s { [self applyOp:@"Mono to Stereo" block:^(EDSample *x) { [x convertToStereo]; }]; }
+- (IBAction)sampleRateConvert:(id)s {
+    if (!_sample) return;
+    double hz = [self askNumber:@"Sample Rate Convert" message:[NSString stringWithFormat:@"Resample from %u Hz to this rate (4000 – 96000 Hz). The length and loop points follow, the pitch stays the same.", _sample.sampleRate] initial:[NSString stringWithFormat:@"%u", _sample.sampleRate]];
+    if (isnan(hz) || hz < 4000 || hz > 96000 || (uint32_t)hz == _sample.sampleRate) return;
+    [self applyOp:@"Sample Rate Convert" block:^(EDSample *x) { [x convertToSampleRate:(uint32_t)hz]; }];
+}
+- (IBAction)digitalTuning:(id)s {
+    double c = [self askNumber:@"Digital Tuning" message:@"Shift the pitch by this many cents (100 = one semitone, ±1200). The sample gets shorter when raised and longer when lowered." initial:@"0"];
+    if (isnan(c) || c == 0) return;
+    [self applyOp:@"Digital Tuning" block:^(EDSample *x) { [x tuneByCents:MAX(-1200, MIN(1200, c))]; }];
+}
+- (IBAction)bitConvert:(id)s {
+    double b = [self askNumber:@"Bit Converter" message:@"Reduce the resolution to this many bits (1 – 15), with a little dither. The sample stays 16-bit on the sampler." initial:@"12"];
+    if (isnan(b) || b < 1 || b > 15) return;
+    [self applyOp:@"Bit Convert" block:^(EDSample *x) { [x reduceToBits:(int)b dither:YES]; }];
 }
 - (IBAction)zoomIn:(id)s { [_wave zoomBy:2]; }
 - (IBAction)zoomOut:(id)s { [_wave zoomBy:0.5]; }
@@ -2079,14 +2166,86 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
 
 // MARK: housekeeping
 
+/// The unsaved-work buffer: ~/Library/Application Support/EMU3 Editor/Unsaved. Instead of asking, anything that would discard
+/// unsaved changes writes the bank here first (newest 25 are kept), so nothing is lost and no dialog interrupts.
+- (NSURL *)unsavedFolder {
+    return [[NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask].firstObject
+            URLByAppendingPathComponent:@"EMU3 Editor/Unsaved" isDirectory:YES];
+}
+- (BOOL)stashUnsaved {
+    NSData *d = [_bank serializeWithError:nil]; if (!d) return NO;
+    NSURL *dir = [self unsavedFolder]; NSFileManager *fm = NSFileManager.defaultManager;
+    [fm createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyyMMdd-HHmmss";
+    NSString *safe = [_bankTitle stringByReplacingOccurrencesOfString:@"/" withString:@"-"];
+    if (![d writeToURL:[dir URLByAppendingPathComponent:[NSString stringWithFormat:@"%@ %@.e4b", safe, [f stringFromDate:NSDate.date]]] atomically:YES]) return NO;
+    NSArray<NSURL *> *all = [fm contentsOfDirectoryAtURL:dir includingPropertiesForKeys:@[NSURLContentModificationDateKey] options:NSDirectoryEnumerationSkipsHiddenFiles error:nil];
+    all = [all sortedArrayUsingComparator:^NSComparisonResult(NSURL *a, NSURL *b) {
+        NSDate *da = nil, *db = nil; [a getResourceValue:&da forKey:NSURLContentModificationDateKey error:nil]; [b getResourceValue:&db forKey:NSURLContentModificationDateKey error:nil];
+        return [db compare:da ?: NSDate.distantPast]; }];
+    for (NSUInteger i = 25; i < all.count; i++) [fm removeItemAtURL:all[i] error:nil];
+    _status.stringValue = [NSString stringWithFormat:@"Unsaved changes in “%@” kept in the buffer (File ▸ Recover Unsaved Bank…)", _bankTitle];
+    return YES;
+}
+- (IBAction)recoverUnsaved:(id)sender {
+    if (![self confirmDiscard]) return;
+    NSOpenPanel *p = [NSOpenPanel openPanel]; p.message = @"Unsaved banks kept by the editor"; p.directoryURL = [self unsavedFolder];
+    if ([p runModal] != NSModalResponseOK) return;
+    if ([self openBankFileAtURL:p.URL]) { _standaloneURL = nil; _currentNode = nil; _status.stringValue = @"Recovered bank. Use Save Bank As to keep it."; }
+}
 - (BOOL)confirmDiscard {
     if (!_bank.dirty) return YES;
-    NSInteger r = [EDTheme choose:[NSString stringWithFormat:@"“%@” has unsaved changes. Save them before continuing?", _bankTitle] buttons:@[@"Cancel", @"Discard", @"Save"]];
+    if ([self stashUnsaved]) { [self clearSession]; return YES; }   // buffered: no question needed
+    NSInteger r = [EDTheme choose:[NSString stringWithFormat:@"“%@” has unsaved changes and the buffer could not be written. Save them before continuing?", _bankTitle] buttons:@[@"Cancel", @"Discard", @"Save"]];
     if (r == 2) { [self saveBank:nil]; return !_bank.dirty; }
     return r == 1;
 }
-- (BOOL)confirmQuit { return [self confirmDiscard]; }
-- (BOOL)windowShouldClose:(NSWindow *)w { return [self confirmDiscard]; }
+/// Quitting or closing keeps the work in the session, which is restored silently on the next launch.
+- (BOOL)confirmQuit { if (_bank.dirty && ![self writeSession]) return [self confirmDiscard]; return YES; }
+- (BOOL)windowShouldClose:(NSWindow *)w { return [self confirmQuit]; }
+
+// MARK: unsaved-work session
+// While a bank has unsaved changes a copy is kept up to date in Unsaved/Session (2 s after each edit, and on quit). The next launch
+// restores it as it was, still unsaved, so nothing is lost and nothing asks.
+- (NSURL *)sessionDataURL { return [[self unsavedFolder] URLByAppendingPathComponent:@"Session/Session.e4b"]; }
+- (NSURL *)sessionInfoURL { return [[self unsavedFolder] URLByAppendingPathComponent:@"Session/Session.plist"]; }
+- (void)sessionChanged {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(writeSession) object:nil];
+    if (_bank.dirty) [self performSelector:@selector(writeSession) withObject:nil afterDelay:2];
+    else if (_sessionActive) [self clearSession];
+}
+- (BOOL)writeSession {
+    if (!_bank.dirty) return YES;
+    NSData *d = [_bank serializeWithError:nil]; if (!d) return NO;
+    NSURL *dir = [[self sessionDataURL] URLByDeletingLastPathComponent];
+    [NSFileManager.defaultManager createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSDictionary *info = @{@"title": _bankTitle ?: @"Untitled", @"path": _standaloneURL.path ?: @""};
+    if (![d writeToURL:[self sessionDataURL] atomically:YES] || ![info writeToURL:[self sessionInfoURL] atomically:YES]) return NO;
+    _sessionActive = YES; return YES;
+}
+- (void)clearSession {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(writeSession) object:nil];
+    [NSFileManager.defaultManager removeItemAtURL:[[self sessionDataURL] URLByDeletingLastPathComponent] error:nil];
+    _sessionActive = NO;
+}
+/// Called once at launch. A bank passed on the command line or double-clicked wins; the old session is then kept in the buffer.
+- (void)restoreSession {
+    NSData *d = [NSData dataWithContentsOfURL:[self sessionDataURL]]; NSDictionary *info = [NSDictionary dictionaryWithContentsOfURL:[self sessionInfoURL]];
+    if (!d || !info) return;
+    if (_bank) {   // something else was opened at launch: park the session in the buffer
+        NSURL *dir = [self unsavedFolder]; NSDateFormatter *f = [NSDateFormatter new]; f.dateFormat = @"yyyyMMdd-HHmmss";
+        [d writeToURL:[dir URLByAppendingPathComponent:[NSString stringWithFormat:@"%@ %@.e4b", [info[@"title"] stringByReplacingOccurrencesOfString:@"/" withString:@"-"], [f stringFromDate:NSDate.date]]] atomically:YES];
+        [self clearSession]; return;
+    }
+    NSString *title = info[@"title"] ?: @"Untitled";
+    _noConvertOffer = YES; BOOL ok = [self loadBankData:d title:title]; _noConvertOffer = NO;
+    if (!ok) return;
+    NSString *path = info[@"path"]; _standaloneURL = (path.length && [NSFileManager.defaultManager fileExistsAtPath:path]) ? [NSURL fileURLWithPath:path] : nil;
+    _currentNode = nil; _inBank = YES; [self refreshBrowser];
+    [_bank markAllDirty]; [self updateTitle];
+    [self selectTabNamed:@"presets"]; _tabPicker.selectedSegment = 3;
+    _status.stringValue = [NSString stringWithFormat:@"Restored your unsaved work on “%@”. %@", title, _standaloneURL ? @"Save Bank writes it back to its file." : @"Use Save Bank As to keep it."];
+}
 - (void)alertError:(NSError *)e title:(NSString *)t {
     [EDTheme notice:[NSString stringWithFormat:@"%@. %@", t, e.localizedDescription ?: @"Unknown error"]];
 }
@@ -2101,8 +2260,10 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     if (a == @selector(sendPresetToSamplerDisk:) || a == @selector(exportPresetBank:)) return [self selectedPreset].kind == EDPresetKindE4 && [_bank.formType hasPrefix:@"E4B"];
     if (a == @selector(exportWAV:) || a == @selector(importWAV:) || a == @selector(sdsTransfer:) || a == @selector(smdiTransfer:) || a == @selector(sendToSamplerDisk:) || a == @selector(togglePlay:) || a == @selector(normalize:) ||
         a == @selector(reverseSample:) || a == @selector(fadeIn:) || a == @selector(fadeOut:) || a == @selector(removeDC:) ||
-        a == @selector(cropToLoop:) || a == @selector(crossfadeLoop:) || a == @selector(zoomIn:) || a == @selector(zoomOut:) ||
+        a == @selector(cropToLoop:) || a == @selector(crossfadeLoop:) || a == @selector(gainChange:) || a == @selector(sampleRateConvert:) || a == @selector(digitalTuning:) || a == @selector(bitConvert:) || a == @selector(zoomIn:) || a == @selector(zoomOut:) ||
         a == @selector(zoomFit:) || a == @selector(zoomLoop:)) return _sample != nil && !_sample.locked;
+    if (a == @selector(swapChannels:) || a == @selector(stereoToMono:)) return _sample != nil && !_sample.locked && _sample.isStereo;
+    if (a == @selector(monoToStereo:)) return _sample != nil && !_sample.locked && !_sample.isStereo;
     return YES;
 }
 @end

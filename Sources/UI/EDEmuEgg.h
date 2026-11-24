@@ -10,5 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// `done` is called when the bird has left the panel; `peckedMount` says whether it had been at the mount icon (the caller then opens it).
 /// `peck` is called with YES each frame the beak hits the mount icon and NO when it lets go (so the icon can animate).
 + (void)playOver:(NSView *)host avoiding:(NSArray<NSValue *> *)rects mount:(NSRect)mount leftLimit:(CGFloat)left peck:(nullable void (^)(BOOL hit))peck done:(nullable void (^)(BOOL peckedMount))done;
+/// YES while a bird is on screen (it handles Esc itself).
++ (BOOL)isRunning;
 @end
 NS_ASSUME_NONNULL_END

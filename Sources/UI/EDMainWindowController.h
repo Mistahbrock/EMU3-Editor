@@ -30,6 +30,9 @@
 - (IBAction)copyToSDCard:(id)sender;
 - (IBAction)browserRename:(id)sender;
 - (IBAction)openBankFile:(id)sender;
+- (IBAction)recoverUnsaved:(id)sender;
+- (void)restoreSession;
+- (BOOL)writeSession;
 - (IBAction)saveBank:(id)sender;
 - (IBAction)saveBankAs:(id)sender;
 - (IBAction)exportWAV:(id)sender;

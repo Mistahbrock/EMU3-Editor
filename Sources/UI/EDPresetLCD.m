@@ -142,6 +142,18 @@ static const CGFloat kSeg = 62, kMin = 8, kPad = 14;
 @end
 
 // Waveform preview of one LFO shape, drawn like the sampler's small LFO graph (one cycle, zero line, frame).
+// LFO rate byte 0…127 → Hz, panel-read on an E4XT (lentferj/eosed, e4xt_lfo_rate_table.json); the E6400 should match but is unchecked.
+static const float kLFOHz[128] = {
+    0.08, 0.11, 0.15, 0.17, 0.21, 0.25, 0.28, 0.32, 0.36, 0.38, 0.42, 0.48, 0.50, 0.53, 0.56, 0.65,
+    0.69, 0.72, 0.76, 0.80, 0.84, 0.92, 0.95, 0.99, 1.03, 1.11, 1.13, 1.22, 1.26, 1.30, 1.37, 1.41,
+    1.49, 1.56, 1.60, 1.68, 1.72, 1.79, 1.87, 1.95, 1.98, 2.06, 2.14, 2.21, 2.29, 2.37, 2.44, 2.52,
+    2.59, 2.67, 2.75, 2.82, 2.98, 3.05, 3.13, 3.20, 3.28, 3.43, 3.51, 3.59, 3.74, 3.81, 3.89, 4.04,
+    4.12, 4.26, 4.34, 4.50, 4.58, 4.73, 4.88, 4.96, 5.11, 5.26, 5.34, 5.49, 5.65, 5.80, 5.95, 6.10,
+    6.26, 6.41, 6.56, 6.71, 6.87, 7.02, 7.17, 7.32, 7.63, 7.78, 7.93, 8.09, 8.39, 8.53, 8.69, 8.85,
+    9.16, 9.31, 9.61, 9.77, 10.07, 10.22, 10.53, 10.68, 10.99, 11.14, 11.44, 11.75, 12.05, 12.21, 12.51, 12.82,
+    13.12, 13.43, 13.73, 14.04, 14.34, 14.65, 14.95, 15.26, 15.56, 15.87, 16.17, 16.78, 17.09, 17.39, 17.70, 18.01,
+};
+
 @interface EDLFOGraph : NSView
 @property (nonatomic) NSInteger shape; @property (nonatomic, copy) NSString *caption;
 @end
@@ -306,7 +318,8 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
     if ([pg[@"title"] isEqual:@"LFOs and Lag"])
         for (int i = 0; i < 2 && i < (int)rows.count; i++) {
             NSArray<EDParam *> *c = rows[i][1];
-            _lfoGraph[i].shape = c.count > 1 && self.getValue ? self.getValue(c[1], [self vIndex], [self rIndex]) : 0; _lfoGraph[i].hidden = NO; _lfoGraph[i].needsDisplay = YES;
+            _lfoGraph[i].shape = c.count > 1 && self.getValue ? self.getValue(c[1], [self vIndex], [self rIndex]) : 0;
+            if (self.getValue) { NSInteger rb = MAX(0, MIN(127, self.getValue(c[0], [self vIndex], [self rIndex]))); _lfoGraph[i].caption = [NSString stringWithFormat:@"LFO %d  %.2f Hz", i + 1, kLFOHz[rb]]; } _lfoGraph[i].hidden = NO; _lfoGraph[i].needsDisplay = YES;
         }
     NSInteger perCol = heads ? 8 : 7, ncol = ((NSInteger)rows.count + perCol - 1) / perCol;
     for (NSInteger c = 0; c < ncol; c++) {
@@ -354,7 +367,7 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
     }
     EDPresetLCDField *f = [EDPresetLCDField textFieldWithString:p.isNote && !p.isSample ? [EDParam noteName:v] : [NSString stringWithFormat:@"%ld", (long)v]];
     f.font = [EDTheme lcdFont:wide ? 16 : 13]; f.textColor = EDTheme.lcdInk; f.bordered = NO; f.drawsBackground = NO; f.focusRingType = NSFocusRingTypeNone;
-    f.editable = !p.readOnly; f.alignment = NSTextAlignmentCenter; f.wantsLayer = YES; f.layer.borderWidth = p.readOnly ? 0 : 1.5; f.layer.borderColor = EDTheme.lcdInk.CGColor; f.layer.cornerRadius = 3;
+    f.editable = !p.readOnly; f.alignment = NSTextAlignmentCenter; f.wantsLayer = YES; f.layer.borderWidth = p.readOnly ? 0 : 1.5; f.layer.borderColor = EDTheme.lcdInk.CGColor; f.layer.cornerRadius = 0;
     f.target = self; f.action = @selector(fieldCommitted:); f.paramTag = (NSInteger)_fieldParams.count; [_fieldParams addObject:p];
     [f.widthAnchor constraintEqualToConstant:w].active = YES;
     return f;

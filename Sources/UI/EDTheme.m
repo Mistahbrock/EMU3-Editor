@@ -35,6 +35,92 @@
 - (void)setHighlighted:(BOOL)h { [super setHighlighted:NO]; }
 @end
 
+// One row of a menu-bar menu: dark background, light text, shortcut on the right (the system's glass menus are replaced by this).
+static BOOL EDIsSep(NSMenuItem *i) { return i.isSeparatorItem || [i.representedObject isEqual:@"edsep"]; }
+@interface EDDarkMenuItemView : NSView
+@property (nonatomic, weak) NSMenuItem *item;
+@property (nonatomic) BOOL lit;
+@end
+@interface EDDarkMenuDelegate : NSObject <NSMenuDelegate>
+@end
+@implementation EDDarkMenuItemView
+static NSString *EDShortcutText(NSMenuItem *i) {
+    if (i.action == @selector(toggleFullScreen:)) return @"⌃⌘F";
+    NSString *k = i.keyEquivalent; if (!k.length) return @"";
+    NSEventModifierFlags m = i.keyEquivalentModifierMask;
+    if ([k isEqualToString:k.uppercaseString] && ![k isEqualToString:k.lowercaseString]) m |= NSEventModifierFlagShift;
+    NSMutableString *o = [NSMutableString string];
+    if (m & NSEventModifierFlagControl) [o appendString:@"⌃"]; if (m & NSEventModifierFlagOption) [o appendString:@"⌥"]; if (m & NSEventModifierFlagShift) [o appendString:@"⇧"]; if (m & NSEventModifierFlagCommand) [o appendString:@"⌘"];
+    [o appendString:[k isEqualToString:@" "] ? @"Space" : k.uppercaseString]; return o;
+}
+- (instancetype)initWithItem:(NSMenuItem *)i width:(CGFloat)w {
+    if (!(self = [super initWithFrame:NSMakeRect(0, 0, w, 24)])) return nil;
+    _item = i; self.autoresizingMask = NSViewWidthSizable; return self;
+}
+- (void)updateTrackingAreas {
+    [super updateTrackingAreas]; for (NSTrackingArea *t in self.trackingAreas.copy) [self removeTrackingArea:t];
+    [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect owner:self userInfo:nil]];
+}
+- (void)mouseEntered:(NSEvent *)e { for (NSMenuItem *o in _item.menu.itemArray) if ([o.view isKindOfClass:EDDarkMenuItemView.class]) { ((EDDarkMenuItemView *)o.view).lit = o == _item; } }
+- (void)mouseExited:(NSEvent *)e { self.lit = NO; }
+- (void)setLit:(BOOL)l { if (l != _lit) { _lit = l; [self setNeedsDisplay:YES]; } }
+- (void)drawRect:(NSRect)r {
+    BOOL on = _item.enabled;
+    [(on && _lit ? [NSColor colorWithSRGBRed:0.04 green:0.40 blue:0.85 alpha:1] : EDTheme.bodyDark) setFill]; NSRectFill(self.bounds);
+    NSColor *ink = on ? [NSColor colorWithWhite:0.94 alpha:1] : [NSColor colorWithWhite:0.5 alpha:1];
+    NSFont *f = [NSFont systemFontOfSize:13];
+    NSDictionary *a = @{NSFontAttributeName: f, NSForegroundColorAttributeName: ink};
+    NSSize sz = [_item.title sizeWithAttributes:a]; CGFloat y = NSMidY(self.bounds) - sz.height / 2;
+    [_item.title drawAtPoint:NSMakePoint(16, y) withAttributes:a];
+    if (_item.state == NSControlStateValueOn) [@"✓" drawAtPoint:NSMakePoint(4, y) withAttributes:a];
+    NSString *sc = EDShortcutText(_item);
+    if (sc.length) { NSDictionary *b = @{NSFontAttributeName: f, NSForegroundColorAttributeName: [ink colorWithAlphaComponent:0.7]}; NSSize ss = [sc sizeWithAttributes:b]; [sc drawAtPoint:NSMakePoint(NSMaxX(self.bounds) - 14 - ss.width, y) withAttributes:b]; }
+}
+- (void)mouseUp:(NSEvent *)e {
+    if (!_item.enabled) return;
+    NSMenuItem *i = _item; [i.menu cancelTracking];
+    [NSRunLoop.mainRunLoop performInModes:@[NSDefaultRunLoopMode] block:^{ if (i.action) [NSApp sendAction:i.action to:i.target from:i]; }];
+}
+@end
+@interface EDDarkSepView : NSView
+@end
+@implementation EDDarkSepView
+- (void)drawRect:(NSRect)r {
+    [EDTheme.bodyDark setFill]; NSRectFill(self.bounds);
+    [[NSColor colorWithWhite:0.32 alpha:1] setFill]; NSRectFill(NSMakeRect(10, floor(NSMidY(self.bounds)), NSWidth(self.bounds) - 20, 1));
+}
+@end
+@implementation EDDarkMenuDelegate
+// macOS appends its own entries (Writing Tools, AutoFill, …) to some menus; they cannot be styled, so they are taken out again. Every item and
+// separator of ours carries a view, so anything without one is the system's.
+static void EDDropSystemItems(NSMenu *m) {
+    for (NSInteger k = (NSInteger)m.numberOfItems - 1; k >= 0; k--) { NSMenuItem *i = [m itemAtIndex:k]; if (!i.view) [m removeItemAtIndex:k]; }
+}
+- (void)menuNeedsUpdate:(NSMenu *)m { EDDropSystemItems(m); }
+// The menu's own window is translucent glass with rounded corners: make it a plain opaque dark rectangle (public NSWindow/NSView calls only,
+// found by class name, so if macOS names it differently this quietly does nothing).
+static void EDFlattenMenuViews(NSView *v) {
+    if ([v isKindOfClass:NSVisualEffectView.class]) { v.hidden = YES; }
+    v.layer.cornerRadius = 0; v.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner | kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+    for (NSView *s in v.subviews) EDFlattenMenuViews(s);
+}
+static void EDFlattenMenuWindows(void) {
+    for (NSWindow *w in NSApp.windows) {
+        if (![NSStringFromClass(w.class) containsString:@"Menu"]) continue;
+        w.opaque = YES; w.backgroundColor = EDTheme.bodyDark;
+        NSView *root = w.contentView.superview ?: w.contentView; EDFlattenMenuViews(root);
+    }
+}
+- (void)menuWillOpen:(NSMenu *)m {
+    EDDropSystemItems(m);
+    dispatch_async(dispatch_get_main_queue(), ^{ EDFlattenMenuWindows(); });
+    [NSRunLoop.mainRunLoop performInModes:@[NSEventTrackingRunLoopMode] block:^{ EDFlattenMenuWindows(); }];
+}
+- (void)menu:(NSMenu *)m willHighlightItem:(NSMenuItem *)it {
+    for (NSMenuItem *o in m.itemArray) if ([o.view isKindOfClass:EDDarkMenuItemView.class]) ((EDDarkMenuItemView *)o.view).lit = (o == it);
+}
+@end
+
 // One row of an LCD context menu: the item's own title and action, drawn in the LCD colours.
 @interface EDLCDMenuItemView : NSView
 @property (nonatomic, weak) NSMenuItem *item;
@@ -81,7 +167,7 @@
 - (instancetype)initWithItem:(NSMenuItem *)i width:(CGFloat)w;
 @end
 @implementation EDLCDPopRow { BOOL _hover; NSMenuItem *_item; }
-- (instancetype)initWithItem:(NSMenuItem *)i width:(CGFloat)w { if ((self = [super initWithFrame:NSMakeRect(0, 0, w, i.isSeparatorItem ? 7 : 24)])) { _item = i; } return self; }
+- (instancetype)initWithItem:(NSMenuItem *)i width:(CGFloat)w { if ((self = [super initWithFrame:NSMakeRect(0, 0, w, EDIsSep(i) ? 7 : 24)])) { _item = i; } return self; }
 - (void)updateTrackingAreas {
     [super updateTrackingAreas]; for (NSTrackingArea *t in self.trackingAreas.copy) [self removeTrackingArea:t];
     [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:self.bounds options:NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways | NSTrackingInVisibleRect owner:self userInfo:nil]];
@@ -90,14 +176,17 @@
 - (void)mouseExited:(NSEvent *)e { _hover = NO; [self setNeedsDisplay:YES]; }
 - (BOOL)acceptsFirstMouse:(NSEvent *)e { return YES; }
 - (void)drawRect:(NSRect)r {
-    if (_item.isSeparatorItem) { [EDTheme.lcdBackground setFill]; NSRectFill(self.bounds); [[EDTheme.lcdInk colorWithAlphaComponent:0.6] setFill]; NSRectFill(NSMakeRect(6, floor(NSMidY(self.bounds)), NSWidth(self.bounds) - 12, 1)); return; }
+    if (EDIsSep(_item)) { [EDTheme.lcdBackground setFill]; NSRectFill(self.bounds); [[EDTheme.lcdInk colorWithAlphaComponent:0.6] setFill]; NSRectFill(NSMakeRect(6, floor(NSMidY(self.bounds)), NSWidth(self.bounds) - 12, 1)); return; }
     BOOL on = _item.enabled;
     [(on && _hover ? [[EDTheme lcdBackground] shadowWithLevel:0.25] : [EDTheme lcdBackground]) setFill]; NSRectFill(self.bounds);
     NSDictionary *a = @{NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold], NSForegroundColorAttributeName: on ? [EDTheme lcdInk] : [[EDTheme lcdInk] colorWithAlphaComponent:0.4]};
     NSSize sz = [_item.title sizeWithAttributes:a];
     [_item.title drawAtPoint:NSMakePoint(16, NSMidY(self.bounds) - sz.height / 2) withAttributes:a];
+    if (_item.state == NSControlStateValueOn) [@"✓" drawAtPoint:NSMakePoint(4, NSMidY(self.bounds) - sz.height / 2) withAttributes:a];
+    NSString *sc = EDShortcutText(_item);
+    if (sc.length) { NSDictionary *b = @{NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: [(on ? EDTheme.lcdInk : [EDTheme.lcdInk colorWithAlphaComponent:0.4]) colorWithAlphaComponent:0.75]}; NSSize ss = [sc sizeWithAttributes:b]; [sc drawAtPoint:NSMakePoint(NSMaxX(self.bounds) - 12 - ss.width, NSMidY(self.bounds) - ss.height / 2) withAttributes:b]; }
 }
-- (void)mouseUp:(NSEvent *)e { if (!_item.isSeparatorItem && _item.enabled && _pick) _pick(_item); }
+- (void)mouseUp:(NSEvent *)e { if (!EDIsSep(_item) && _item.enabled && _pick) _pick(_item); }
 @end
 
 static NSPanel *gPopPanel; static id gPopMouseMonitor; static id gPopResign;
@@ -374,13 +463,13 @@ static NSColor *ContrastInk(NSInteger c) { return ContrastInkH(c, LoadHue()); }
 static void EDShowPop(NSMenu *m, NSRect anchor, NSScreen *screen) {
     EDClosePop(); [m update];   // run the menu's validation so items that cannot work now show greyed out
     NSMutableArray<NSMenuItem *> *items = [NSMutableArray array]; for (NSMenuItem *i in m.itemArray) if (!i.hidden) [items addObject:i];
-    for (NSInteger i = (NSInteger)items.count - 1; i > 0; i--) if (items[i].isSeparatorItem && items[i - 1].isSeparatorItem) [items removeObjectAtIndex:i];   // hidden items can leave two rules side by side
-    while (items.firstObject.isSeparatorItem) [items removeObjectAtIndex:0]; while (items.lastObject.isSeparatorItem) [items removeLastObject];
+    for (NSInteger i = (NSInteger)items.count - 1; i > 0; i--) if (EDIsSep(items[i]) && items[i - 1].isSeparatorItem) [items removeObjectAtIndex:i];   // hidden items can leave two rules side by side
+    while (EDIsSep(items.firstObject)) [items removeObjectAtIndex:0]; while (EDIsSep(items.lastObject)) [items removeLastObject];
     if (!items.count) return;
     NSDictionary *fa = @{NSFontAttributeName: [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold]};
-    CGFloat w = 0, h = 0; for (NSMenuItem *i in items) { if (!i.isSeparatorItem) w = MAX(w, ceil([i.title sizeWithAttributes:fa].width) + 36); h += i.isSeparatorItem ? 7 : 24; }
+    CGFloat w = 0, h = 0; for (NSMenuItem *i in items) { if (!EDIsSep(i)) w = MAX(w, ceil([i.title sizeWithAttributes:fa].width) + 36 + (i.keyEquivalent.length || i.action == @selector(toggleFullScreen:) ? 64 : 0)); h += EDIsSep(i) ? 7 : 24; }
     NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, w, h)]; content.wantsLayer = YES;
-    content.layer.backgroundColor = EDTheme.lcdBackground.CGColor; content.layer.borderColor = NSColor.blackColor.CGColor; content.layer.borderWidth = 1.5; content.layer.cornerRadius = 4; content.layer.masksToBounds = YES;
+    content.layer.backgroundColor = EDTheme.lcdBackground.CGColor; content.layer.borderColor = NSColor.blackColor.CGColor; content.layer.borderWidth = 1.5; content.layer.cornerRadius = 0; content.layer.masksToBounds = YES;
     CGFloat yy = h;
     for (NSMenuItem *it in items) {
         EDLCDPopRow *row = [[EDLCDPopRow alloc] initWithItem:it width:w]; yy -= NSHeight(row.frame); row.frame = NSMakeRect(0, yy, w, NSHeight(row.frame));
@@ -427,6 +516,20 @@ static void EDShowPop(NSMenu *m, NSRect anchor, NSScreen *screen) {
         return e;
     }];
 }
++ (void)styleDarkMenu:(NSMenu *)m {
+    static EDDarkMenuDelegate *d; if (!d) d = [EDDarkMenuDelegate new];
+    m.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]; if (!m.delegate) m.delegate = d;
+    NSDictionary *a = @{NSFontAttributeName: [NSFont systemFontOfSize:13]}; CGFloat w = 220;
+    for (NSMenuItem *i in m.itemArray) if (!i.isSeparatorItem && !i.submenu) w = MAX(w, ceil([i.title sizeWithAttributes:a].width) + 36 + (i.keyEquivalent.length ? 70 : 0));
+    for (NSMenuItem *i in m.itemArray) if (!i.isSeparatorItem && !i.submenu && !i.view) i.view = [[EDDarkMenuItemView alloc] initWithItem:i width:w];
+    // the system draws separators as glass lines; swap each for a plain item that draws a thin grey rule on the dark ground
+    for (NSInteger k = (NSInteger)m.numberOfItems - 1; k >= 0; k--) if ([m itemAtIndex:k].isSeparatorItem) {
+        [m removeItemAtIndex:k];
+        NSMenuItem *sep = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""]; sep.enabled = NO; sep.representedObject = @"edsep";
+        sep.view = [[EDDarkSepView alloc] initWithFrame:NSMakeRect(0, 0, w, 9)]; sep.view.autoresizingMask = NSViewWidthSizable;
+        [m insertItem:sep atIndex:k];
+    }
+}
 + (void)styleLCDMenu:(NSMenu *)m {
     m.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
     for (NSMenuItem *i in m.itemArray) if (!i.isSeparatorItem) i.view = [[EDLCDMenuItemView alloc] initWithItem:i];
@@ -459,7 +562,7 @@ static void EDShowPop(NSMenu *m, NSRect anchor, NSScreen *screen) {
 - (void)setEnabled:(BOOL)e { [super setEnabled:e]; self.needsDisplay = YES; }
 - (void)drawRect:(NSRect)r {
     NSRect b = NSInsetRect(self.bounds, 2, 2);
-    NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:b xRadius:6 yRadius:6];
+    NSBezierPath *p = [NSBezierPath bezierPathWithRoundedRect:b xRadius:0 yRadius:0];
     BOOL on = self.state == NSControlStateValueOn;
     CGFloat dim = self.enabled ? 1 : 0.45;
     if (self.filled) { [[EDTheme.lcdBackground colorWithAlphaComponent:dim] setFill]; [p fill]; }
@@ -514,6 +617,7 @@ static void EDShowPop(NSMenu *m, NSRect anchor, NSScreen *screen) {
 
 @implementation EDTheme (LCDKeys)
 + (void)useLCDScroller:(NSScrollView *)s { EDUseLCDScroller(s); }
++ (BOOL)lcdPopupOpen { return gPopPanel != nil; }
 + (NSButton *)lcdKey:(NSString *)title target:(id)t action:(SEL)a {
     EDLCDButton *b = [[EDLCDButton alloc] initWithFrame:NSMakeRect(0, 0, 100, 28)]; b.title = title; b.target = t; b.action = a; b.bordered = NO; b.filled = YES;
     b.font = [EDTheme lcdFont:13]; [b setButtonType:NSButtonTypeMomentaryPushIn]; return b;
@@ -565,7 +669,7 @@ static void EDShowPop(NSMenu *m, NSRect anchor, NSScreen *screen) {
 - (void)setTitleString:(NSString *)t { _title = [t copy]; self.needsDisplay = YES; }
 - (void)drawRect:(NSRect)dirty {
     NSRect b = NSInsetRect(self.bounds, 1.5, 1.5);
-    NSBezierPath *frame = [NSBezierPath bezierPathWithRoundedRect:b xRadius:3 yRadius:3];
+    NSBezierPath *frame = [NSBezierPath bezierPathWithRoundedRect:b xRadius:0 yRadius:0];
     [EDTheme.lcdBackground setFill]; [frame fill];
     [NSGraphicsContext saveGraphicsState]; [frame addClip];
     // cross-hatch like the LCD's dithered strip
@@ -601,14 +705,29 @@ static void EDShowPop(NSMenu *m, NSRect anchor, NSScreen *screen) {
     NSInteger i = [self indexOfItemWithTitle:@"+0"]; if (i >= 0) { [self selectItemAtIndex:i]; [self sendAction:self.action to:self.target]; }
 }
 // Contrast: a double click sets it (and the screen colour) back to the default; the menu opens after the double-click time
+// The system's pop-up menu gets a white glass rim on newer macOS; show the choices in the LCD pop-up (black rim, green) instead.
+- (void)showLCDChoices {
+    NSMenu *m = [NSMenu new];
+    for (NSInteger i = 0; i < self.numberOfItems; i++) {
+        NSMenuItem *src = [self itemAtIndex:i];
+        NSMenuItem *it = [m addItemWithTitle:(i == self.indexOfSelectedItem ? [@"✓ " stringByAppendingString:src.title] : [@"   " stringByAppendingString:src.title]) action:@selector(lcdChoicePicked:) keyEquivalent:@""];
+        it.target = self; it.tag = i; it.enabled = src.isEnabled;
+    }
+    [EDTheme popUpLCDMenu:m fromButton:self];
+}
+- (void)lcdChoicePicked:(NSMenuItem *)it {
+    if (it.tag < 0 || it.tag >= self.numberOfItems) return;
+    [self selectItemAtIndex:it.tag]; [self sendAction:self.action to:self.target];
+}
 - (void)mouseDown:(NSEvent *)e {
-    if (![self isContrast] || !self.isEnabled) { [super mouseDown:e]; return; }
+    if (!self.isEnabled) { [super mouseDown:e]; return; }
+    if (![self isContrast]) { [self showLCDChoices]; return; }
     if (e.clickCount >= 2) { [self resetContrast]; return; }
     NSEvent *up = [self.window nextEventMatchingMask:NSEventMaskLeftMouseUp untilDate:[NSDate dateWithTimeIntervalSinceNow:0.25] inMode:NSEventTrackingRunLoopMode dequeue:YES];
-    if (!up) { [super mouseDown:e]; return; }    // held down: the menu as usual
+    if (!up) { [self showLCDChoices]; return; }    // held down: the menu as usual
     NSEvent *dn = [self.window nextEventMatchingMask:NSEventMaskLeftMouseDown untilDate:[NSDate dateWithTimeIntervalSinceNow:NSEvent.doubleClickInterval] inMode:NSEventTrackingRunLoopMode dequeue:YES];
     if (dn) { [self.window nextEventMatchingMask:NSEventMaskLeftMouseUp untilDate:[NSDate dateWithTimeIntervalSinceNow:0.3] inMode:NSEventTrackingRunLoopMode dequeue:YES]; [self resetContrast]; return; }
-    [self performClick:nil];
+    [self showLCDChoices];
 }
 - (void)scrollWheel:(NSEvent *)e {
     if ([self isContrast] && (e.modifierFlags & NSEventModifierFlagShift) && self.isEnabled) {   // Shift + wheel: the colour of the green screens
