@@ -547,31 +547,6 @@ static void putBE32(NSMutableData *d, uint32_t v) { uint8_t b[4] = {v >> 24, v >
     return out;
 }
 
-- (EDSample *)addSampleNamed:(NSString *)name rate:(uint32_t)rate left:(NSData *)left right:(NSData *)right loopStart:(NSUInteger)loopStart loopEnd:(NSUInteger)loopEnd loop:(BOOL)loop {
-    if (![_formType hasPrefix:@"E4B"] || left.length < 2) return nil;
-    uint16_t num = 1; { BOOL used; do { used = NO; for (EDSample *e in _samples) if (e.number == num) { used = YES; num++; break; } } while (used && num < 1000); }
-    if (num >= 1000) return nil;
-    NSMutableData *h = nil;                                   // header bytes of a neighbouring sample keep the fields we do not know; a new bank starts from zeros
-    for (EDSample *t in _samples) if (t.eosFormat && !t.locked && t.header.length >= kHdrSize) { h = [t.header mutableCopy]; break; }
-    if (!h) h = [NSMutableData dataWithLength:kHdrSize];
-    memset((uint8_t *)h.mutableBytes + 0x3E, 0, 8);          // data-offset words, recomputed by the sampler
-    EDSample *e = [EDSample new]; e.header = h; e.eosFormat = YES;
-    e.number = num; e.name = name.length ? name : @"Generated"; e.sampleRate = rate; e.flags = 0;
-    NSUInteger frames = left.length / 2, n = frames + 2 * kGuard;
-    NSMutableData *L = [NSMutableData dataWithLength:n * 2], *R = right ? [NSMutableData dataWithLength:n * 2] : nil;
-    memcpy((uint8_t *)L.mutableBytes + kGuard * 2, left.bytes, frames * 2);
-    if (R) memcpy((uint8_t *)R.mutableBytes + kGuard * 2, right.bytes, MIN(right.length, frames * 2));
-    [e replaceLeft:L right:R];
-    e.loopStart = MIN(kGuard + loopStart, n - 1); e.loopEnd = MIN(kGuard + loopEnd, n - 1); e.loopEnabled = loop;
-    NSData *d = [e chunkData];
-    NSUInteger at = _chunks.count; if (_samples.count) { at = 0; for (EDSample *x in _samples) at = MAX(at, x.chunkIndex + 1); }
-    EDChunk *c = [EDChunk new]; c.ident = @"E3S1"; c.data = [d mutableCopy];
-    NSError *err = nil; EDSample *ns = [EDSample sampleFromChunkData:d index:at error:&err]; if (!ns) return nil;
-    [self insertChunk:c at:at number:num name:ns.name];
-    ns.dirty = YES; [_samples addObject:ns];
-    return ns;
-}
-
 - (BOOL)removePreset:(EDPreset *)preset { return [self detachPreset:preset] != nil; }
 
 /// Removes a sample chunk and its table-of-contents record (E4B banks only). Presets that used it keep a dangling number, like on the sampler.

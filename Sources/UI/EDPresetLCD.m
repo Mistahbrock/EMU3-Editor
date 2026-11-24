@@ -68,7 +68,7 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
 // its stage's rate (further right = slower), vertical position is its level.
 @interface EDEnvGraph : NSView
 @property (nonatomic) BOOL scaled;     // zoom the stages to fill the frame (Scaled) instead of a fixed time axis (Fixed)
-@property (nonatomic) BOOL unipolar;   // volume envelope: levels 0…127 (handles stop at the zero line)
+@property (nonatomic) BOOL unipolar;   // envelope graphs: handles stop at the zero line
 @property (nonatomic, strong) NSArray<EDParam *> *params;   // 12: rate, level per stage
 @property (nonatomic, copy) NSInteger (^get)(EDParam *);
 @property (nonatomic, copy) void (^set)(EDParam *, NSInteger);
@@ -313,7 +313,7 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
     if (rows.count == 6 && [pg[@"title"] hasSuffix:@"Envelope"]) {
         NSMutableArray *ep = [NSMutableArray array];
         for (NSArray *r in rows) [ep addObjectsFromArray:r[1]];
-        _graph.params = ep; _graph.unipolar = [pg[@"title"] isEqual:@"Volume Envelope"]; _graph.hidden = NO; _scaleBtn.hidden = NO; _graph.needsDisplay = YES;
+        _graph.params = ep; _graph.unipolar = YES; _graph.hidden = NO; _scaleBtn.hidden = NO; _graph.needsDisplay = YES;
     }
     if ([pg[@"title"] isEqual:@"LFOs and Lag"])
         for (int i = 0; i < 2 && i < (int)rows.count; i++) {

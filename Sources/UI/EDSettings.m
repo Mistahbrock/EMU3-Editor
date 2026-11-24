@@ -1,7 +1,6 @@
 #import "EDSettings.h"
 #import "EDTheme.h"
 #import "EDPreset+Params.h"
-#import "EDGenerator.h"
 #import <objc/runtime.h>
 
 // Tool tips on / off: every NSView tool tip is kept aside and only handed to AppKit while tool tips are on.
@@ -35,7 +34,7 @@ static NSArray<NSArray<NSString *> *> *FolderKinds(void) {
 @implementation EDSettings {
     NSWindow *_win;
     NSMutableArray<NSTextField *> *_pathFields;
-    NSTextField *_addOnPath; NSButton *_autoSave, *_offerConvert, *_tips; NSTextField *_modelLabel; NSPopUpButton *_auditionKey;
+    NSButton *_autoSave, *_offerConvert, *_tips; NSTextField *_modelLabel; NSPopUpButton *_auditionKey;
 }
 
 + (void)show {
@@ -76,15 +75,6 @@ static NSView *rule(void) {
         NSButton *reset = [NSButton buttonWithTitle:@"Last Used" target:self action:@selector(resetFolder:)]; reset.tag = i; reset.toolTip = @"Follow the folder you used last again.";
         NSStackView *row = [NSStackView stackViewWithViews:@[name, path, choose, reset]]; row.spacing = 8; [col addArrangedSubview:row]; i++;
     }
-
-    section(@"Add Ons");
-    NSTextField *ah0 = label(@"Generator Add Ons (.addon) are loaded from this folder: an \"Add Ons\" subfolder of the Disk images folder above when one is set. A change takes effect at the next start.", NO); ah0.textColor = NSColor.secondaryLabelColor; ah0.font = [NSFont systemFontOfSize:12];
-    _addOnPath = [NSTextField labelWithString:@""]; _addOnPath.lineBreakMode = NSLineBreakByTruncatingMiddle; _addOnPath.font = [NSFont systemFontOfSize:12]; [_addOnPath.widthAnchor constraintEqualToConstant:240].active = YES;
-    NSButton *aoChoose = [NSButton buttonWithTitle:@"Choose…" target:self action:@selector(chooseAddOnFolder:)]; aoChoose.toolTip = @"Pick the folder that holds your Add Ons.";
-    NSButton *aoReset = [NSButton buttonWithTitle:@"Default" target:self action:@selector(resetAddOnFolder:)]; aoReset.toolTip = @"Back to the \"Add Ons\" subfolder of the Disk images folder (or ~/Library/Application Support/EMU3 Editor/Add Ons).";
-    NSButton *aoShow = [NSButton buttonWithTitle:@"Show in Finder" target:self action:@selector(showAddOnFolder:)];
-    NSStackView *aoRow = [NSStackView stackViewWithViews:@[label(@"Add On folder", NO), _addOnPath, aoChoose, aoReset, aoShow]]; aoRow.spacing = 8;
-    [col addArrangedSubview:ah0]; [col addArrangedSubview:aoRow];
 
     section(@"Sampler");
     _modelLabel = label(@"", NO);
@@ -129,7 +119,6 @@ static NSView *rule(void) {
         _pathFields[i].stringValue = fixed.length ? fixed.stringByAbbreviatingWithTildeInPath : (last.length ? [@"Last used: " stringByAppendingString:last.stringByAbbreviatingWithTildeInPath] : @"Last used (none yet)");
         _pathFields[i].textColor = fixed.length ? NSColor.labelColor : NSColor.secondaryLabelColor; i++;
     }
-    _addOnPath.stringValue = EDGeneratorRegistry.addOnFolder.path.stringByAbbreviatingWithTildeInPath;
     NSString *model = [d stringForKey:@"SamplerModel"]; _modelLabel.stringValue = model.length ? [@"Sampler found on the SCSI bus: " stringByAppendingString:model] : @"Sampler not scanned yet (Tools ▸ Find Sampler)";
     _autoSave.state = [d boolForKey:@"AutoSaveToSampler"] ? NSControlStateValueOn : NSControlStateValueOff;
     { NSInteger ak = [d objectForKey:@"AuditionKey"] ? [d integerForKey:@"AuditionKey"] : 60; [_auditionKey selectItemWithTag:MAX(0, MIN(127, ak))]; }
@@ -147,22 +136,12 @@ static NSView *rule(void) {
     [NSUserDefaults.standardUserDefaults setObject:p.URL.path forKey:k[2]]; [self refresh];
 }
 - (void)resetFolder:(NSButton *)b { [NSUserDefaults.standardUserDefaults removeObjectForKey:FolderKinds()[b.tag][2]]; [self refresh]; }
-- (void)chooseAddOnFolder:(id)b {
-    NSOpenPanel *p = [NSOpenPanel openPanel]; p.canChooseFiles = NO; p.canChooseDirectories = YES; p.canCreateDirectories = YES; p.prompt = @"Choose"; p.message = @"Folder that holds the Generator Add Ons (.addon)";
-    p.directoryURL = EDGeneratorRegistry.addOnFolder;
-    if ([p runModal] != NSModalResponseOK) return;
-    [NSUserDefaults.standardUserDefaults setObject:p.URL.path forKey:@"AddOnFolder"]; [self refresh];
-}
-- (void)resetAddOnFolder:(id)b { [NSUserDefaults.standardUserDefaults removeObjectForKey:@"AddOnFolder"]; [self refresh]; }
-- (void)showAddOnFolder:(id)b {
-    NSURL *u = EDGeneratorRegistry.addOnFolder; [NSFileManager.defaultManager createDirectoryAtURL:u withIntermediateDirectories:YES attributes:nil error:nil]; [NSWorkspace.sharedWorkspace openURL:u];
-}
 - (void)auditionChanged:(NSPopUpButton *)b { [NSUserDefaults.standardUserDefaults setInteger:b.selectedItem.tag forKey:@"AuditionKey"]; }
 - (void)autoChanged:(NSButton *)b { [NSUserDefaults.standardUserDefaults setBool:b.state == NSControlStateValueOn forKey:@"AutoSaveToSampler"]; }
 - (void)setDefaults:(id)sender {
     NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
     for (NSArray *k in FolderKinds()) { [d removeObjectForKey:k[1]]; [d removeObjectForKey:k[2]]; }
-    for (NSString *k in @[@"AutoSaveToSampler", @"SkipConvertOffer", @"HideToolTips", @"AuditionKey", @"AddOnFolder"]) [d removeObjectForKey:k];
+    for (NSString *k in @[@"AutoSaveToSampler", @"SkipConvertOffer", @"HideToolTips", @"AuditionKey"]) [d removeObjectForKey:k];
     [EDTheme setLcdHue:0];
     for (NSWindow *w in NSApp.windows) [w.contentView ed_applyToolTips];
     [self refresh];
