@@ -93,6 +93,10 @@ typedef NS_ENUM(NSInteger, EDPresetKind) { EDPresetKindE4 = 0, EDPresetKindLegac
 - (nullable EDPreset *)addPresetNamed:(NSString *)name;
 /// Removes a preset added in this session (used to undo addPresetNamed:). NO if it is not in the bank.
 - (BOOL)removePreset:(EDPreset *)preset;
+/// Adds a new sample (mono, or stereo when `right` is given) to an E4B bank, with the lowest free sample number and the 4-frame guard padding the
+/// sampler expects. `left`/`right` are plain little-endian-host int16 frames without padding; loop points are frame indexes into them.
+/// Used by the Generator. nil for 3X banks, empty audio, or when no sample number is free.
+- (nullable EDSample *)addSampleNamed:(NSString *)name rate:(uint32_t)rate left:(NSData *)left right:(nullable NSData *)right loopStart:(NSUInteger)loopStart loopEnd:(NSUInteger)loopEnd loop:(BOOL)loop;
 - (BOOL)removeSample:(EDSample *)sample;               // E4B banks; also drops its table-of-contents record
 - (void)eraseAllPresetsAndSamples;
 /// Removes any preset from an E4B bank (Preset Manage > Delete). Returns an opaque state for reattachPreset: (undo), or nil when not possible.

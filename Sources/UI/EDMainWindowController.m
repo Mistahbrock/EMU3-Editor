@@ -1,4 +1,5 @@
 #import "EDAlert.h"
+#import "EDGeneratorView.h"
 #import "NSData+EDWrite.h"
 #import "EDMainWindowController.h"
 #import "EDSDSPanel.h"
@@ -118,7 +119,7 @@ static void RememberFolder(NSSavePanel *p, NSString *key) {
     EDWaveformView *_wave;
     NSLayoutConstraint *_presetNoteLeading; NSTextField *_presetNote, *_nameField, *_rateField, *_loopStartField, *_loopEndField, *_info, *_status;
     NSButton *_loopCheck, *_releaseCheck, *_playButton;
-    NSTabView *_tabs;
+    NSTabView *_tabs; EDGeneratorView *_genView; NSWindow *_genWindow;
     NSSegmentedControl *_tabPicker;
     EDLCDStrip *_lcd; NSTextField *_modelLabel;
     id _spaceMonitor; BOOL _auditioning;
@@ -555,12 +556,13 @@ static NSTextField *toolNote(NSString *s) {
     EDLogoView *logo = [EDLogoView new];
     NSView *head = [NSView new]; head.wantsLayer = YES; head.layer.backgroundColor = EDTheme.bodyDark.CGColor;
     _modelLabel = [NSTextField labelWithString:@""]; _modelLabel.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium]; _modelLabel.textColor = EDTheme.labelWhite; _modelLabel.alphaValue = 0.8;
-    for (NSView *v in @[logo, _modelLabel, _tabPicker]) { v.translatesAutoresizingMaskIntoConstraints = NO; [head addSubview:v]; }
+    for (NSView *v in @[logo, _modelLabel, _tabPicker]) {
+         v.translatesAutoresizingMaskIntoConstraints = NO; [head addSubview:v]; }
     NSLayoutGuide *modelSpace = [NSLayoutGuide new]; [head addLayoutGuide:modelSpace];   // the space to the right of the tab picker
     [NSLayoutConstraint activateConstraints:@[
         [head.heightAnchor constraintEqualToConstant:72],
         [logo.leadingAnchor constraintEqualToAnchor:head.leadingAnchor constant:34], [logo.centerYAnchor constraintEqualToAnchor:head.centerYAnchor],
-        [_modelLabel.centerXAnchor constraintEqualToAnchor:modelSpace.centerXAnchor], [modelSpace.leadingAnchor constraintEqualToAnchor:_tabPicker.trailingAnchor], [modelSpace.trailingAnchor constraintEqualToAnchor:head.trailingAnchor], [_modelLabel.centerYAnchor constraintEqualToAnchor:head.centerYAnchor constant:2],
+        [_modelLabel.centerXAnchor constraintEqualToAnchor:modelSpace.centerXAnchor], [modelSpace.leadingAnchor constraintEqualToAnchor:_tabPicker.trailingAnchor], [modelSpace.trailingAnchor constraintEqualToAnchor:head.trailingAnchor constant:-24], [_modelLabel.centerYAnchor constraintEqualToAnchor:head.centerYAnchor constant:2],
         [_tabPicker.centerXAnchor constraintEqualToAnchor:head.centerXAnchor], [_tabPicker.centerYAnchor constraintEqualToAnchor:head.centerYAnchor]]];
     NSView *rule = [NSView new]; rule.wantsLayer = YES; rule.layer.backgroundColor = EDTheme.accent.CGColor;
     [rule.heightAnchor constraintEqualToConstant:3].active = YES;
@@ -601,6 +603,10 @@ static NSTextField *toolNote(NSString *s) {
         [_lcd.centerYAnchor constraintEqualToAnchor:foot.centerYAnchor constant:-4], [_lcd.heightAnchor constraintEqualToConstant:36]]];
     _statusWidth = [_status.widthAnchor constraintEqualToConstant:322]; _statusWide = [_status.trailingAnchor constraintEqualToAnchor:foot.trailingAnchor constant:-14]; _statusWide.active = YES;
     _status.alignment = NSTextAlignmentCenter;   // centred under the page (beside the readout on Master ▸ Utilities)
+    _genView = [[EDGeneratorView alloc] initWithFrame:NSMakeRect(0, 0, 800, 500)]; 
+    __weak typeof(self) genSelf = self;
+    _genView.bankAvailable = ^BOOL { EDMainWindowController *me = genSelf; return [me->_bank.formType hasPrefix:@"E4B"]; };
+    _genView.addToBank = ^NSInteger(EDGeneratedSample *g, NSString **msg) { return [genSelf addGeneratedSample:g message:msg]; };
     NSStackView *root = [NSStackView stackViewWithViews:@[head, rule, bar, rule2, _tabs, foot]];
     root.orientation = NSUserInterfaceLayoutOrientationVertical; root.spacing = 0; root.alignment = NSLayoutAttributeLeading;
     root.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1917,6 +1923,37 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
 }
 - (NSUndoManager *)windowWillReturnUndoManager:(NSWindow *)w { return _undo ?: (_undo = [NSUndoManager new]); }
 
+/// The sample list, preset editor and status after the bank's samples changed from outside the Samples page.
+- (void)reloadBankAfterEdit {
+    if (_sample && ![_bank.samples containsObject:_sample]) { _sample = nil; _wave.sample = nil; [self refreshAll]; }
+    [_sampleTable reloadData]; [_presetEditor reload]; [self refreshBankStatus]; [self updateTitle]; [self modelChanged];
+}
+// MARK: Generator mode
+
+/// The Generator has its own window (View ▸ nothing: Generator menu); the editor window stays as it is.
+- (IBAction)showGenerator:(id)sender {
+    if (!_genWindow) {
+        _genWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1080, 680) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+        _genWindow.title = @"EMU3 Editor — Generator"; _genWindow.releasedWhenClosed = NO; _genWindow.backgroundColor = EDTheme.bodyDark; _genWindow.minSize = NSMakeSize(760, 480);
+        _genWindow.contentView = _genView; _genWindow.delegate = self;
+    }
+    if (!_genWindow.visible) [_genWindow center];   // always in the middle of the screen
+    [_genWindow makeKeyAndOrderFront:nil];
+}
+- (void)windowWillClose:(NSNotification *)n { if (n.object == _genWindow) [_genView stopAudition]; }
+- (IBAction)showGeneratorItem:(NSMenuItem *)sender { [self showGenerator:nil]; [_genView selectIdentifier:sender.representedObject]; }
+- (IBAction)showSampler:(id)sender { [self.window makeKeyAndOrderFront:nil]; }
+/// Adds a generated sample to the open bank, with undo. Returns the sample number, or 0 with a message.
+- (NSInteger)addGeneratedSample:(EDGeneratedSample *)g message:(NSString **)msg {
+    if (![_bank.formType hasPrefix:@"E4B"]) { if (msg) *msg = @"Open or create an EOS bank first."; return 0; }
+    EDSample *ns = [_bank addSampleNamed:g.name rate:g.sampleRate left:g.left right:g.right loopStart:g.loopStart loopEnd:g.loopEnd loop:g.loop];
+    if (!ns) { if (msg) *msg = @"The bank could not take another sample (all 999 numbers used?)."; return 0; }
+    EDBank *bank = _bank;
+    [_undo registerUndoWithTarget:self handler:^(EDMainWindowController *me) { [bank removeSample:ns]; [me reloadBankAfterEdit]; }];
+    [_undo setActionName:@"Add Generated Sample"];
+    [self reloadBankAfterEdit];
+    return ns.number;
+}
 // MARK: sample operations
 
 - (void)applyOp:(NSString *)name block:(void (^)(EDSample *s))op {

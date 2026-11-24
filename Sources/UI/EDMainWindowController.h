@@ -54,6 +54,9 @@
 - (IBAction)zoomFit:(id)sender;
 - (IBAction)zoomLoop:(id)sender;
 - (IBAction)showMasterTab:(id)sender;
+- (IBAction)showGenerator:(id)sender;
+- (IBAction)showSampler:(id)sender;
+- (IBAction)showGeneratorItem:(NSMenuItem *)sender;   // Generator menu: representedObject = generator identifier
 - (IBAction)showDiskTab:(id)sender;
 - (IBAction)showSamplesTab:(id)sender;
 - (IBAction)showPresetsTab:(id)sender;

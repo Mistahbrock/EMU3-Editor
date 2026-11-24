@@ -3,6 +3,7 @@
 #import "EDSettings.h"
 #import "EDHelp.h"
 #import "EDMainWindowController.h"
+#import "EDGenerator.h"
 
 @implementation AppDelegate { EDMainWindowController *_main; }
 
@@ -107,6 +108,18 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     [edit addItem:NSMenuItem.separatorItem];
     item(edit, @"Cut", @selector(cut:), @"x", nil); item(edit, @"Copy", @selector(copy:), @"c", nil);
     item(edit, @"Paste", @selector(paste:), @"v", nil); item(edit, @"Select All", @selector(selectAll:), @"a", nil);
+
+    NSMenu *gen = SUB(@"Generator");   // built-in generators, then the Add Ons; "Editor" goes back to the bank/preset editor
+    NSUInteger nBuiltIn = EDGeneratorRegistry.builtInGenerators.count, gi = 0;
+    for (Class c in EDGeneratorRegistry.generators) {
+        if (gi == nBuiltIn && EDGeneratorRegistry.addOns.count) {
+            [gen addItem:NSMenuItem.separatorItem];
+            NSMenuItem *h = [gen addItemWithTitle:@"Add Ons" action:nil keyEquivalent:@""]; h.enabled = NO;
+        }
+        NSMenuItem *mi = item(gen, [(id)c generatorName], @selector(showGeneratorItem:), gi == 0 ? @"g" : @"", _main); mi.representedObject = [(id)c generatorIdentifier]; gi++;
+    }
+    [gen addItem:NSMenuItem.separatorItem];
+    item(gen, @"Editor", @selector(showSampler:), @"e", _main);
 
     NSMenu *smp = SUB(@"Sample");
     item(smp, @"Play / Stop", @selector(togglePlay:), @" ", _main);

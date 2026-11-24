@@ -24,7 +24,7 @@ targets:
         CLANG_ENABLE_OBJC_ARC: YES
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_IDENTITY: "-"
-        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Sources/Disk", "$(SRCROOT)/Sources/Model", "$(SRCROOT)/Sources/UI", "$(SRCROOT)/Sources/MIDI"]
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Sources/Disk", "$(SRCROOT)/Sources/Model", "$(SRCROOT)/Sources/UI", "$(SRCROOT)/Sources/MIDI", "$(SRCROOT)/Sources/Generator"]
     dependencies:
       - sdk: AudioToolbox.framework
       - sdk: AVFoundation.framework

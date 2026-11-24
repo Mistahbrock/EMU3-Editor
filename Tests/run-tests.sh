@@ -7,6 +7,8 @@ clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/NSDa
 build/modeltest build/test.e4b
 clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/NSData+EDWrite.m Sources/Model/EDLegacyBank.m Sources/Model/EDSample+Ops.m Tests/OpsTest.m -framework Foundation -framework AudioToolbox -o build/opstest
 build/opstest build/test.e4b
+clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/NSData+EDWrite.m Sources/Model/EDLegacyBank.m Tests/GenTest.m -framework Foundation -framework AudioToolbox -o build/gentest
+build/gentest build/test.e4b
 clang -fobjc-arc -Wall -ISources/Model -ISources/MIDI Sources/MIDI/EDSDS.m Sources/Model/EDBank.m Sources/Model/NSData+EDWrite.m Sources/Model/EDLegacyBank.m Tests/SDSTest.m -framework Foundation -framework AudioToolbox -o build/sdstest
 build/sdstest
 clang -fobjc-arc -Wall -ISources/Model -ISources/MIDI Sources/MIDI/EDSMDI.m Sources/MIDI/EDSDS.m Sources/Model/EDBank.m Sources/Model/NSData+EDWrite.m Sources/Model/EDLegacyBank.m Tests/SMDITest.m -framework Foundation -framework AudioToolbox -o build/smditest
