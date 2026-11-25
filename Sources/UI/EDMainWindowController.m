@@ -130,7 +130,7 @@ static void RememberFolder(NSSavePanel *p, NSString *key) {
     EDPresetEditor *_presetEditor;
     EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn, *_convertBtn; BOOL _autoBackedUp, _noConvertOffer, _sessionActive;
     EDHomeList *_home;
-    EDMemoryView *_memory; NSTextField *_ramRow; BOOL _liveMem, _remoteBusy; NSDate *_remoteAt;
+    EDMemoryView *_memory; NSTextField *_ramRow; BOOL _liveMem, _remoteBusy, _samplerAnswered; NSDate *_remoteAt;
     EDRemoteDisk *_remoteDisk; EDSMDIBoard *_remoteBoard; pid_t _remotePid; BOOL _remoteRestoreTarget, _openingRemote; NSString *_remotePort; NSArray<EDSMDIDevice *> *_scsiDrives; BOOL _scsiBusy;
     NSTextField *_samplerStatus; EDDiskIcons *_diskHint; NSView *_mountsBox; id _eggMonitor, _escMonitor, _enterMonitor;
     NSScrollView *_diskScroll, *_outlineScroll; EDLCDSideTab *_diskSideTab; EDNode *_browseNode; BOOL _listView, _inBank, _bankList; NSArray<EDDiskItem *> *_diskItems; NSButton *_viewKey, *_loadKey, *_saveKey, *_infoKey;
@@ -425,7 +425,7 @@ static NSTextField *toolNote(NSString *s) {
     // Master tab: sampler status and shortcuts | banks to open (sampler disk + recent) | current bank
     _samplerStatus = [NSTextField ed_wrappingLabelWithString:@""]; _samplerStatus.font = [NSFont systemFontOfSize:14]; _samplerStatus.textColor = EDTheme.labelWhite;
     _masterSummary = [NSTextField ed_wrappingLabelWithString:@""]; _masterSummary.font = [NSFont systemFontOfSize:15]; _masterSummary.textColor = EDTheme.labelWhite;
-    NSStackView *gSampler = [self group:@"Sampler" views:@[_samplerStatus]];   // status only; the sampler tools live on the Tools tab
+    NSStackView *gSampler = [self group:@"Devices Status" views:@[_samplerStatus]];   // status only; the sampler tools live on the Tools tab
     NSStackView *gUtils = [self group:@"Utils" views:@[
         [self wideButton:@"Assign Key…" action:@selector(showAssignKeys:)], [self wideButton:@"Channel Volume…" action:@selector(showChannelVolume:)],
         [self wideButton:@"Tones…" action:@selector(showTones:)]]];
@@ -903,6 +903,7 @@ static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults o
             dispatch_async(dispatch_get_main_queue(), ^{
                 me->_statusBusy = NO;
                 if (![sig isEqualToString:me->_statusSig]) { me->_statusSig = sig; [me refreshSamplerStatus]; }
+                [me refreshRemote];   // read-only; throttled to once per 10 s
             });
         });
     }];
@@ -999,6 +1000,8 @@ static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults o
     [EDSamplerRemote queryWithCompletion:^(EDSamplerStatus *st) {
         EDMainWindowController *me = weak; if (!me) return;
         me->_remoteBusy = NO; me->_remoteAt = [NSDate date];
+        BOOL was = me->_samplerAnswered; me->_samplerAnswered = st != nil;   // it answered the identity request
+        if (was != me->_samplerAnswered) [me refreshSamplerStatus];
         if (!st || st.sampleTotalMB <= 0) { me->_liveMem = NO; return; }
         me->_liveMem = YES;
         me->_memory.sampleTotalMB = st.sampleTotalMB; me->_memory.sampleUsedMB = MAX(0, st.sampleTotalMB - st.sampleFreeK / 1024.0);
@@ -1025,7 +1028,8 @@ static NSInteger HostBusID(void) { id v = [NSUserDefaults.standardUserDefaults o
     line(root != nil, root ? [NSString stringWithFormat:@"Disk served: %@", root.lastPathComponent] : @"No sampler disk mounted");
     line(boards > 0, boards ? @"SCSI board connected" : @"SCSI board not found");
     NSString *model = [NSUserDefaults.standardUserDefaults stringForKey:@"SamplerModel"];   // found by Tools ▸ Find Sampler
-    if (model.length) line(YES, [model stringByReplacingOccurrencesOfString:@"E-mu" withString:@"E-MU"]);
+    if (model.length) { NSString *nm = [model stringByReplacingOccurrencesOfString:@"E-mu" withString:@"E-MU"];
+        line(_samplerAnswered, nm); }
     _samplerStatus.attributedStringValue = as;
     [_home reloadWithSamplerDisk:d];
     [self refreshDiskIcons];
@@ -2243,7 +2247,7 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     NSString *path = info[@"path"]; _standaloneURL = (path.length && [NSFileManager.defaultManager fileExistsAtPath:path]) ? [NSURL fileURLWithPath:path] : nil;
     _currentNode = nil; _inBank = YES; [self refreshBrowser];
     [_bank markAllDirty]; [self updateTitle];
-    [self selectTabNamed:@"presets"]; _tabPicker.selectedSegment = 3;
+    _tabPicker.selectedSegment = 0; [self tabPicked:nil];   // always start on the Master page
     _status.stringValue = [NSString stringWithFormat:@"Restored your unsaved work on “%@”. %@", title, _standaloneURL ? @"Save Bank writes it back to its file." : @"Use Save Bank As to keep it."];
 }
 - (void)alertError:(NSError *)e title:(NSString *)t {
