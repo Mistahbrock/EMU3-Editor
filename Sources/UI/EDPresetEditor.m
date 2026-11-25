@@ -204,7 +204,7 @@
 @end
 
 @implementation EDPresetEditor {
-    NSTableView *_presetTable, *_paramTable, *_sampleList; EDFitPanel *_fitPanel;
+    NSMenu *_outlineMenu; NSTableView *_presetTable, *_paramTable, *_sampleList; EDFitPanel *_fitPanel;
     NSMutableSet<NSNumber *> *_usedSamples;   // sample numbers the selected preset uses (marked in the bank sample list)
     NSButton *_assign, *_newVoice, *_newPreset, *_deletePreset;
     NSOutlineView *_outline;
@@ -258,6 +258,11 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     _addRef = [self button:@"＋ Sample" action:@selector(addRef:)]; _removeRef = [self button:@"－ Sample" action:@selector(removeRef:)];
     _dupVoice = [self button:@"Copy voice" action:@selector(dupVoice:)]; _removeVoice = [self button:@"Delete voice" action:@selector(removeVoice:)];
     _newVoice = [self button:@"＋ Voice" action:@selector(newVoice:)];
+    _outlineMenu = [NSMenu new]; _outlineMenu.delegate = self; _outlineMenu.autoenablesItems = NO;   // right-click on the structure: the same keys as below
+    for (NSArray *k in @[@[@"＋ Voice", @"newVoice:"], @[@"Copy voice", @"dupVoice:"], @[@"Delete voice", @"removeVoice:"], @"-", @[@"＋ Sample", @"addRef:"], @[@"－ Sample", @"removeRef:"]]) {
+        if ([k isKindOfClass:NSString.class]) { [_outlineMenu addItem:NSMenuItem.separatorItem]; continue; }
+        NSMenuItem *it = [_outlineMenu addItemWithTitle:k[0] action:NSSelectorFromString(k[1]) keyEquivalent:@""]; it.target = self; }
+    _outline.menu = _outlineMenu; [EDTheme useLCDContextMenuOn:_outline];
     NSStackView *btnRow1 = [NSStackView stackViewWithViews:@[_newVoice, _dupVoice, _removeVoice]]; btnRow1.spacing = 4;
     NSStackView *btnRow2 = [NSStackView stackViewWithViews:@[_addRef, _removeRef]]; btnRow2.spacing = 4;
     NSStackView *btns = [NSStackView stackViewWithViews:@[btnRow1, btnRow2]]; btns.orientation = NSUserInterfaceLayoutOrientationVertical; btns.alignment = NSLayoutAttributeLeading; btns.spacing = 4;
@@ -265,12 +270,12 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     for (NSArray *c in @[@[@"num", @"#", @44], @[@"name", @"Bank sample", @240]]) {
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:c[0]]; col.title = c[1]; col.width = [c[2] doubleValue]; [_sampleList addTableColumn:col];
     }
-    _sampleList.doubleAction = @selector(assignSample:); _sampleList.target = self;
+    _sampleList.doubleAction = @selector(openSampleClicked:); _sampleList.target = self;
     _assign = [self button:@"Use for this zone" action:@selector(assignSample:)];
     NSView *sampleScroll = lcdPanelOf(_sampleList, _assign); NSLayoutConstraint *sampleH = [sampleScroll.heightAnchor constraintEqualToConstant:150]; sampleH.active = YES;
-    NSTextField *sampleCap = [NSTextField labelWithString:@"BANK SAMPLES  (double-click to assign)"];
+    NSTextField *sampleCap = [NSTextField labelWithString:@"BANK SAMPLES  (double-click to open)"];
     { NSMutableAttributedString *as = [[NSMutableAttributedString alloc] initWithString:@"BANK SAMPLES" attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:12 weight:NSFontWeightBold], NSForegroundColorAttributeName: NSColor.secondaryLabelColor}];
-      [as appendAttributedString:[[NSAttributedString alloc] initWithString:@"   double-click to assign" attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:11], NSForegroundColorAttributeName: [NSColor.secondaryLabelColor colorWithAlphaComponent:0.7]}]];
+      [as appendAttributedString:[[NSAttributedString alloc] initWithString:@"   double-click to open" attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:11], NSForegroundColorAttributeName: [NSColor.secondaryLabelColor colorWithAlphaComponent:0.7]}]];
       sampleCap.attributedStringValue = as; }   // same heading style as PRESETS / STRUCTURE
     NSView *capLine = [NSView new]; capLine.wantsLayer = YES; capLine.layer.backgroundColor = EDTheme.accent.CGColor; capLine.translatesAutoresizingMaskIntoConstraints = NO;
     EDHeightGrip *grip = [EDHeightGrip new]; grip.target = sampleH; grip.minH = 60; grip.maxH = 520; grip.translatesAutoresizingMaskIntoConstraints = NO;
@@ -342,6 +347,12 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
 
 - (void)setPresetMenu:(NSMenu *)m { _presetMenu = m; m.delegate = self; _presetTable.menu = m; [EDTheme useLCDContextMenuOn:_presetTable]; }
 - (void)menuNeedsUpdate:(NSMenu *)menu {
+    if (menu == _outlineMenu) {
+        NSInteger cr = _outline.clickedRow; if (cr >= 0 && cr != _outline.selectedRow) [_outline selectRowIndexes:[NSIndexSet indexSetWithIndex:cr] byExtendingSelection:NO];
+        NSDictionary *on = @{@"newVoice:": @(_newVoice.enabled), @"dupVoice:": @(_dupVoice.enabled), @"removeVoice:": @(_removeVoice.enabled), @"addRef:": @(_addRef.enabled), @"removeRef:": @(_removeRef.enabled)};
+        for (NSMenuItem *i in menu.itemArray) if (i.action) i.enabled = [on[NSStringFromSelector(i.action)] boolValue];
+        return;
+    }
     NSInteger r = _presetTable.clickedRow;
     if (r >= 0 && r != _presetTable.selectedRow) [_presetTable selectRowIndexes:[NSIndexSet indexSetWithIndex:r] byExtendingSelection:NO];
     EDPreset *p = (r >= 0 && r < (NSInteger)_bank.presets.count) ? _bank.presets[r] : nil;
@@ -578,6 +589,10 @@ static BOOL InView(id r, NSView *v) { return [r isKindOfClass:NSView.class] && [
     BOOL ok = [self assignableSampleParam] != nil && _sampleList.selectedRow >= 0;
     _assign.enabled = ok;
     _assign.title = [self assignableSampleParam] ? @"Use for this zone" : @"Select a zone first";
+}
+- (void)openSampleClicked:(id)sender {
+    NSInteger row = _sampleList.clickedRow >= 0 ? _sampleList.clickedRow : _sampleList.selectedRow;
+    if (row >= 0 && row < (NSInteger)_bank.samples.count && _openSample) _openSample(_bank.samples[row]);
 }
 - (void)assignSample:(id)sender {
     EDParam *sp = [self assignableSampleParam]; NSInteger row = _sampleList.clickedRow >= 0 ? _sampleList.clickedRow : _sampleList.selectedRow;

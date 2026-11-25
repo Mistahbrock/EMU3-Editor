@@ -212,6 +212,25 @@ static NSArray<EDParam *> *legacyParams(EDParamScope scope, NSUInteger zones) {
     self.dirty = YES;
 }
 
+- (BOOL)getDefault:(NSInteger *)out ofParam:(EDParam *)p {
+    if (!self.canEditStructure || p.isSample || p.readOnly) return NO;
+    uint8_t buf[kE4Header + kE4Voice + kE4Ref]; memcpy(buf, kDefaultPresetHeader, kE4Header); memset(buf + 64, 0, 4); memset(buf + 72, 0, 4);   // effect sends off, as in a new preset
+    uint8_t *v = buf + kE4Header, *r = v + kE4Voice; memcpy(v, kDefaultVoice, kE4Voice); memcpy(r, kDefaultRef, kE4Ref);
+    memcpy(v + 12, "\x00\x00\x00\x7f", 4); memcpy(v + 16, "\x00\x00\x00\x7f", 4); memcpy(v + 20, "\x00\x00\x00\x7f", 4);   // key, velocity, realtime windows: full range
+    memcpy(r, "\x00\x00\x00\x7f", 4); memcpy(r + 4, "\x00\x00\x00\x7f", 4); r[10] = r[11] = 0; r[12] = 60; r[13] = 0; r[14] = 0;   // zone windows, fine tune, root C3, 0 dB, centre
+    if (p.scope == EDScopePreset) { *out = p.min == -1 ? -1 : MAX(p.min, MIN(p.max, 0)); return YES; }   // the template header is a real preset (MIDI A..D = 89, 69...): preset-wide values start at 0, "off" (-1) where the range has it
+    const uint8_t *base = p.scope == EDScopeVoice ? v : r;
+    NSUInteger o = p.offset, w = (p.type == EDParamU16BE || p.type == EDParamS16BE) ? 2 : 1;
+    NSUInteger limit = p.scope == EDScopePreset ? kE4Header : p.scope == EDScopeVoice ? kE4Voice : kE4Ref; if (o + w > limit) return NO;
+    switch (p.type) {
+        case EDParamU8: *out = base[o]; break;
+        case EDParamS8: *out = (int8_t)base[o]; break;
+        case EDParamU16BE: *out = (base[o] << 8) | base[o + 1]; break;
+        case EDParamS16BE: *out = (int16_t)((base[o] << 8) | base[o + 1]); break;
+    }
+    *out = MAX(p.min, MIN(p.max, *out)); return YES;
+}
+
 // MARK: structural edits (E4)
 
 - (BOOL)addRefToVoice:(NSInteger)v {

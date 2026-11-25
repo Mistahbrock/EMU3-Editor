@@ -28,6 +28,8 @@ typedef NS_ENUM(NSInteger, EDParamScope) { EDScopePreset, EDScopeVoice, EDScopeR
 - (NSInteger)voiceCount;
 - (NSInteger)refCountInVoice:(NSInteger)voice;         // sample references (0 for 3X presets, whose voices hold one sample)
 - (NSInteger)valueOfParam:(EDParam *)p voice:(NSInteger)v ref:(NSInteger)r;
+/// The value a new voice / zone / preset starts with (the template of "Voices > Utils > New"). NO when there is none (3X presets, sample numbers).
+- (BOOL)getDefault:(NSInteger *)out ofParam:(EDParam *)p;
 - (void)setValue:(NSInteger)value ofParam:(EDParam *)p voice:(NSInteger)v ref:(NSInteger)r;   // clamped to the param range
 /// Structural edits (E4 presets only). Return NO when not possible.
 - (BOOL)addRefToVoice:(NSInteger)v;

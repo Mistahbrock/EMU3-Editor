@@ -188,10 +188,38 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
 }
 @end
 
+/// Double-click on a value box: the first click starts editing and the field editor then owns the second one, so both the box and its editor report it.
+@interface EDLCDFieldEditor : NSTextView
+@end
+@interface EDLCDFieldCell : NSTextFieldCell
+@end
 @interface EDPresetLCDField : NSTextField
 @property (nonatomic) NSInteger paramTag;
+@property (nonatomic, copy) void (^wheel)(NSInteger steps);
+@property (nonatomic, copy) void (^reset)(void);
 @end
-@implementation EDPresetLCDField
+@implementation EDLCDFieldEditor
+- (void)mouseDown:(NSEvent *)e { id d = self.delegate; if (e.clickCount == 2 && [d isKindOfClass:NSControl.class] && [d respondsToSelector:@selector(reset)] && [(EDPresetLCDField *)d reset]) { ((void (^)(void))[(EDPresetLCDField *)d reset])(); return; } [super mouseDown:e]; }
+@end
+@implementation EDLCDFieldCell
+- (NSTextView *)fieldEditorForView:(NSView *)v {
+    static EDLCDFieldEditor *ed; if (!ed) { ed = [[EDLCDFieldEditor alloc] initWithFrame:NSZeroRect]; ed.fieldEditor = YES; }
+    return ed;
+}
+@end
+@implementation EDPresetLCDField { CGFloat _acc; }
++ (Class)cellClass { return EDLCDFieldCell.class; }
+- (void)mouseDown:(NSEvent *)e { if (e.clickCount == 2 && self.reset && self.isEditable) { self.reset(); return; } [super mouseDown:e]; }
+/// Mouse wheel over a value: one click = one step (Shift = 10); trackpads accumulate small deltas.
+- (void)scrollWheel:(NSEvent *)e {
+    CGFloat dy = e.isDirectionInvertedFromDevice ? -e.scrollingDeltaY : e.scrollingDeltaY;   // wheel up = larger, whatever the natural-scrolling setting
+    if (!self.wheel || !self.isEnabled || !self.isEditable || dy == 0) { [super scrollWheel:e]; return; }
+    if (e.phase == NSEventPhaseBegan || e.phase == NSEventPhaseMayBegin) _acc = 0;
+    _acc += e.hasPreciseScrollingDeltas ? dy : (dy > 0 ? 1 : -1);
+    CGFloat step = e.hasPreciseScrollingDeltas ? 10 : 1; NSInteger n = 0;
+    while (fabs(_acc) >= step) { NSInteger dir = _acc > 0 ? 1 : -1; _acc -= dir * step; n += dir; }
+    if (n) self.wheel(n * ((e.modifierFlags & NSEventModifierFlagShift) ? 10 : 1));
+}
 @end
 
 @implementation EDPresetLCD {
@@ -245,7 +273,7 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
         [_context.trailingAnchor constraintEqualToAnchor:_prevV.leadingAnchor constant:-12], [_context.centerYAnchor constraintEqualToAnchor:_menuRow.centerYAnchor],
         [_graph.topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:40], [_graph.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:330],
         [_scaleBtn.topAnchor constraintEqualToAnchor:_graph.bottomAnchor constant:8], [_scaleBtn.trailingAnchor constraintEqualToAnchor:_graph.trailingAnchor],
-        [_graph.widthAnchor constraintEqualToConstant:460], [_graph.heightAnchor constraintEqualToConstant:250],
+        [_graph.trailingAnchor constraintEqualToAnchor:_context.leadingAnchor], [_graph.widthAnchor constraintGreaterThanOrEqualToConstant:300], [_graph.heightAnchor constraintEqualToConstant:250],
         [_grid.topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:22], [_grid.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:24],
         [_empty.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_screen.centerYAnchor constant:-20], [_empty.widthAnchor constraintEqualToConstant:420],
         [_keys.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-12],
@@ -369,6 +397,22 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
     f.font = [EDTheme lcdFont:wide ? 16 : 13]; f.textColor = EDTheme.lcdInk; f.bordered = NO; f.drawsBackground = NO; f.focusRingType = NSFocusRingTypeNone;
     f.editable = !p.readOnly; f.alignment = NSTextAlignmentCenter; f.wantsLayer = YES; f.layer.borderWidth = p.readOnly ? 0 : 1.5; f.layer.borderColor = EDTheme.lcdInk.CGColor; f.layer.cornerRadius = 0;
     f.target = self; f.action = @selector(fieldCommitted:); f.paramTag = (NSInteger)_fieldParams.count; [_fieldParams addObject:p];
+    __weak EDPresetLCD *wl = self; __weak EDPresetLCDField *wf = f;
+    f.wheel = ^(NSInteger n) { EDPresetLCD *me = wl; EDPresetLCDField *fl = wf; if (!me || !fl) return; [me wheelStep:n field:fl]; };
+    if (!p.readOnly) {   // right-click: reset, or one of the values that matter for this box
+        NSMenu *m = [NSMenu new]; NSInteger dv = 0; BOOL hasDef = [_preset getDefault:&dv ofParam:p];
+        NSString *(^show)(NSInteger) = ^NSString *(NSInteger k) { return p.isNote && !p.isSample ? [EDParam noteName:k] : [NSString stringWithFormat:@"%ld", (long)k]; };
+        void (^add)(NSString *, SEL, NSInteger, NSNumber *, BOOL) = ^(NSString *t, SEL a, NSInteger tag, NSNumber *val, BOOL on) {
+            NSMenuItem *it = [m addItemWithTitle:[(on ? @"✓ " : @"   ") stringByAppendingString:t] action:a keyEquivalent:@""]; it.target = self; it.tag = tag; it.representedObject = val; };
+        if (hasDef) add(@"Reset to Default", @selector(menuReset:), f.paramTag, nil, NO);
+        NSMutableArray<NSNumber *> *vals = [NSMutableArray array];
+        if (p.max - p.min <= 16) for (NSInteger k = p.min; k <= p.max; k++) [vals addObject:@(k)];
+        else { NSMutableSet *seen = [NSMutableSet set]; for (NSNumber *k in @[@(p.min), @(0), @(hasDef ? dv : p.min), @(p.max)]) if (k.integerValue >= p.min && k.integerValue <= p.max && ![seen containsObject:k]) { [seen addObject:k]; [vals addObject:k]; } [vals sortUsingSelector:@selector(compare:)]; }
+        if (vals.count) { if (m.numberOfItems) [m addItem:NSMenuItem.separatorItem];
+            for (NSNumber *k in vals) { NSInteger kv = k.integerValue; NSString *tag = kv == p.min && p.max - p.min > 16 ? @" (min)" : kv == p.max && p.max - p.min > 16 ? @" (max)" : (hasDef && kv == dv && p.max - p.min > 16) ? @" (default)" : @"";
+                add([show(kv) stringByAppendingString:tag], @selector(menuPickValue:), f.paramTag, k, kv == v); } }
+        f.menu = m; [EDTheme useLCDContextMenuOn:f]; }
+    f.reset = ^{ EDPresetLCD *me = wl; EDPresetLCDField *fl = wf; if (me && fl) [me resetField:fl]; };
     [f.widthAnchor constraintEqualToConstant:w].active = YES;
     return f;
 }
@@ -382,6 +426,30 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
 - (void)softKey:(NSButton *)b { _page = b.tag; [self rebuild]; }
 - (void)popPicked:(NSPopUpButton *)b {
     EDParam *p = _fieldParams[b.tag]; if (self.setValue) self.setValue(p, [self vIndex], [self rIndex], b.selectedItem.tag);
+}
+- (void)menuReset:(NSMenuItem *)mi { [self resetParamAt:mi.tag]; }
+- (void)menuPickValue:(NSMenuItem *)mi {
+    if (mi.tag >= (NSInteger)_fieldParams.count) return;
+    [self.window makeFirstResponder:nil];
+    if (self.setValue) self.setValue(_fieldParams[mi.tag], [self vIndex], [self rIndex], [mi.representedObject integerValue]);
+    [self rebuild];
+}
+- (void)resetField:(EDPresetLCDField *)f { [self resetParamAt:f.paramTag]; }
+- (void)resetParamAt:(NSInteger)tag {
+    if (tag >= (NSInteger)_fieldParams.count || !_preset) return;
+    EDParam *p = _fieldParams[tag]; NSInteger dv = 0;
+    BOOL okd = [_preset getDefault:&dv ofParam:p];
+    if (!okd) { NSBeep(); return; }
+    [self.window makeFirstResponder:nil];   // end the editing the first click started, or it commits the old text over the default
+    if (self.setValue) self.setValue(p, [self vIndex], [self rIndex], dv);
+    [self rebuild];
+}
+- (void)wheelStep:(NSInteger)n field:(EDPresetLCDField *)f {
+    if (f.paramTag >= (NSInteger)_fieldParams.count) return;
+    EDParam *p = _fieldParams[f.paramTag]; if (p.readOnly || !self.getValue) return;
+    NSInteger old = self.getValue(p, [self vIndex], [self rIndex]);
+    if (self.setValue) self.setValue(p, [self vIndex], [self rIndex], old + n);
+    [self rebuild];   // shows the clamped value
 }
 - (void)fieldCommitted:(EDPresetLCDField *)f {
     EDParam *p = _fieldParams[f.paramTag];

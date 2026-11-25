@@ -9,6 +9,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) void (^edited)(void);     // called after every change
 @property (nonatomic, copy, nullable) void (^selectionChanged)(void);
 @property (nonatomic, strong, nullable) NSMenu *presetMenu;                 // right-click menu of the preset list; the clicked row is selected first
+@property (nonatomic, copy, nullable) void (^openSample)(EDSample *);   // double-click on a sample: show it on the Samples page
 @property (nonatomic, copy, nullable) void (^presetCountChanged)(void);   // a preset was added, deleted or restored
 @property (nonatomic, readonly) NSInteger selectedIndex;     // row of the selected preset, -1 when none
 - (void)selectIndex:(NSInteger)i;

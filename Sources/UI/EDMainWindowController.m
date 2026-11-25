@@ -130,7 +130,7 @@ static void RememberFolder(NSSavePanel *p, NSString *key) {
     EDPresetEditor *_presetEditor;
     EDMIDIEditor *_midiEditor; NSSegmentedControl *_masterPicker; NSView *_masterOverview; NSButton *_autoSaveBtn, *_convertBtn; BOOL _autoBackedUp, _noConvertOffer, _sessionActive;
     EDHomeList *_home;
-    EDMemoryView *_memory; NSTextField *_ramRow; BOOL _liveMem, _remoteBusy, _samplerAnswered; NSDate *_remoteAt;
+    EDMemoryView *_memory; NSTextField *_ramRow; BOOL _liveMem, _remoteBusy, _samplerAnswered; NSTextField *_waveHint; NSDate *_remoteAt;
     EDRemoteDisk *_remoteDisk; EDSMDIBoard *_remoteBoard; pid_t _remotePid; BOOL _remoteRestoreTarget, _openingRemote; NSString *_remotePort; NSArray<EDSMDIDevice *> *_scsiDrives; BOOL _scsiBusy;
     NSTextField *_samplerStatus; EDDiskIcons *_diskHint; NSView *_mountsBox; id _eggMonitor, _escMonitor, _enterMonitor;
     NSScrollView *_diskScroll, *_outlineScroll; EDLCDSideTab *_diskSideTab; EDNode *_browseNode; BOOL _listView, _inBank, _bankList; NSArray<EDDiskItem *> *_diskItems; NSButton *_viewKey, *_loadKey, *_saveKey, *_infoKey;
@@ -204,6 +204,7 @@ static void RememberFolder(NSSavePanel *p, NSString *key) {
             }
             if (e.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption)) return e;
             if ([me.window.firstResponder isKindOfClass:[NSText class]] || me.window.attachedSheet) return e;
+            NSInteger pg = me->_tabPicker.selectedSegment; if (pg != 1 && pg != 2) return e;   // Space auditions samples only on the Disk and Samples pages
             if (me->_sample && !me->_sample.locked) [me togglePlay:nil];
             return nil;
         }];
@@ -346,6 +347,16 @@ static NSTextField *toolNote(NSString *s) {
     __weak EDMainWindowController *weak = self;
     _wave.loopChanged = ^(BOOL final) { [weak loopDragged:final]; };
     [_wave.heightAnchor constraintGreaterThanOrEqualToConstant:320].active = YES;
+    _waveHint = [NSTextField wrappingLabelWithString:@""];
+    { NSFont *hf = [NSFont monospacedSystemFontOfSize:13 weight:NSFontWeightSemibold]; NSMutableAttributedString *ha = [NSMutableAttributedString new];
+      NSMutableParagraphStyle *flush = [NSMutableParagraphStyle new], *bul = [NSMutableParagraphStyle new]; bul.firstLineHeadIndent = 16; bul.headIndent = 32; bul.paragraphSpacing = 16; flush.paragraphSpacing = 16;
+      void (^add)(NSString *, NSParagraphStyle *) = ^(NSString *t, NSParagraphStyle *ps) { [ha appendAttributedString:[[NSAttributedString alloc] initWithString:t attributes:@{NSFontAttributeName: hf, NSForegroundColorAttributeName: EDTheme.lcdInk, NSParagraphStyleAttributeName: ps}]]; };
+      add(@"Samples\n", flush); add(@"Pick a sample from the list on the left to see its waveform here.\n", flush);
+      for (NSString *t in @[@"Play it with the Play key, or audition from the Disk page.", @"Drag the loop start and end markers in the waveform, or type them in the fields below.", @"Use Sample Edit and Sample Tools above to trim, fade, normalize, change pitch or rate.", @"Export WAV, replace it from a WAV, or send it to the sampler with SMDI.", @"Double-click a sample on the Presets page to jump straight here."]) add([@"• " stringByAppendingString:t], bul), add(@"\n", bul);
+      _waveHint = [NSTextField labelWithAttributedString:ha]; }
+        _waveHint.translatesAutoresizingMaskIntoConstraints = NO; [_wave addSubview:_waveHint];
+    [NSLayoutConstraint activateConstraints:@[[_waveHint.centerXAnchor constraintEqualToAnchor:_wave.centerXAnchor], [_waveHint.centerYAnchor constraintEqualToAnchor:_wave.centerYAnchor],
+        [_waveHint.leadingAnchor constraintGreaterThanOrEqualToAnchor:_wave.leadingAnchor constant:20]]];
 
     // the whole sample editor is one green LCD screen: waveform on top, keys and fields below
     _playButton = [EDTheme lcdKey:@"▶ Play" target:self action:@selector(togglePlay:)];
@@ -381,6 +392,7 @@ static NSTextField *toolNote(NSString *s) {
     _presetEditor = [[EDPresetEditor alloc] initWithFrame:NSMakeRect(0, 0, 800, 500)];
     _presetEditor.edited = ^{ [weak updateTitle]; [weak modelChanged]; };
     _presetEditor.selectionChanged = ^{ [weak modelChanged]; };
+    _presetEditor.openSample = ^(EDSample *sm) { EDMainWindowController *me = weak; [me selectSample:sm]; [me selectTabNamed:@"samples"]; me->_tabPicker.selectedSegment = 2; };
     _presetEditor.presetCountChanged = ^{ [weak refreshBankStatus]; };
     NSMenu *pm = [[NSMenu alloc] initWithTitle:@"Preset"];
     NSMenuItem *mi = [pm addItemWithTitle:@"Preset" action:nil keyEquivalent:@""]; mi.tag = 901; mi.enabled = NO;     // info line, filled in when the menu opens
@@ -758,7 +770,8 @@ static NSTextField *toolNote(NSString *s) {
     NSArray *gs = [(NSStackView *)_cmdBar views];
     for (NSUInteger i = 0; i < gs.count; i++) [gs[i] setHidden:i == 0 ? !diskOnly : diskOnly];   // File: Disk only; the rest: Samples only
 }
-- (IBAction)tabPicked:(id)sender { [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; [self resetStatus]; [self showPresetNote:_tabPicker.selectedSegment == 3]; if (_tabPicker.selectedSegment == 4) { [self refreshMountedImages]; [self refreshLinkSettings]; } _cmdBar.hidden = _cmdRule.hidden = _tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2; [self updateCmdBarGroups:_tabPicker.selectedSegment == 1]; [self refreshLCDVisibility]; }
+- (IBAction)tabPicked:(id)sender { if (_tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2) [_player stop];   // sample audition belongs to the Disk and Samples pages
+    [_tabs selectTabViewItemAtIndex:_tabPicker.selectedSegment]; [self resetStatus]; [self showPresetNote:_tabPicker.selectedSegment == 3]; if (_tabPicker.selectedSegment == 4) { [self refreshMountedImages]; [self refreshLinkSettings]; } _cmdBar.hidden = _cmdRule.hidden = _tabPicker.selectedSegment != 1 && _tabPicker.selectedSegment != 2; [self updateCmdBarGroups:_tabPicker.selectedSegment == 1]; [self refreshLCDVisibility]; }
 - (IBAction)showMasterTab:(id)s { [self selectTabNamed:@"master"]; }
 - (IBAction)showDiskTab:(id)s { [self selectTabNamed:@"disk"]; }
 - (IBAction)showSamplesTab:(id)s { [self selectTabNamed:@"samples"]; }
@@ -1852,7 +1865,7 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     [self modelChanged];
 }
 - (void)refreshAll {
-    BOOL has = _sample != nil;
+    BOOL has = _sample != nil; _waveHint.hidden = has;
     for (NSControl *c in @[_nameField, _rateField, _loopStartField, _loopEndField, _loopCheck, _releaseCheck]) c.enabled = has && !_sample.locked;
     _playButton.enabled = has && !_sample.locked;
     _nameField.stringValue = _sample.name ?: @"";
@@ -2262,10 +2275,11 @@ static NSString *Dur(double s) { return s < 1 ? [NSString stringWithFormat:@"%.0
     if (a == @selector(newPresetFromMenu:)) return [_bank.formType hasPrefix:@"E4B"];
     if (a == @selector(importPresetsFromBank:) || a == @selector(importPresetsFromDisk:)) return [_bank.formType hasPrefix:@"E4B"];
     if (a == @selector(sendPresetToSamplerDisk:) || a == @selector(exportPresetBank:)) return [self selectedPreset].kind == EDPresetKindE4 && [_bank.formType hasPrefix:@"E4B"];
-    if (a == @selector(exportWAV:) || a == @selector(importWAV:) || a == @selector(sdsTransfer:) || a == @selector(smdiTransfer:) || a == @selector(sendToSamplerDisk:) || a == @selector(togglePlay:) || a == @selector(normalize:) ||
+    if (a == @selector(exportWAV:) || a == @selector(importWAV:) || a == @selector(sdsTransfer:) || a == @selector(smdiTransfer:) || a == @selector(sendToSamplerDisk:) || a == @selector(normalize:) ||
         a == @selector(reverseSample:) || a == @selector(fadeIn:) || a == @selector(fadeOut:) || a == @selector(removeDC:) ||
         a == @selector(cropToLoop:) || a == @selector(crossfadeLoop:) || a == @selector(gainChange:) || a == @selector(sampleRateConvert:) || a == @selector(digitalTuning:) || a == @selector(bitConvert:) || a == @selector(zoomIn:) || a == @selector(zoomOut:) ||
         a == @selector(zoomFit:) || a == @selector(zoomLoop:)) return _sample != nil && !_sample.locked;
+    if (a == @selector(togglePlay:)) return _sample != nil && !_sample.locked && (_tabPicker.selectedSegment == 1 || _tabPicker.selectedSegment == 2);
     if (a == @selector(swapChannels:) || a == @selector(stereoToMono:)) return _sample != nil && !_sample.locked && _sample.isStereo;
     if (a == @selector(monoToStereo:)) return _sample != nil && !_sample.locked && !_sample.isStereo;
     return YES;
