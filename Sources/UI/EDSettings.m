@@ -1,5 +1,7 @@
 #import "EDSettings.h"
 #import "EDTheme.h"
+#import "EDAddOns.h"
+#import "EDAlert.h"
 #import "EDPreset+Params.h"
 #import <objc/runtime.h>
 
@@ -35,6 +37,7 @@ static NSArray<NSArray<NSString *> *> *FolderKinds(void) {
     NSWindow *_win;
     NSMutableArray<NSTextField *> *_pathFields;
     NSButton *_autoSave, *_offerConvert, *_tips; NSTextField *_modelLabel; NSPopUpButton *_auditionKey;
+    NSButton *_removeAddOns; NSTextField *_addOnLabel;
 }
 
 + (void)show {
@@ -53,7 +56,7 @@ static NSView *rule(void) {
 
 - (void)build {
     _win = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 640, 100) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
-    _win.title = @"Settings"; _win.releasedWhenClosed = NO; [EDTheme styleWindow:_win];
+    _win.title = @"Settings"; _win.releasedWhenClosed = NO; _win.delegate = self; [EDTheme styleWindow:_win];
     NSStackView *col = [NSStackView stackViewWithViews:@[]]; col.orientation = NSUserInterfaceLayoutOrientationVertical; col.alignment = NSLayoutAttributeLeading; col.spacing = 8;
     col.edgeInsets = NSEdgeInsetsMake(20, 24, 22, 24);
     void (^section)(NSString *) = ^(NSString *t) {
@@ -91,6 +94,12 @@ static NSView *rule(void) {
     _auditionKey.target = self; _auditionKey.action = @selector(auditionChanged:); _auditionKey.toolTip = @"The key that Space plays on the Presets page.";
     NSStackView *arow = [NSStackView stackViewWithViews:@[label(@"Audition key", NO), _auditionKey]]; arow.spacing = 12;
     [col addArrangedSubview:ah]; [col addArrangedSubview:arow];
+    section(@"Add Ons");
+    _addOnLabel = label(@"", NO); _addOnLabel.textColor = NSColor.secondaryLabelColor; _addOnLabel.font = [NSFont systemFontOfSize:12];
+    _addOnLabel.lineBreakMode = NSLineBreakByTruncatingTail; [_addOnLabel.widthAnchor constraintEqualToConstant:590].active = YES;
+    _removeAddOns = [NSButton buttonWithTitle:@"Remove Add Ons…" target:self action:@selector(removeAddOns:)];
+    _removeAddOns.toolTip = @"Moves the installed Add Ons to the Trash. Emu_Imager stays.";
+    [col addArrangedSubview:_addOnLabel]; [col addArrangedSubview:_removeAddOns];
     section(@"Help");
     _autoSave.toolTip = @"When the open bank is on the sampler's disk, write it back a few seconds after you stop editing.";
     _offerConvert.toolTip = @"When you open a 3X / ESI-32 bank, ask whether to make an EOS copy.";
@@ -124,6 +133,39 @@ static NSView *rule(void) {
     { NSInteger ak = [d objectForKey:@"AuditionKey"] ? [d integerForKey:@"AuditionKey"] : 60; [_auditionKey selectItemWithTag:MAX(0, MIN(127, ak))]; }
     _tips.state = TipsOn() ? NSControlStateValueOn : NSControlStateValueOff;
     _offerConvert.state = [d boolForKey:@"SkipConvertOffer"] ? NSControlStateValueOff : NSControlStateValueOn;
+    NSArray<NSString *> *extra = [self addOnNames:[self removableAddOns]];
+    _addOnLabel.stringValue = extra.count ? [@"Emu_Imager comes with the editor and stays. Also installed: " stringByAppendingString:[extra componentsJoinedByString:@", "]]
+                                          : @"Emu_Imager comes with the editor and stays. No other Add Ons are installed.";
+    _removeAddOns.enabled = extra.count > 0;
+}
+- (void)windowDidBecomeKey:(NSNotification *)n { [self refresh]; }   // an Add On may have been installed meanwhile
+
+// MARK: Add Ons
+- (NSArray<NSURL *> *)removableAddOns { return [EDAddOns removableApps:[EDAddOns appsInFolder:EDAddOns.folder]]; }
+- (NSArray<NSString *> *)addOnNames:(NSArray<NSURL *> *)apps {
+    NSMutableArray<NSString *> *names = [NSMutableArray array]; for (NSURL *u in apps) [names addObject:[EDAddOns titleFor:u]]; return names;
+}
+- (BOOL)isRunning:(NSURL *)app {
+    NSString *path = app.path.stringByResolvingSymlinksInPath;
+    for (NSRunningApplication *r in NSWorkspace.sharedWorkspace.runningApplications) if ([r.bundleURL.path.stringByResolvingSymlinksInPath isEqualToString:path]) return YES;
+    return NO;
+}
+- (void)removeAddOns:(id)sender {
+    NSArray<NSURL *> *apps = [self removableAddOns]; NSArray<NSString *> *names = [self addOnNames:apps];
+    if (!apps.count) { [self refresh]; return; }
+    EDAlert *a = [EDAlert new];
+    a.messageText = apps.count == 1 ? @"Remove this Add On?" : [NSString stringWithFormat:@"Remove %lu Add Ons?", (unsigned long)apps.count];
+    a.informativeText = [NSString stringWithFormat:@"%@\n\nMoved to the Trash. Emu_Imager stays.", [names componentsJoinedByString:@"\n"]];
+    [a addButtonWithTitle:@"Remove"]; [a addButtonWithTitle:@"Cancel"];
+    if ([a runModal] != NSAlertFirstButtonReturn) return;
+    NSMutableArray<NSString *> *failed = [NSMutableArray array];
+    for (NSURL *u in apps) {
+        NSError *e = nil;
+        if ([self isRunning:u]) [failed addObject:[NSString stringWithFormat:@"%@ is running. Quit it first.", [EDAddOns titleFor:u]]];
+        else if (![NSFileManager.defaultManager trashItemAtURL:u resultingItemURL:nil error:&e]) [failed addObject:[NSString stringWithFormat:@"%@: %@", [EDAddOns titleFor:u], e.localizedDescription]];
+    }
+    [self refresh];
+    if (failed.count) [EDTheme notice:[@"Not removed:\n" stringByAppendingString:[failed componentsJoinedByString:@"\n"]]];
 }
 
 - (void)chooseFolder:(NSButton *)b {

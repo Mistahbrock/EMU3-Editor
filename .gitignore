@@ -6,3 +6,4 @@ EOV 4,62/
 *.pdf
 *.img
 *.hda
+dist/

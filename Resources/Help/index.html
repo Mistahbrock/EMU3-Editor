@@ -34,6 +34,7 @@ th{color:var(--dim);font-weight:600}
 <a href="#samples">Samples</a>
 <a href="#presets">Presets</a>
 <a href="#tools">Tools</a>
+<a href="#addons">Add Ons</a>
 <a href="#convert">Converting 3X banks</a>
 <a href="#sampler">Sampler &amp; BlueSCSI</a>
 <a href="#midi">MIDI transfer</a>
@@ -102,6 +103,31 @@ th{color:var(--dim);font-weight:600}
 <li><b>Mounts:</b> the disks that are mounted now. Double-click one to open it.</li>
 </ul>
 
+<h2 id="addons">Add Ons</h2>
+<p>Add Ons are separate small apps that you open from the editor. They are listed in the <b>Tools menu</b> in the menu bar. (The <i>Tools</i> page, <kbd>⌘9</kbd>, is something else.) <i>Emu_Imager</i>, which comes with the editor, is at the top; other Add Ons you have installed are below a line, in alphabetical order.</p>
+
+<h3>Emu_Imager</h3>
+<p>Prepares disk images and SD cards for samplers with BlueSCSI.</p>
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr><td style="white-space:nowrap"><i>New Image…</i></td><td>Creates a disk image from 8 MB to 512 GB, formatted as an empty EOS disk unless you untick that. BlueSCSI takes the SCSI ID from the name: <code>HD20_14GB.hda</code> is ID 2. An existing file is never overwritten.</td></tr>
+<tr><td style="white-space:nowrap"><i>Format Image…</i></td><td><b>Erases</b> an existing EOS image: all its folders and banks are lost. The layout is verified for 1 GB and 14 GB images; for other sizes, formatting on the sampler is the safest choice.</td></tr>
+<tr><td style="white-space:nowrap"><i>Check SD Card…</i></td><td>Shows the size, free space and format of the inserted cards.</td></tr>
+<tr><td style="white-space:nowrap"><i>Format SD Card…</i></td><td><b>Erases</b> a whole card and formats it as exFAT (recommended) or FAT32 (images below 4 GB only), with the partition table BlueSCSI expects. Only external disks of 256 GB or less are offered.</td></tr>
+</table>
+<div class="note">Check that you have chosen the right card before you format it. A card sitting in a BlueSCSI board that is connected by USB can be in the list too.</div>
+<p><i>Format Image…</i> refuses an image that another program has open. EMU3 Disk Manager holds the images it has mounted open: move the image out of its image folder, format it, and move it back.</p>
+
+<h3>Installing an Add On</h3>
+<ul>
+<li>The EMU3 Editor installer installs Emu_Imager for you.</li>
+<li>Other Add Ons come with their own installer, or as an app that you put in <code>~/Library/Application Support/EMU3 Editor/Add Ons</code> (in the Finder: <i>Go ▸ Go to Folder…</i>, <kbd>⇧⌘G</kbd>).</li>
+<li>A new Add On shows up the next time you click the menu bar. You don't have to restart the editor.</li>
+</ul>
+
+<h3>Removing Add Ons</h3>
+<p><i>EMU3 Editor ▸ Settings… ▸ Remove Add Ons…</i> lists the installed Add Ons and, when you confirm, moves all of them to the Trash. Emu_Imager stays. An Add On that is running is not removed: quit it and try again. To get one back, move it from the Trash to the Add Ons folder, or install it again.</p>
+
 <h2 id="convert">Converting 3X / ESI-32 banks</h2>
 <p>Emulator 3X and ESI-32 banks cannot be loaded by an E4 / E64 / E6400 as they are. The editor can write an EOS (E4B) copy of them. The original is never changed.</p>
 <ul>
@@ -123,6 +149,7 @@ th{color:var(--dim);font-weight:600}
 <li><b>Folders for file dialogs:</b> each dialog opens in the folder you used last. <i>Choose…</i> pins a folder; <i>Last Used</i> goes back to following your last one.</li>
 <li><b>Auto-save</b> to the sampler's disk, <b>convert offer</b> for 3X banks, <b>tool tips</b> on/off.</li>
 <li><b>Set Defaults</b> puts all of these back to the start values.</li>
+<li><b>Remove Add Ons…</b> moves the installed Add Ons to the Trash, after asking. Emu_Imager comes with the editor and stays (see <a href="#addons">Add Ons</a>).</li>
 </ul>
 
 <h2 id="keys">Keyboard</h2>
@@ -149,6 +176,8 @@ th{color:var(--dim);font-weight:600}
 <h2 id="trouble">Troubleshooting</h2>
 <h3>The sampler does not see my disk</h3>
 <p>Check the SCSI IDs: sampler 6, board 7, disk not equal to either. Run <i>Find Sampler</i> and check the USB cable to the board.</p>
+<h3>An Add On is not in the Tools menu</h3>
+<p>It has to be an app in the Add Ons folder (see <a href="#addons">Add Ons</a>). If Emu_Imager is missing, run the EMU3 Editor installer again.</p>
 <h3>A bank will not open</h3>
 <p>Only EOS (E4B) and Emulator 3X / ESI-32 v3 banks are read. Original Emulator III banks are not supported yet.</p>
 <h3>A converted bank sounds wrong</h3>

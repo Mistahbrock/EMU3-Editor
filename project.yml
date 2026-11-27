@@ -23,8 +23,10 @@ targets:
         INFOPLIST_FILE: Resources/Info.plist
         CLANG_ENABLE_OBJC_ARC: YES
         GENERATE_INFOPLIST_FILE: NO
-        CODE_SIGN_IDENTITY: "-"
-        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Sources/Disk", "$(SRCROOT)/Sources/Model", "$(SRCROOT)/Sources/UI", "$(SRCROOT)/Sources/MIDI"]
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: WPR6A3C8NM
+        HEADER_SEARCH_PATHS: ["$(SRCROOT)/Sources/App", "$(SRCROOT)/Sources/Disk", "$(SRCROOT)/Sources/Model", "$(SRCROOT)/Sources/UI", "$(SRCROOT)/Sources/MIDI"]
     dependencies:
       - sdk: AudioToolbox.framework
       - sdk: AVFoundation.framework

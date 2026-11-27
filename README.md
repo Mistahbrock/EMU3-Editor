@@ -51,6 +51,26 @@ Model tests (synthetic banks, no sampler data):
 bash Tests/run-tests.sh
 ```
 
+## Installer
+
+```bash
+Installer/build-installer.sh
+```
+
+This writes `dist/EMU3Editor-<version>.pkg`, which installs for the current user, with no administrator password:
+
+- EMU3 Editor in `~/Applications/Rhyno Audio`
+- Emu_Imager (disk images and SD cards) as an Add On, in `~/Library/Application Support/EMU3 Editor/Add Ons`,
+  where the editor lists it in its Tools menu
+
+Emu_Imager is built from its own project, expected in a folder named `Emu_Imager` next to this one. Set
+`IMAGER_DIR` to use another folder, or `IMAGER_DIR=none` to build the installer without it.
+
+Before installing, the package moves other copies of these apps to the Trash: app bundles with their identifiers
+(renamed copies too) in `/Applications`, `~/Applications` and the Add Ons folder, and zip files there that hold only
+one such app. Banks, backups, settings and build folders are not touched. The package is not signed with a
+Developer ID or notarized, so another Mac will warn before opening it.
+
 ## Documentation
 
 - [docs/STATUS.md](docs/STATUS.md): what is done, verified on real data, and still unverified.

@@ -43,7 +43,7 @@
 @end
 @implementation EDLogoView
 - (NSSize)intrinsicContentSize { return NSMakeSize(210, 44); }
-// clicking the logo opens the About box (the app menu no longer has an About item)
+// clicking the logo opens the About box (as does the app menu's About item)
 - (BOOL)acceptsFirstMouse:(NSEvent *)e { return YES; }
 - (void)mouseDown:(NSEvent *)e { [NSApp sendAction:NSSelectorFromString(@"showAbout:") to:NSApp.delegate from:self]; }
 - (void)resetCursorRects { [self addCursorRect:self.bounds cursor:NSCursor.pointingHandCursor]; }

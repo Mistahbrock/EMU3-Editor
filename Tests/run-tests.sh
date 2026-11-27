@@ -3,6 +3,8 @@ set -e
 cd "$(dirname "$0")/.."
 mkdir -p build
 python3 -I Tests/make_test_bank.py build/test.e4b
+clang -fobjc-arc -Wall -ISources/App Sources/App/EDAddOns.m Tests/AddOnsTest.m -framework Foundation -o build/addonstest
+build/addonstest
 clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/NSData+EDWrite.m Sources/Model/EDLegacyBank.m Tests/ModelSelfTest.m -framework Foundation -framework AudioToolbox -o build/modeltest
 build/modeltest build/test.e4b
 clang -fobjc-arc -Wall -ISources/Model Sources/Model/EDBank.m Sources/Model/NSData+EDWrite.m Sources/Model/EDLegacyBank.m Sources/Model/EDSample+Ops.m Tests/OpsTest.m -framework Foundation -framework AudioToolbox -o build/opstest

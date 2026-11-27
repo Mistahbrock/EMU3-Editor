@@ -1,0 +1,19 @@
+#!/bin/bash
+# Run by the installer, as the installing user, before the new app is copied. build-installer.sh fills in @...@.
+[ -n "$HOME" ] && [ "$HOME" != "/" ] || { echo "preinstall: no home folder" >&2; exit 1; }
+
+remove() {
+  "$(dirname "$0")/remove-old-installs.sh" "$@" \
+    "/Applications" "$HOME/Applications" "$HOME/Library/Application Support/EMU3 Editor/Add Ons"
+}
+# other apps in the same package must not be running either: stop before anything is removed
+for other in @ALSO_CHECK@; do
+  remove --check "$other" "$HOME" || exit 1
+done
+remove "@BUNDLE_ID@" "$HOME" || exit 1
+
+# forget the records of other package variants, whose app is gone now
+for receipt in @OLD_RECEIPTS@; do
+  pkgutil --volume "$HOME" --forget "$receipt" >/dev/null 2>&1
+done
+exit 0

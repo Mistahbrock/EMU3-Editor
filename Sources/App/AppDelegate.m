@@ -3,8 +3,9 @@
 #import "EDSettings.h"
 #import "EDHelp.h"
 #import "EDMainWindowController.h"
+#import "EDAddOns.h"
 
-@implementation AppDelegate { EDMainWindowController *_main; }
+@implementation AppDelegate { EDMainWindowController *_main; NSMenu *_toolsMenu; }
 
 static NSMenuItem *item(NSMenu *m, NSString *title, SEL a, NSString *key, id target) {
     NSMenuItem *i = [m addItemWithTitle:title action:a keyEquivalent:key ?: @""]; i.target = target; return i;
@@ -77,10 +78,29 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
 - (void)showSettings:(id)s { [EDSettings show]; }
 - (void)showHelp:(id)s { [EDHelp show]; }
 
+/// Tools menu: the Add On apps in the folder, Emu_Imager first and installed ones below a separator. Refilled when the menu bar is clicked and when the editor comes to the front, so a newly installed one shows up without a restart.
+- (void)refreshToolsMenu {
+    [_toolsMenu removeAllItems];
+    for (NSArray<NSURL *> *group in [EDAddOns menuGroups:[EDAddOns appsInFolder:EDAddOns.folder]]) {
+        if (_toolsMenu.numberOfItems) [_toolsMenu addItem:NSMenuItem.separatorItem];
+        for (NSURL *u in group) item(_toolsMenu, [EDAddOns titleFor:u], @selector(openAddOn:), @"", self).representedObject = u;
+    }
+    if (!_toolsMenu.numberOfItems) [_toolsMenu addItemWithTitle:@"No Add Ons Installed" action:nil keyEquivalent:@""].enabled = NO;
+    [EDTheme styleDarkMenu:_toolsMenu];
+}
+- (void)applicationDidBecomeActive:(NSNotification *)n { [self refreshToolsMenu]; }
+- (void)openAddOn:(NSMenuItem *)sender {
+    [NSWorkspace.sharedWorkspace openApplicationAtURL:sender.representedObject configuration:NSWorkspaceOpenConfiguration.configuration completionHandler:^(NSRunningApplication *app, NSError *e) {
+        if (e) dispatch_async(dispatch_get_main_queue(), ^{ [NSApp presentError:e]; });
+    }];
+}
+
 - (void)buildMenus {
     NSMenu *bar = [NSMenu new]; NSApp.mainMenu = bar;
     #define SUB(title) ({ NSMenuItem *mi = [bar addItemWithTitle:title action:nil keyEquivalent:@""]; NSMenu *sm = [[NSMenu alloc] initWithTitle:title]; mi.submenu = sm; sm; })
     NSMenu *app = SUB(@"EMU3 Editor");
+    item(app, @"About EMU3 Editor", @selector(showAbout:), @"", self);
+    [app addItem:NSMenuItem.separatorItem];
     item(app, @"Settings…", @selector(showSettings:), @",", self);
     [app addItem:NSMenuItem.separatorItem];
     item(app, @"Hide EMU3 Editor", @selector(hide:), @"h", NSApp);
@@ -144,6 +164,9 @@ static void collectTables(NSView *v, NSMutableString *out, NSInteger depth) {
     item(xfer, @"Utils: Assign Key…", @selector(showAssignKeys:), @"", _main);
     item(xfer, @"Utils: Channel Volume…", @selector(showChannelVolume:), @"", _main);
     item(xfer, @"Utils: Tones…", @selector(showTones:), @"", _main);
+
+    _toolsMenu = SUB(@"Tools"); [self refreshToolsMenu];
+    [NSNotificationCenter.defaultCenter addObserverForName:NSMenuDidBeginTrackingNotification object:bar queue:nil usingBlock:^(NSNotification *n) { [self refreshToolsMenu]; }];
 
     NSMenu *view = SUB(@"View");
     item(view, @"Master", @selector(showMasterTab:), @"1", _main);

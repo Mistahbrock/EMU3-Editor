@@ -3,6 +3,7 @@
 #import "EDPreset+Params.h"
 #import "EDTheme.h"
 #import "EDPlayer.h"
+#import "EDPresetPlayer.h"
 
 // outline node: the preset, one of its voices, or one sample reference of a voice
 @interface EDPNode : NSObject
@@ -31,6 +32,7 @@
 @property (nonatomic, copy) void (^keyDown)(int key);                      // the on-screen keyboard was pressed / dragged to a new key
 @property (nonatomic, copy) void (^keyUp)(void);
 @property (nonatomic) int pressedKey;                                       // -1 when none
+@property (nonatomic) int velocity;                                         // from where on the key the mouse is: top soft, bottom hard
 @end
 @implementation EDKeyMapView
 - (BOOL)isFlipped { return YES; }
@@ -90,14 +92,15 @@
     CGFloat w = self.bounds.size.width - 16; int k = (int)floor((p.x - 8) / w * 128);
     return MAX(0, MIN(127, k));
 }
+- (int)velocityAtPoint:(NSPoint)p { CGFloat t = (p.y - (self.bounds.size.height - 26)) / 26; return 25 + (int)llround(102 * MAX(0, MIN(1, t))); }
 - (void)mouseDown:(NSEvent *)e {
     NSPoint p = [self convertPoint:e.locationInWindow fromView:nil];
-    if (p.y >= self.bounds.size.height - 26) { self.pressedKey = [self keyAtPoint:p]; self.needsDisplay = YES; if (self.keyDown) self.keyDown(self.pressedKey); return; }
+    if (p.y >= self.bounds.size.height - 26) { self.velocity = [self velocityAtPoint:p]; self.pressedKey = [self keyAtPoint:p]; self.needsDisplay = YES; if (self.keyDown) self.keyDown(self.pressedKey); return; }
     for (NSUInteger i = 0; i < self.bars.count; i++) if (NSPointInRect(p, NSInsetRect([self barRect:i], 0, -1)) && self.picked) { self.picked(self.bars[i][@"node"]); return; }
 }
 - (void)mouseDragged:(NSEvent *)e {
     if (self.pressedKey < 0) return;
-    int k = [self keyAtPoint:[self convertPoint:e.locationInWindow fromView:nil]];
+    NSPoint dp = [self convertPoint:e.locationInWindow fromView:nil]; int k = [self keyAtPoint:dp]; self.velocity = [self velocityAtPoint:dp];
     if (k != self.pressedKey) { self.pressedKey = k; self.needsDisplay = YES; if (self.keyDown) self.keyDown(k); }
 }
 - (void)mouseUp:(NSEvent *)e {
@@ -216,7 +219,7 @@
     EDPreset *_preset;
     EDPNode *_sel;
     EDKeyMapView *_keyMap;
-    EDPlayer *_player;
+    EDPlayer *_player; EDPresetPlayer *_presetPlayer; int _heldKey;
     EDPresetLCD *_lcd; NSView *_paramScroll; NSSegmentedControl *_viewSeg;
 }
 
@@ -262,6 +265,8 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     for (NSArray *k in @[@[@"＋ Voice", @"newVoice:"], @[@"Copy voice", @"dupVoice:"], @[@"Delete voice", @"removeVoice:"], @"-", @[@"＋ Sample", @"addRef:"], @[@"－ Sample", @"removeRef:"]]) {
         if ([k isKindOfClass:NSString.class]) { [_outlineMenu addItem:NSMenuItem.separatorItem]; continue; }
         NSMenuItem *it = [_outlineMenu addItemWithTitle:k[0] action:NSSelectorFromString(k[1]) keyEquivalent:@""]; it.target = self; }
+    [_outlineMenu addItem:NSMenuItem.separatorItem];
+    [_outlineMenu addItemWithTitle:@"Save as Bank on Sampler Disk…" action:@selector(sendPresetToSamplerDisk:) keyEquivalent:@""];   // no target: the main window handles it, as in the preset list's menu
     _outline.menu = _outlineMenu; [EDTheme useLCDContextMenuOn:_outline];
     NSStackView *btnRow1 = [NSStackView stackViewWithViews:@[_newVoice, _dupVoice, _removeVoice]]; btnRow1.spacing = 4;
     NSStackView *btnRow2 = [NSStackView stackViewWithViews:@[_addRef, _removeRef]]; btnRow2.spacing = 4;
@@ -308,6 +313,14 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     [_keyMap.heightAnchor constraintEqualToConstant:176].active = YES;
     __weak EDPresetEditor *weak = self;
     _keyMap.pressedKey = -1;
+    _heldKey = -1; _presetPlayer = [EDPresetPlayer new];
+    _presetPlayer.midiNote = ^(int key, int vel, BOOL on) {   // a MIDI keyboard plays the selected preset while this page is showing
+        EDPresetEditor *me = weak; if (!me || !me.window || me.hiddenOrHasHiddenAncestor || !me->_preset) return;
+        if (on) { me->_hint.stringValue = [me->_presetPlayer noteOn:key velocity:vel preset:me->_preset bank:me->_bank]; me->_keyMap.pressedKey = key; }
+        else { [me->_presetPlayer noteOff:key]; if (me->_keyMap.pressedKey == key) me->_keyMap.pressedKey = -1; }
+        me->_keyMap.needsDisplay = YES;
+    };
+    [_presetPlayer startMIDIInput];
     _keyMap.picked = ^(id node) { [weak pickNode:node]; };
     _keyMap.keyDown = ^(int k) { [weak playKey:k]; };
     _keyMap.keyUp = ^{ [weak endKey]; };
@@ -350,7 +363,7 @@ static NSView *lcdPanelOf(NSView *v, NSView *footer) { return [EDTheme framedLCD
     if (menu == _outlineMenu) {
         NSInteger cr = _outline.clickedRow; if (cr >= 0 && cr != _outline.selectedRow) [_outline selectRowIndexes:[NSIndexSet indexSetWithIndex:cr] byExtendingSelection:NO];
         NSDictionary *on = @{@"newVoice:": @(_newVoice.enabled), @"dupVoice:": @(_dupVoice.enabled), @"removeVoice:": @(_removeVoice.enabled), @"addRef:": @(_addRef.enabled), @"removeRef:": @(_removeRef.enabled)};
-        for (NSMenuItem *i in menu.itemArray) if (i.action) i.enabled = [on[NSStringFromSelector(i.action)] boolValue];
+        for (NSMenuItem *i in menu.itemArray) if (i.action) i.enabled = on[NSStringFromSelector(i.action)] ? [on[NSStringFromSelector(i.action)] boolValue] : (_preset != nil && _preset.kind == EDPresetKindE4);
         return;
     }
     NSInteger r = _presetTable.clickedRow;
@@ -549,30 +562,24 @@ static BOOL InView(id r, NSView *v) { return [r isKindOfClass:NSView.class] && [
 
 // MARK: playing the on-screen keyboard
 
-/// Plays the zone under `key`: the first zone (in voice order) whose key window contains it, at the pitch of that key relative to the zone's
-/// root key. Held until the mouse is released; a looped sample sustains. Only the zone's key window, root key and sample are used — not the
-/// voice's envelopes, filter, tuning or velocity, so it is an audition, not an emulation of the sampler.
-- (void)playKey:(int)k {
+/// Plays `key` on the selected preset with the preset player (all matching zones, volume envelope, pan, tuning) until the key is released.
+- (void)playKey:(int)k { [self playKey:k velocity:_keyMap.velocity ?: 100]; }
+- (void)playKey:(int)k velocity:(int)vel {
     if (_preset.kind != EDPresetKindE4) { _hint.stringValue = @"Keyboard audition works on EOS presets."; return; }
-    EDParam *sp = nil, *rk = nil;
-    for (EDParam *q in [_preset paramsForScope:EDScopeRef]) { if (q.isSample) sp = q; if ([q.label isEqual:@"Root key"]) rk = q; }
-    EDPNode *hit = nil;
+    if (!_presetPlayer) _presetPlayer = [EDPresetPlayer new];
+    if (_heldKey >= 0) [_presetPlayer noteOff:_heldKey];
+    _heldKey = k;
+    _hint.stringValue = [_presetPlayer noteOn:k velocity:vel preset:_preset bank:_bank];
+    EDPNode *hit = nil;   // follow the sounding zone in the structure list
     for (EDPNode *v in _root.children) { for (EDPNode *n in v.children) if (n.lo >= 0 && k >= n.lo && k <= n.hi) { hit = n; break; } if (hit) break; }
-    if (!hit || !sp) { _hint.stringValue = [NSString stringWithFormat:@"%@: no zone covers this key", [EDParam noteName:k]]; [_player stop]; return; }
-    NSInteger sn = [_preset valueOfParam:sp voice:hit.voice ref:hit.ref], root = rk ? [_preset valueOfParam:rk voice:hit.voice ref:hit.ref] : 60;
-    EDSample *smp = nil; for (EDSample *x in _bank.samples) if (x.number == sn) { smp = x; break; }
-    if (!smp) { _hint.stringValue = [NSString stringWithFormat:@"%@: %@", [EDParam noteName:k], sn >= 1000 ? @"ROM samples can't be played here" : @"sample is not in this bank"]; [_player stop]; return; }
-    if (!_player) _player = [EDPlayer new];
-    [_player playSample:smp ratio:pow(2.0, (double)(k - root) / 12.0)];
-    _hint.stringValue = [NSString stringWithFormat:@"%@  →  #%ld %@  (root %@)", [EDParam noteName:k], (long)sn, smp.name, [EDParam noteName:root]];
-    if (_sel != hit) [self pickNode:hit];
+    if (hit && _sel != hit) [self pickNode:hit];
 }
 - (BOOL)auditionKey:(int)key {
     if (!_preset) return NO;
     _keyMap.pressedKey = key; _keyMap.needsDisplay = YES; [self playKey:key]; return YES;
 }
 - (void)endAudition { _keyMap.pressedKey = -1; _keyMap.needsDisplay = YES; [self endKey]; }
-- (void)endKey { [_player stop]; _hint.stringValue = _preset.kind == EDPresetKindLegacy3X ? @"Emulator 3X preset: only the sample reference of each voice is decoded; other voice bytes are shown raw." : @""; }
+- (void)endKey { if (_heldKey >= 0) [_presetPlayer noteOff:_heldKey]; _heldKey = -1; [_player stop]; _hint.stringValue = _preset.kind == EDPresetKindLegacy3X ? @"Emulator 3X preset: only the sample reference of each voice is decoded; other voice bytes are shown raw." : @""; }
 
 // MARK: choosing a sample for a zone
 
@@ -627,6 +634,7 @@ static NSInteger parseValue(NSString *s, EDParam *p) {
 }
 - (void)registerUndo:(NSDictionary *)before name:(NSString *)n { [[self.undoManager prepareWithInvocationTarget:self] restore:before onPreset:_preset]; [self.undoManager setActionName:n]; }
 - (void)changed {
+    [_presetPlayer presetChanged:_preset];   // sounding notes follow the edit
     NSInteger r = [_bank.presets indexOfObject:_preset];
     if (r != NSNotFound) [_presetTable reloadDataForRowIndexes:[NSIndexSet indexSetWithIndex:r] columnIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 3)]];
     if (_edited) _edited();

@@ -73,8 +73,9 @@ static NSInteger parseNoteOrInt(NSString *s, EDParam *p) {
 @property (nonatomic, copy) NSInteger (^get)(EDParam *);
 @property (nonatomic, copy) void (^set)(EDParam *, NSInteger);
 @end
-@implementation EDEnvGraph { NSInteger _drag; CGFloat _dragScale; }
-static const CGFloat kSeg = 62, kMin = 8, kPad = 14;
+@implementation EDEnvGraph { NSInteger _drag, _sel; CGFloat _dragScale; }   // _sel: clicked handle stays bold until you click elsewhere
+static inline CGFloat minWidth(NSInteger stage) { return stage ? 8 : 0; }
+static const CGFloat kSeg = 62, kMin = 8, kPad = 14;   // every stage after the first keeps a minimum width so the handles stay apart; Attack 1 may sit on the left edge (rate 0)
 - (BOOL)isFlipped { return YES; }
 - (CGFloat)zeroY { CGFloat h = self.bounds.size.height - 2 * kPad; return kPad + h / 2; }   // same layout for all envelopes; volume just cannot go below zero
 - (CGFloat)pxPerLevel { CGFloat h = self.bounds.size.height - 2 * kPad; return h / 2 / 127.0; }
@@ -84,11 +85,11 @@ static const CGFloat kSeg = 62, kMin = 8, kPad = 14;
     NSInteger prev = i ? _get(_params[i * 2 - 1]) : 0;
     return 0.25 + 0.75 * MIN(127, labs(lvl - prev)) / 127.0;
 }
-- (CGFloat)rawWidth:(NSInteger)i { return kMin + kSeg * _get(_params[i * 2]) / 127.0 * [self levelFactor:i level:_get(_params[i * 2 + 1])]; }
+- (CGFloat)rawWidth:(NSInteger)i { return minWidth(i) + kSeg * _get(_params[i * 2]) / 127.0 * [self levelFactor:i level:_get(_params[i * 2 + 1])]; }
 - (CGFloat)timeScale {
     if (!_scaled) return 1;
     CGFloat t = 0; for (int i = 0; i < 6; i++) t += [self rawWidth:i];
-    return (self.bounds.size.width - 2 * kPad) / t;
+    return t > 0.01 ? (self.bounds.size.width - 2 * kPad) / t : 1;
 }
 - (NSArray<NSValue *> *)points {
     NSMutableArray *a = [NSMutableArray array]; CGFloat x = kPad, sc = [self timeScale];
@@ -103,6 +104,7 @@ static const CGFloat kSeg = 62, kMin = 8, kPad = 14;
 - (void)drawRect:(NSRect)r {
     if (_params.count != 12) return;
     NSColor *ink = EDTheme.lcdInk;
+    [[ink colorWithAlphaComponent:0.20] setFill]; NSRectFillUsingOperation(NSInsetRect(self.bounds, 1, 1), NSCompositingOperationSourceOver);   // darker plot, like the window graph
     NSBezierPath *frame = [NSBezierPath bezierPathWithRect:NSInsetRect(self.bounds, 1, 1)]; frame.lineWidth = 2; [ink setStroke]; [frame stroke];
     [[ink colorWithAlphaComponent:0.35] setStroke];
     NSBezierPath *zero = [NSBezierPath bezierPath]; [zero moveToPoint:NSMakePoint(kPad, [self zeroY])]; [zero lineToPoint:NSMakePoint(self.bounds.size.width - kPad, [self zeroY])];
@@ -116,13 +118,20 @@ static const CGFloat kSeg = 62, kMin = 8, kPad = 14;
     [ink setStroke]; [line stroke];
     for (NSInteger i = 1; i < 7; i++) {
         NSPoint pt = pts[i].pointValue; NSRect b = NSMakeRect(pt.x - 4, pt.y - 4, 8, 8);
-        [EDTheme.lcdBackground setFill]; NSRectFill(b); [ink setStroke]; NSBezierPath *bp = [NSBezierPath bezierPathWithRect:b]; bp.lineWidth = i == _drag ? 3 : 1.5; [bp stroke];
+        BOOL on = i == _sel; (on ? ink : EDTheme.lcdBackground).setFill; NSRectFill(b); [ink setStroke]; NSBezierPath *bp = [NSBezierPath bezierPathWithRect:b]; bp.lineWidth = on ? 3 : 1.5; [bp stroke];
     }
 }
 - (void)mouseDown:(NSEvent *)e {
     NSPoint m = [self convertPoint:e.locationInWindow fromView:nil]; _drag = 0; CGFloat best = 12;
     NSArray<NSValue *> *pts = [self points];
     for (NSInteger i = 1; i < 7; i++) { NSPoint p = pts[i].pointValue; CGFloat d = hypot(p.x - m.x, p.y - m.y); if (d < best) { best = d; _drag = i; } }
+    if (_drag) {   // handles of instant stages sit on top of each other: take the last one, and each further click on the spot moves on to the one beneath
+        NSPoint at = pts[_drag].pointValue; NSMutableArray<NSNumber *> *pile = [NSMutableArray array];
+        for (NSInteger i = 6; i >= 1; i--) { NSPoint p = pts[i].pointValue; if (hypot(p.x - at.x, p.y - at.y) < 2) [pile addObject:@(i)]; }
+        NSUInteger k = [pile indexOfObject:@(_sel)];
+        _drag = pile.count > 1 && k != NSNotFound ? pile[(k + 1) % pile.count].integerValue : pile.firstObject.integerValue;
+    }
+    _sel = _drag; self.needsDisplay = YES;
     _dragScale = [self timeScale]; if (_drag) [self mouseDragged:e];
 }
 - (void)mouseDragged:(NSEvent *)e {
@@ -131,11 +140,95 @@ static const CGFloat kSeg = 62, kMin = 8, kPad = 14;
     NSArray<NSValue *> *pts = [self points]; CGFloat prevX = pts[_drag - 1].pointValue.x;
     NSInteger lvl = (NSInteger)llround(([self zeroY] - m.y) / [self pxPerLevel]);
     lvl = MAX(_unipolar ? 0 : -127, MIN(127, lvl));
-    NSInteger rate = (NSInteger)llround(((m.x - prevX) / _dragScale - kMin) / kSeg * 127 / [self levelFactor:_drag - 1 level:lvl]);
+    NSInteger rate = (NSInteger)llround(((m.x - prevX) / _dragScale - minWidth(_drag - 1)) / kSeg * 127 / [self levelFactor:_drag - 1 level:lvl]);
     EDParam *rp = _params[(_drag - 1) * 2], *lp = _params[(_drag - 1) * 2 + 1];
     rate = MAX(rp.min, MIN(rp.max, rate)); lvl = MAX(_unipolar ? 0 : lp.min, MIN(lp.max, lvl));
     if (rate != _get(rp)) _set(rp, rate);
     if (lvl != _get(lp)) _set(lp, lvl);
+    self.needsDisplay = YES;
+}
+- (void)mouseUp:(NSEvent *)e { _drag = 0; self.needsDisplay = YES; }
+@end
+
+// Key × velocity picture of a window page. Keys run left to right, velocity bottom to top. The outer rectangle is the whole window
+// (low…high), the darker inner one is where the zone plays at full level (fade lo…fade hi); between them it fades in and out.
+// Eight handles sit in two rulers: squares (low, high) and diamonds (fade lo, fade hi), along the bottom for keys, at the left for velocity.
+@interface EDWindowGraph : NSView
+@property (nonatomic, strong) NSArray<EDParam *> *params;   // 8: key low, fade lo, fade hi, high, then the same for velocity
+@property (nonatomic, copy) NSInteger (^get)(EDParam *);
+@property (nonatomic, copy) void (^set)(EDParam *, NSInteger);
+@end
+@implementation EDWindowGraph { NSInteger _drag, _sel; }   // handle + 1; _sel stays after the click until you click elsewhere
+static const CGFloat kWL = 50, kWB = 50, kWT = 10, kWR = 14;
+- (BOOL)isFlipped { return YES; }
+- (NSRect)plot { return NSMakeRect(kWL, kWT, self.bounds.size.width - kWL - kWR, self.bounds.size.height - kWT - kWB); }
+- (CGFloat)xOf:(NSInteger)k { NSRect P = [self plot]; return P.origin.x + k / 127.0 * P.size.width; }
+- (CGFloat)yOf:(NSInteger)v { NSRect P = [self plot]; return NSMaxY(P) - v / 127.0 * P.size.height; }
+- (NSPoint)handle:(NSInteger)h {   // 0…3 key low, fade lo, fade hi, high; 4…7 velocity
+    NSRect P = [self plot]; NSInteger i = h % 4, v = _get(_params[h]); BOOL outer = i == 0 || i == 3;
+    return h < 4 ? NSMakePoint([self xOf:v], NSMaxY(P) + (outer ? 14 : 34)) : NSMakePoint(P.origin.x - (outer ? 14 : 34), [self yOf:v]);
+}
+- (NSInteger)value:(NSInteger)h {
+    NSRect P = [self plot]; NSPoint m = [self convertPoint:self.window.mouseLocationOutsideOfEventStream fromView:nil];
+    CGFloat t = h < 4 ? (m.x - P.origin.x) / P.size.width : (NSMaxY(P) - m.y) / P.size.height;
+    return MAX(0, MIN(127, (NSInteger)llround(t * 127)));
+}
+- (void)drawRect:(NSRect)r {
+    if (_params.count != 8) return;
+    NSColor *ink = EDTheme.lcdInk; NSRect P = [self plot];
+    NSInteger k[4], v[4]; for (int i = 0; i < 4; i++) { k[i] = _get(_params[i]); v[i] = _get(_params[4 + i]); }
+    NSDictionary *at = @{NSFontAttributeName: [EDTheme lcdFont:10], NSForegroundColorAttributeName: [ink colorWithAlphaComponent:0.75]};
+    CGFloat dash[2] = {3, 3};
+    [[ink colorWithAlphaComponent:0.25] setStroke];
+    NSBezierPath *grid = [NSBezierPath bezierPath]; grid.lineWidth = 1; [grid setLineDash:dash count:2 phase:0];
+    for (int o = 0; o <= 10; o++) { CGFloat x = [self xOf:MIN(127, o * 12)]; [grid moveToPoint:NSMakePoint(x, P.origin.y)]; [grid lineToPoint:NSMakePoint(x, NSMaxY(P))]; }
+    for (int q = 0; q <= 4; q++) { CGFloat y = [self yOf:MIN(127, q * 32)]; [grid moveToPoint:NSMakePoint(P.origin.x, y)]; [grid lineToPoint:NSMakePoint(NSMaxX(P), y)]; }
+    [grid stroke];
+    for (int o = 0; o <= 10; o += 2) { NSString *t = [EDParam noteName:o * 12]; [t drawAtPoint:NSMakePoint([self xOf:o * 12] - 8, NSMaxY(P) + 3) withAttributes:at]; }   // tiny labels sit above the squares' row
+    for (int q = 0; q <= 4; q++) { NSString *t = [NSString stringWithFormat:@"%d", MIN(127, q * 32)]; NSSize sz = [t sizeWithAttributes:at]; [t drawAtPoint:NSMakePoint(P.origin.x - sz.width - 3, [self yOf:MIN(127, q * 32)] - sz.height / 2 - (q == 0 ? 4 : 0)) withAttributes:at]; }
+    NSRect outer = NSMakeRect([self xOf:k[0]], [self yOf:v[3]], [self xOf:k[3]] - [self xOf:k[0]], [self yOf:v[0]] - [self yOf:v[3]]);
+    NSRect inner = NSMakeRect([self xOf:k[1]], [self yOf:v[2]], [self xOf:k[2]] - [self xOf:k[1]], [self yOf:v[1]] - [self yOf:v[2]]);
+    [[ink colorWithAlphaComponent:0.20] setFill]; NSRectFillUsingOperation(outer, NSCompositingOperationSourceOver);
+    [[ink colorWithAlphaComponent:0.45] setFill]; NSRectFillUsingOperation(inner, NSCompositingOperationSourceOver);
+    [ink setStroke]; NSBezierPath *ob = [NSBezierPath bezierPathWithRect:outer]; ob.lineWidth = 2; [ob stroke];
+    NSBezierPath *ib = [NSBezierPath bezierPathWithRect:inner]; ib.lineWidth = 1; [ib stroke];
+    NSBezierPath *fr = [NSBezierPath bezierPathWithRect:P]; fr.lineWidth = 1.5; [ink setStroke]; [fr stroke];
+    for (NSInteger h = 0; h < 8; h++) {   // guide lines from every handle into the plot, then the handles
+        NSPoint pt = [self handle:h]; NSBezierPath *g = [NSBezierPath bezierPath]; g.lineWidth = 1; [g setLineDash:dash count:2 phase:0];
+        if (h < 4) { [g moveToPoint:NSMakePoint(pt.x, P.origin.y)]; [g lineToPoint:NSMakePoint(pt.x, pt.y)]; } else { [g moveToPoint:NSMakePoint(NSMaxX(P), pt.y)]; [g lineToPoint:NSMakePoint(pt.x, pt.y)]; }
+        [[ink colorWithAlphaComponent:0.45] setStroke]; [g stroke];
+    }
+    for (NSInteger h = 0; h < 8; h++) {
+        NSPoint pt = [self handle:h]; NSInteger i = h % 4; BOOL sq = i == 0 || i == 3;
+        NSBezierPath *b = sq ? [NSBezierPath bezierPathWithRect:NSMakeRect(pt.x - 5, pt.y - 5, 10, 10)] : [NSBezierPath bezierPath];
+        if (!sq) { [b moveToPoint:NSMakePoint(pt.x, pt.y - 6)]; [b lineToPoint:NSMakePoint(pt.x + 6, pt.y)]; [b lineToPoint:NSMakePoint(pt.x, pt.y + 6)]; [b lineToPoint:NSMakePoint(pt.x - 6, pt.y)]; [b closePath]; }
+        BOOL on = h == _sel - 1; (on ? ink : EDTheme.lcdBackground).setFill; [b fill]; [ink setStroke]; b.lineWidth = on ? 3 : 1.5; [b stroke];
+    }
+    if (_sel) {   // value of the selected handle
+        NSInteger h = _sel - 1; NSPoint pt = [self handle:h]; NSInteger val = _get(_params[h]);
+        NSString *t = h < 4 ? [EDParam noteName:val] : [NSString stringWithFormat:@"%ld", (long)val];
+        NSMutableDictionary *bold = [@{NSFontAttributeName: [EDTheme lcdFont:12], NSForegroundColorAttributeName: ink} mutableCopy];
+        NSSize sz = [t sizeWithAttributes:bold]; NSPoint o = h < 4 ? NSMakePoint(pt.x - sz.width / 2, pt.y - 24 - (h % 4 == 0 || h % 4 == 3 ? 0 : 0)) : NSMakePoint(pt.x + 10, pt.y - sz.height / 2);
+        if (h < 4) o.y = P.origin.y + 2;
+        [t drawAtPoint:o withAttributes:bold];
+    }
+}
+- (void)mouseDown:(NSEvent *)e {
+    NSPoint m = [self convertPoint:e.locationInWindow fromView:nil]; _drag = 0; CGFloat best = 14;
+    for (NSInteger h = 0; h < 8; h++) { NSPoint p = [self handle:h]; CGFloat d = hypot(p.x - m.x, p.y - m.y); if (d < best) { best = d; _drag = h + 1; } }
+    _sel = _drag; if (_drag) [self mouseDragged:e]; self.needsDisplay = YES;   // a click on empty space deselects
+}
+- (void)mouseDragged:(NSEvent *)e {
+    if (!_drag) return;
+    NSInteger h = _drag - 1, g = h / 4 * 4, i = h % 4, val = [self value:h], a[4];
+    for (int j = 0; j < 4; j++) a[j] = _get(_params[g + j]);
+    a[i] = val;   // keep low ≤ fade lo ≤ fade hi ≤ high: the outer edges push the fades, the fades stop at their neighbours
+    if (i == 0) { a[1] = MAX(a[1], val); a[2] = MAX(a[2], a[1]); a[3] = MAX(a[3], a[2]); }
+    else if (i == 1) a[1] = MAX(a[0], MIN(a[2], val));
+    else if (i == 2) a[2] = MAX(a[1], MIN(a[3], val));
+    else { a[2] = MIN(a[2], val); a[1] = MIN(a[1], a[2]); a[0] = MIN(a[0], a[1]); }
+    NSInteger old[4]; for (int j = 0; j < 4; j++) old[j] = _get(_params[g + j]);
+    for (int j = 0; j < 4; j++) if (a[j] != old[j]) _set(_params[g + j], a[j]);
     self.needsDisplay = YES;
 }
 - (void)mouseUp:(NSEvent *)e { _drag = 0; self.needsDisplay = YES; }
@@ -229,7 +322,7 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
     NSMutableArray<EDParam *> *_fieldParams;
     NSMutableArray<NSButton *> *_menuBtns; NSStackView *_menuRow;
     NSView *_screen; NSTextField *_title, *_context, *_empty; NSButton *_prevV, *_nextV;
-    NSStackView *_grid, *_keys; EDEnvGraph *_graph; NSButton *_scaleBtn; EDLFOGraph *_lfoGraph[2];
+    NSStackView *_grid, *_keys; EDEnvGraph *_graph; EDWindowGraph *_winGraph; NSButton *_scaleBtn; EDLFOGraph *_lfoGraph[2];
 }
 
 - (instancetype)initWithFrame:(NSRect)f {
@@ -250,6 +343,7 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
     _keys = [NSStackView new]; _keys.orientation = NSUserInterfaceLayoutOrientationVertical; _keys.spacing = 6; _keys.translatesAutoresizingMaskIntoConstraints = NO;
     for (NSView *v in @[_title, _context, _prevV, _nextV, _empty, _grid, _menuRow, _keys]) { v.translatesAutoresizingMaskIntoConstraints = NO; [_screen addSubview:v]; }
     _graph = [EDEnvGraph new]; _graph.translatesAutoresizingMaskIntoConstraints = NO; _graph.hidden = YES; [_screen addSubview:_graph];
+    _winGraph = [EDWindowGraph new]; _winGraph.translatesAutoresizingMaskIntoConstraints = NO; _winGraph.hidden = YES; [_screen addSubview:_winGraph];
     _scaleBtn = [EDTheme lcdButton:@"Fixed" target:self action:@selector(toggleScale:)]; _scaleBtn.translatesAutoresizingMaskIntoConstraints = NO; _scaleBtn.hidden = YES;
     [_scaleBtn.widthAnchor constraintEqualToConstant:104].active = YES; [_screen addSubview:_scaleBtn];
     _graph.scaled = [NSUserDefaults.standardUserDefaults boolForKey:@"EnvScaled"]; _scaleBtn.title = _graph.scaled ? @"Scaled" : @"Fixed";
@@ -261,6 +355,7 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
     __weak EDPresetLCD *ws = self;
     _graph.get = ^NSInteger(EDParam *p) { EDPresetLCD *me = ws; return me.getValue ? me.getValue(p, [me vIndex], [me rIndex]) : 0; };
     _graph.set = ^(EDParam *p, NSInteger v) { EDPresetLCD *me = ws; if (me.setValue) me.setValue(p, [me vIndex], [me rIndex], v); };
+    _winGraph.get = _graph.get; _winGraph.set = _graph.set;
     [EDTheme addGlareTo:_screen];
     [self addSubview:_screen];
     [NSLayoutConstraint activateConstraints:@[
@@ -274,6 +369,7 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
         [_graph.topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:40], [_graph.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:330],
         [_scaleBtn.topAnchor constraintEqualToAnchor:_graph.bottomAnchor constant:8], [_scaleBtn.trailingAnchor constraintEqualToAnchor:_graph.trailingAnchor],
         [_graph.trailingAnchor constraintEqualToAnchor:_context.leadingAnchor], [_graph.widthAnchor constraintGreaterThanOrEqualToConstant:300], [_graph.heightAnchor constraintEqualToConstant:250],
+        [_winGraph.topAnchor constraintEqualToAnchor:_grid.bottomAnchor constant:24], [_winGraph.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:24], [_winGraph.trailingAnchor constraintEqualToAnchor:_screen.trailingAnchor constant:-24], [_winGraph.bottomAnchor constraintEqualToAnchor:_keys.topAnchor constant:-16],
         [_grid.topAnchor constraintEqualToAnchor:_menuRow.bottomAnchor constant:22], [_grid.leadingAnchor constraintEqualToAnchor:_screen.leadingAnchor constant:24],
         [_empty.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_empty.centerYAnchor constraintEqualToAnchor:_screen.centerYAnchor constant:-20], [_empty.widthAnchor constraintEqualToConstant:420],
         [_keys.centerXAnchor constraintEqualToAnchor:_screen.centerXAnchor], [_keys.bottomAnchor constraintEqualToAnchor:_screen.bottomAnchor constant:-12],
@@ -322,7 +418,7 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
     if ([_menu isEqual:@"Voice"]) _context.stringValue = [NSString stringWithFormat:@"Voice %ld of %ld", (long)[self vIndex] + 1, (long)nv];
     else if ([_menu isEqual:@"Zone"]) _context.stringValue = nz ? [NSString stringWithFormat:@"Voice %ld  Zone %ld of %ld", (long)[self vIndex] + 1, (long)[self rIndex] + 1, (long)nz] : @"";
     else _context.stringValue = _preset ? [NSString stringWithFormat:@"%@", _preset.name] : @"";
-    _graph.hidden = YES; _scaleBtn.hidden = YES; _lfoGraph[0].hidden = _lfoGraph[1].hidden = YES;
+    _graph.hidden = YES; _winGraph.hidden = YES; _scaleBtn.hidden = YES; _lfoGraph[0].hidden = _lfoGraph[1].hidden = YES;
     if (!_active.count) {
         _title.stringValue = _menu; _empty.hidden = NO; _grid.hidden = YES;
         _empty.stringValue = !_preset ? @"No preset selected." : ([_menu isEqual:@"Zone"] ? @"Select a voice's sample zone in the structure list." : (_preset.kind == EDPresetKindLegacy3X ? @"Emulator 3X preset: only some parameters are decoded. See the List view." : @"Nothing to show."));
@@ -342,6 +438,11 @@ static double lfoAt(NSInteger shape, double t) {   // t 0…1 over one cycle, re
         NSMutableArray *ep = [NSMutableArray array];
         for (NSArray *r in rows) [ep addObjectsFromArray:r[1]];
         _graph.params = ep; _graph.unipolar = YES; _graph.hidden = NO; _scaleBtn.hidden = NO; _graph.needsDisplay = YES;
+    }
+    if ([pg[@"title"] hasSuffix:@"Windows"] && rows.count >= 2) {   // key and velocity windows get a picture
+        NSMutableArray *wp = [NSMutableArray array];
+        for (NSInteger i = 0; i < 2; i++) [wp addObjectsFromArray:rows[i][1]];
+        _winGraph.params = wp; _winGraph.hidden = NO; _winGraph.needsDisplay = YES;
     }
     if ([pg[@"title"] isEqual:@"LFOs and Lag"])
         for (int i = 0; i < 2 && i < (int)rows.count; i++) {
